@@ -1,0 +1,5 @@
+# 로컬 개발용 값. `cp .dev.vars.example .dev.vars` 후 채운다. .dev.vars는 git에 올리지 않는다.
+APP_ORIGIN=http://localhost:8787
+SPIKE_TOKEN=
+VAPID_PRIVATE_KEY=
+VAPID_PUBLIC_KEY=

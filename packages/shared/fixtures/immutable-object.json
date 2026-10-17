@@ -1,0 +1,140 @@
+{
+  "topic": "불변 객체를 쓰는 이유와 만드는 방법",
+  "source": "claude.ai",
+  "final_answer": "불변 객체는 생성된 뒤 상태가 바뀌지 않아서 여러 곳에서 공유해도 안전하고, 동기화 없이도 스레드 안전합니다. 만들 때는 필드를 private final로 두고 setter를 없애며, 리스트 같은 가변 필드는 생성자와 getter에서 방어적 복사를 합니다.",
+  "concepts": [
+    {
+      "key": "immutable-object",
+      "name": "불변 객체"
+    },
+    {
+      "key": "final-variable",
+      "name": "변수에 붙인 final"
+    },
+    {
+      "key": "defensive-copy",
+      "name": "방어적 복사"
+    },
+    {
+      "key": "deep-copy",
+      "name": "깊은 복사"
+    },
+    {
+      "key": "shallow-copy",
+      "name": "얕은 복사"
+    }
+  ],
+  "edges": [
+    {
+      "from": "immutable-object",
+      "to": "final-variable",
+      "type": "prerequisite"
+    },
+    {
+      "from": "immutable-object",
+      "to": "defensive-copy",
+      "type": "follow_up"
+    },
+    {
+      "from": "defensive-copy",
+      "to": "deep-copy",
+      "type": "contrast"
+    },
+    {
+      "from": "deep-copy",
+      "to": "shallow-copy",
+      "type": "contrast"
+    }
+  ],
+  "judgments": [
+    {
+      "concept": "deep-copy",
+      "label": "틀림",
+      "said": "깊은 복사는 외부에서 객체의 값을 받아올 때 새로운 객체를 만들어서 값을 복사해서 받아오는 것입니다.",
+      "note": "받아오냐 내보내냐로 나누는 개념이 아님. 짝이 되는 개념은 얕은 복사."
+    },
+    {
+      "concept": "defensive-copy",
+      "label": "애매",
+      "said": "방어적 복사는 내부 객체의 값을 전달할 때 새로운 객체를 만든 후 복사해서 전달하는 것",
+      "note": "내보낼 때만 말함. 생성자에서 받아올 때도 방어적 복사."
+    }
+  ],
+  "key_terms": [
+    "재할당",
+    "방어적 복사",
+    "스레드 안전"
+  ],
+  "followups": [
+    {
+      "concept": "deep-copy",
+      "question": "깊은 복사와 방어적 복사는 어떻게 다른가요?"
+    },
+    {
+      "concept": "defensive-copy",
+      "question": "생성자에서 받은 리스트는 깊은 복사로 받아야 하나요?"
+    }
+  ],
+  "cards": [
+    {
+      "concept": "final-variable",
+      "type": "ox",
+      "prompt": "이 코드는 컴파일 에러가 난다.",
+      "code": "final List<String> names = new ArrayList<>();\nnames.add(\"kim\");",
+      "answer": "X",
+      "explain": "변수에 붙인 final은 재할당만 막는다. 리스트 내부 변경은 막지 않는다."
+    },
+    {
+      "concept": "final-variable",
+      "type": "cloze",
+      "prompt": "변수에 붙인 final은 변수의 ____을 막지만, 그 변수가 가리키는 객체의 내부 상태가 바뀌는 건 막지 못한다.",
+      "answer": "재할당",
+      "choices": [
+        "재할당",
+        "상속",
+        "오버라이딩",
+        "가비지 컬렉션"
+      ],
+      "explain": "그래서 private final 필드라도 가변 리스트를 그대로 받고 그대로 내보내면 객체는 불변이 아니다."
+    },
+    {
+      "concept": "deep-copy",
+      "type": "mcq",
+      "prompt": "깊은 복사를 가장 정확하게 설명한 것은?",
+      "options": [
+        {
+          "text": "객체가 참조하는 내부 객체까지 새로 만들어, 원본과 공유하는 상태가 없게 복사하는 것",
+          "correct": true
+        },
+        {
+          "text": "외부에서 객체를 받아올 때 새 객체를 만들어 값을 복사해 받는 것",
+          "correct": false,
+          "from_my_answer": true
+        },
+        {
+          "text": "새 객체를 만들되, 필드가 가리키는 객체는 원본과 함께 쓰는 것",
+          "correct": false
+        }
+      ],
+      "explain": "세 번째는 얕은 복사. 깊은/얕은 복사는 '어디까지 복사하나'의 구분이고, 받는 시점과는 관계없다."
+    },
+    {
+      "concept": "immutable-object",
+      "type": "ox",
+      "prompt": "필드를 모두 private final로 두고 setter를 없애면, 필드에 가변 리스트가 있어도 그 객체는 불변이다.",
+      "answer": "X",
+      "explain": "final은 재할당만 막는다. 가변 리스트를 그대로 받거나 내보내면 바깥에서 내용을 바꿀 수 있으니 방어적 복사가 필요하다."
+    },
+    {
+      "concept": "immutable-object",
+      "type": "explain",
+      "prompt": "불변 객체를 쓰는 이유와 만드는 방법을 30초 안에 설명해 보세요.",
+      "checklist": [
+        "첫 문장에 이유",
+        "private final 필드 + setter 없음",
+        "가변 필드는 방어적 복사",
+        "스레드 안전"
+      ]
+    }
+  ]
+}

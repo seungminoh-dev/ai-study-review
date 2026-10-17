@@ -1,0 +1,23 @@
+{
+  "name": "moai",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/worker",
+    "packages/shared"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm test --workspaces --if-present",
+    "dev": "npm run dev -w @moai/worker",
+    "deploy": "npm run deploy -w @moai/worker",
+    "db:migrate:local": "npm run db:migrate:local -w @moai/worker",
+    "db:migrate:remote": "npm run db:migrate:remote -w @moai/worker",
+    "gen:vapid": "node scripts/gen-vapid.mjs",
+    "gen:token": "node scripts/gen-token.mjs",
+    "replay": "node scripts/replay.mjs"
+  }
+}

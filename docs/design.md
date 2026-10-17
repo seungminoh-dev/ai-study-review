@@ -1,12 +1,14 @@
-# 되새김(가칭) 설계서 v1.0
+# 모아이 설계서 v1.1
 
-- 상태: 초안 (구현 전)
+- 상태: MVP 0 코드 완료 (실행은 [MVP 0 실행 가이드](mvp0-runbook.md)), MVP 1~3은 설계
 - 날짜: 2026-10-17
 - 런타임: TypeScript, Cloudflare Worker 하나 (Free 플랜). [ADR 0001](adr/0001-runtime.md)에서 결정
-- 관련 문서: [기획서](service-plan.md), [이름 후보](names.md)
+- 관련 문서: [기획서](service-plan.md), [이름 후보](names.md), [MVP 0 실행 가이드](mvp0-runbook.md)
 - 패키지 버전은 2026-10-17 npm 기준이고, API 이름은 각 패키지의 타입 정의로 확인했다.
 
-이름이 정해지기 전까지 코드 식별자는 `dwesaegim`을 쓴다 (Worker 이름, D1 이름). 이름이 정해지면 한 번에 바꾼다.
+서비스 이름은 **모아이**로 정했다. 코드 식별자는 `moai`다 (Worker 이름, D1 이름, 패키지 이름 `@moai/*`).
+
+v1.1 변경: 검증 리뷰 15건 반영, MVP 0을 만들면서 바뀐 점 반영 (npm 워크스페이스, `@cloudflare/vitest-plugin`, 카드 단계는 서버가 정함, 본문 상한 256KB, MVP 0의 호출 로그).
 
 ---
 
@@ -29,7 +31,7 @@ claude.ai에서 공부하다가 "정리해줘"라고 하면, 대화 중인 Claud
           └────────────┬───────────┘                        │
                        ▼                                    ▼
  ┌─────────────────────────────────────────────────────────────────────┐
- │ Cloudflare Worker `dwesaegim`   (app.<도메인>, Free 플랜)              │
+ │ Cloudflare Worker `moai`   (app.<도메인>, Free 플랜)                   │
  │  ├─ POST /mcp/u/:token   MCP 서버 (@modelcontextprotocol/server)      │
  │  ├─ /api/*               REST API (Hono)                              │
  │  ├─ 그 밖의 경로          PWA 정적 파일 (Workers Static Assets)         │
@@ -87,15 +89,18 @@ claude.ai에서 공부하다가 "정리해줘"라고 하면, 대화 중인 Claud
 
 **목표**: 설계 전체가 기대는 가정을 실제 폰과 실제 claude.ai로 먼저 확인한다. 여기서 막히는 것이 있으면 MVP 1 범위를 바꾼다.
 
+**상태**: 코드와 테스트는 레포에 있다 (`apps/worker`, `apps/web/public`, `packages/shared`). Cloudflare·claude.ai 쪽 설정과 점검 순서는 [MVP 0 실행 가이드](mvp0-runbook.md)에 있다.
+
 **만드는 것**
 
-- Worker 뼈대: Hono, 커스텀 도메인 `app.<도메인>`, `workers_dev: false`, D1 생성 (`wrangler d1 create dwesaegim --location apac`).
+- Worker 뼈대: Hono, 커스텀 도메인 `app.<도메인>`, `workers_dev: false`, D1 생성 (`wrangler d1 create moai --location apac`).
 - `POST /mcp/u/:token`: 비밀값 `SPIKE_TOKEN` 하나로만 연다. 도구는 두 개다.
   - `ping`: 서버 시각을 돌려준다.
   - `save_learning`: 실제 스키마(§6.4)로 검증만 하고, 원본 JSON을 `spike_log` 테이블에 넣는다.
-- `/spike` 페이지: 홈 화면 추가 안내, "알림 켜기" 버튼, 구독 저장, 쿠키 확인용 표시.
+- `/spike` 페이지(`apps/web/public`의 정적 파일): 홈 화면 추가 안내, "알림 켜기", 푸시 예약과 도착 확인, 쿠키 확인, MCP 요청 기록 보기.
 - Cron(매분): 예약해 둔 테스트 푸시 1건을 보낸다.
-- 로컬 계약 테스트: 2025년 방식(initialize → tools/list → tools/call)과 2026-07-28 방식 요청을 모두 보내 본다.
+- 계약 테스트: 2025년 방식(initialize → tools/list → tools/call)과 2026-07-28 방식 요청을 공식 MCP 클라이언트(`@modelcontextprotocol/client`)로 모두 보내 본다.
+- MVP 0에서만 호출 로그(`invocation_logs`)를 켜서 요청별 CPU 시간을 본다 (§4.3).
 
 **확인 항목**
 
@@ -103,7 +108,7 @@ claude.ai에서 공부하다가 "정리해줘"라고 하면, 대화 중인 Claud
 |---|---|---|---|
 | 1 | 웹 claude.ai에 커넥터 추가 | "로그인 없음"으로 추가되고 도구 2개가 보인다 | Host, 리다이렉트, 응답 형식 점검 |
 | 2 | 폰 앱(iOS·Android)의 프로젝트 대화에서 "정리해줘" | `save_learning`이 호출되어 `spike_log`에 행이 생긴다. 친구의 Pro 계정에서도 같다. 그 프로젝트가 새 Projects 베타인지 기록한다 | 일반 대화에 코치 지침을 넣어 본다. 그래도 안 되면 붙여넣기 가져오기를 MVP 1로 당겨 주력으로 쓴다 |
-| 3 | CPU 시간 | 가장 큰 페이로드(개념 20개, 카드 30장)로 tools/list와 tools/call의 CPU p99가 7ms 미만이다. 푸시 1건의 CPU도 잰다 | Workers Paid($5/월)로 바꾼다. 코드는 그대로 |
+| 3 | CPU 시간 | 가장 큰 페이로드(개념 20개, 카드 30장, 약 52KB)로 tools/list와 tools/call의 CPU p99가 7ms 미만이다. 푸시 1건의 CPU도 잰다. 요청별 CPU는 호출 로그에서 본다 | Workers Paid($5/월)로 바꾼다. 코드는 그대로 |
 | 4 | 프로토콜 | claude.ai가 보내는 `MCP-Protocol-Version`을 기록하고, 두 방식 계약 테스트가 통과한다 | SDK 옵션과 응답 형식을 조정한다 |
 | 5 | iPhone 홈 화면 PWA 푸시 | 정한 시각 1분 안에 도착한다 | iOS 버전, 홈 화면 설치, 권한을 확인한다. 그래도 안 되면 MVP 1은 휴대폰 기본 알람으로 대신한다 |
 | 6 | Cloudflare 존 설정 | Bot Fight Mode가 꺼져 있고, AI 봇 차단 설정이 `/mcp`를 막지 않는다. 로그에 403이나 챌린지가 없다 | 설정을 고친다 (§13.3) |
@@ -119,16 +124,17 @@ claude.ai에서 공부하다가 "정리해줘"라고 하면, 대화 중인 Claud
 
 **만드는 것**
 
-1. D1 스키마 `0001_init.sql` (§5.2). MVP 0의 `spike_log`는 지운다.
-2. MCP 도구 3개 `find_concepts`, `save_learning`, `get_learner_context`와 도구 설명문 (§6, 부록 A).
-3. 오너 계정: `/setup` 화면에서 비밀값 `BOOTSTRAP_CODE`로 한 번만 만든다. 세션 쿠키로 로그인 상태를 유지한다.
-4. 설정 화면: 커넥터 URL 발급·재발급, 코치 지침 템플릿 복사 (부록 B), 알림 시간 2개, 푸시 테스트.
-5. 복습: 오늘 화면, 복습 세션(OX·객관식·빈칸, 코드 조각 표시), 결과 화면, "틀린 카드 다시 보기".
-6. 복습 엔진: ts-fsrs 일정, 하루 상한, 같은 개념 하루 1장, 카드 사다리 1→2단계 (§9).
-7. 오프라인 답안 큐 (§9.5).
-8. 저장 기록 화면: 세션별 개념·판정·카드 목록, 카드 끄기.
-9. 리마인드: 푸시 구독, 매분 Cron 발송 (§10).
-10. CI(타입 검사, 테스트), 배포(마이그레이션 → `wrangler deploy`).
+1. D1 스키마 `0001_init.sql` (§5.2). MVP 0의 `spike_*` 테이블, `/spike` 페이지, `SPIKE_TOKEN`을 지우고 호출 로그를 끈다.
+2. PWA를 Vite 프로젝트로 바꾸고 `assets.directory`를 `../web/dist`로 옮긴다.
+3. MCP 도구 3개 `find_concepts`, `save_learning`, `get_learner_context`와 도구 설명문 (§6, 부록 A).
+4. 오너 계정: `/setup` 화면에서 비밀값 `BOOTSTRAP_CODE`로 한 번만 만든다. 세션 쿠키로 로그인 상태를 유지한다.
+5. 설정 화면: 커넥터 URL 발급·재발급, 코치 지침 템플릿 복사 (부록 B), 알림 시간(최대 3개), 푸시 테스트.
+6. 복습: 오늘 화면, 복습 세션(OX·객관식·빈칸, 코드 조각 표시), 결과 화면, "틀린 카드 다시 보기".
+7. 복습 엔진: ts-fsrs 일정, 하루 상한, 같은 개념 하루 1장, 카드 사다리 1→2단계 (§9).
+8. 오프라인 답안 큐 (§9.5).
+9. 저장 기록 화면: 세션별 개념·판정·카드 목록, 카드 끄기.
+10. 리마인드: 푸시 구독, 매분 Cron 발송 (§10).
+11. CI(타입 검사, 테스트)와 배포(마이그레이션 → `wrangler deploy`)는 MVP 0에서 만든 워크플로를 그대로 쓴다.
 
 **하지 않는 것**: 초대와 친구 계정, 설명하기 카드 출제(저장은 하고 잠가 둔다), 지식 지도, 스트릭·XP·리그, AI 채점, 붙여넣기 가져오기, 카드 수정.
 
@@ -196,7 +202,7 @@ claude.ai에서 공부하다가 "정리해줘"라고 하면, 대화 중인 Claud
 
 ## 4. 저장소 구조와 스택
 
-### 4.1 저장소 구조 (pnpm 워크스페이스)
+### 4.1 저장소 구조 (npm 워크스페이스)
 
 ```
 apps/
@@ -220,19 +226,25 @@ apps/
       db/                      # SQL과 행 변환 (ORM 없음)
       auth/                    # 토큰 해시, 세션, 초대
       cron.ts                  # 매분 작업 순서
-    migrations/                # 0001_init.sql, 0002_beta.sql, ...
+    migrations/                # 0000_spike.sql(MVP 0), 0001_init.sql, 0002_beta.sql, ...
     test/
     wrangler.jsonc
   web/                         # React PWA
-    src/
+    public/                    # 정적 파일. MVP 0은 여기 있는 spike.html·sw.js·manifest를 그대로 배포한다
+    src/                       # MVP 1부터
       screens/                 # Today, Review, Sessions, Settings, Setup, (MVP 2) Join, Map, League, ...
       cards/                   # OxCard, McqCard, ClozeCard, (MVP 2) ExplainCard
       offline/                 # 큐 캐시, 답안 outbox
       sw.ts                    # 서비스 워커 (푸시, 캐시)
 packages/
   shared/                      # zod 스키마와 타입 (save_learning 입력, API 요청·응답)
+scripts/                       # gen-vapid.mjs, gen-token.mjs, replay.mjs, make-max-fixture.mjs
+.github/workflows/             # ci.yml, deploy.yml
 docs/
 ```
+
+- 패키지 관리는 npm 워크스페이스다. 루트 `.npmrc`의 `legacy-peer-deps=true`는 npm 10이 선택적 peer 의존성을 계산하다 멈추는 버그를 피하려는 설정이다.
+- 내부 패키지(`@moai/shared`)는 빌드하지 않고 TypeScript 소스를 그대로 가져다 쓴다. wrangler(esbuild)와 vitest가 직접 읽는다.
 
 `packages/shared`의 zod 스키마 하나를 MCP 도구 입력, REST 요청 검증, PWA 타입이 같이 쓴다. 스키마가 한 곳에만 있어서 서로 어긋나지 않는다.
 
@@ -247,14 +259,18 @@ docs/
 | 간격 반복 | `ts-fsrs` | 5.4.2 |
 | 웹 푸시 (aes128gcm, VAPID) | `@block65/webcrypto-web-push` | 2.0.0 |
 | Claude API (MVP 2) | `@anthropic-ai/sdk` | 0.135.0 (README에 Cloudflare Workers 지원 명시) |
-| 테스트 | `vitest` + `@cloudflare/vitest-pool-workers` | 0.23.0 |
-| PWA | `vite` + `react` + `vite-plugin-pwa` | 2.0.0 |
+| 테스트 | `vitest` | 4.1.12 (`@cloudflare/vitest-plugin`의 peer 범위) |
+| Workers 테스트 통합 | `@cloudflare/vitest-plugin` | 1.4.4 (`@cloudflare/vitest-pool-workers`가 이름을 바꾼 것. 옛 이름은 지원 종료) |
+| MCP 계약 테스트 | `@modelcontextprotocol/client` | 2.3.1 |
+| 타입 | `typescript`, `@cloudflare/workers-types` | 5.9.3, 5.20261016.1 |
+| PWA (MVP 1) | `vite-plugin-pwa` | 2.0.0. `vite`, `react` 버전은 MVP 1 착수 때 정한다 |
 | 오프라인 저장 | `idb-keyval` | 6.3.0 |
 | 지식 지도 (MVP 2) | `d3-force` | 3.0.0 |
 | OAuth (MVP 3) | `@cloudflare/workers-oauth-provider` | 1.2.3 |
 
 - `nodejs_compat` 플래그는 필요해질 때만 켠다. 위 패키지들은 Web 표준 API로 동작한다.
 - `compatibility_date`는 고정하고, 올릴 때는 CI의 테스트 배포로 먼저 확인한다.
+- 버전은 `package.json`에 정확히 고정한다. 범위로 두면 peer 범위 밖의 새 메이저(예: vitest 5)가 들어올 수 있다.
 
 ### 4.3 `wrangler.jsonc` 핵심 설정
 
@@ -262,21 +278,21 @@ docs/
 
 ```jsonc
 {
-  "name": "dwesaegim",
+  "name": "moai",
   "main": "src/index.ts",
   "compatibility_date": "2026-10-01",
   "workers_dev": false,
   "routes": [{ "pattern": "app.<도메인>", "custom_domain": true }],
   "assets": {
-    "directory": "../web/dist",
+    "directory": "../web/dist",          // MVP 0은 "../web/public"
     "not_found_handling": "single-page-application",
     "run_worker_first": ["/api/*", "/mcp/*"]
   },
   "d1_databases": [
-    { "binding": "DB", "database_name": "dwesaegim", "database_id": "<id>", "migrations_dir": "migrations" }
+    { "binding": "DB", "database_name": "moai", "database_id": "<id>", "migrations_dir": "migrations" }
   ],
   "triggers": { "crons": ["* * * * *"] },
-  "observability": { "enabled": true, "logs": { "invocation_logs": false } },
+  "observability": { "enabled": true, "logs": { "invocation_logs": false } },   // MVP 0만 true
   // "placement": { "mode": "smart" },   // MVP 0에서 응답 시간을 비교하고 정한다
   "vars": {
     "APP_ORIGIN": "https://app.<도메인>",
@@ -286,7 +302,10 @@ docs/
 }
 ```
 
-- `invocation_logs: false`: 호출 로그는 요청 URL을 남기는데, MCP URL에는 비밀 토큰이 들어 있다. 그래서 끄고, 직접 남기는 로그에도 경로를 넣지 않는다. CPU 시간과 오류율은 대시보드 지표로 본다.
+- `invocation_logs`: 호출 로그는 요청 URL을 남기는데, MCP URL에는 비밀 토큰이 들어 있다.
+  - MVP 0은 SPIKE_TOKEN 하나만 쓰고 끝나면 버리므로 켜 둔다. 대시보드 지표는 Worker 전체(Cron 포함)를 합친 값이라, tools/list와 tools/call을 따로 보려면 요청별 CPU가 남는 호출 로그가 필요하다.
+  - MVP 1부터는 사용자 토큰을 발급하기 전에 끈다. 직접 남기는 로그에도 경로를 넣지 않는다.
+- 로컬 실행은 `wrangler dev --local-upstream localhost:8787`이다. 이 옵션이 없으면 wrangler가 요청 주소를 `routes`의 도메인으로 바꿔서 Host 검사(§6.1)에 걸린다.
 
 ### 4.4 비밀값과 변수
 
@@ -315,7 +334,7 @@ docs/
 - 배열과 객체는 JSON 문자열 `TEXT`로 두고 `json_extract`, `json_each`로 읽는다.
 - 자주 읽는 테이블에는 모두 `user_id`를 두고, 모든 조회를 `user_id`로 시작하는 인덱스로 한다. D1은 읽은 행이 아니라 스캔한 행으로 세기 때문이다.
 - ID는 `crypto.randomUUID()`.
-- `REFERENCES`는 적어 두지만, 정합성은 앱 코드가 책임진다.
+- D1은 외래 키(`REFERENCES`)를 기본으로 검사한다. 그래서 지울 때는 자식부터 지운다. 계정 삭제는 `review_logs`, `card_reports` → `cards` → `judgments`, `followups` → `edges` → `concepts`, `learning_sessions` → 나머지 사용자 테이블 → `users` 순서로 한 batch에서 한다. 테이블을 다시 만드는 마이그레이션에는 `PRAGMA defer_foreign_keys = on`을 쓴다.
 - **하루의 경계는 04:00 KST**다. 새벽에 한 복습은 전날로 센다. SQL에서는 `date(ts/1000 + 5*3600, 'unixepoch')`다 (+9시간 −4시간).
 
 ### 5.2 MVP 1 스키마 (`migrations/0001_init.sql`)
@@ -365,6 +384,7 @@ CREATE TABLE concepts (
   key          TEXT NOT NULL,                      -- 영어 kebab-case. 예: deep-copy
   name         TEXT NOT NULL,
   aliases      TEXT NOT NULL DEFAULT '[]',
+  search_text  TEXT NOT NULL,                      -- 이름·별칭·key를 소문자로 바꾸고 공백·기호를 지워 '|'로 이은 값 (§6.6)
   domain       TEXT,                               -- java, spring, db, network, os, ai ...
   final_answer TEXT,                               -- 가장 최근에 확정한 내 설명
   created_at   INTEGER NOT NULL,
@@ -410,7 +430,7 @@ CREATE TABLE cards (
   user_id        TEXT NOT NULL,
   concept_id     TEXT NOT NULL REFERENCES concepts(id),
   session_id     TEXT NOT NULL REFERENCES learning_sessions(id),
-  rung           INTEGER NOT NULL CHECK (rung BETWEEN 1 AND 3),
+  rung           INTEGER NOT NULL CHECK (rung BETWEEN 1 AND 3),   -- 서버가 카드 종류로 정한다 (§9.4)
   type           TEXT NOT NULL CHECK (type IN ('ox', 'mcq', 'cloze', 'explain')),
   prompt         TEXT NOT NULL,
   code           TEXT,                             -- 코드 읽기 카드의 코드 조각
@@ -548,14 +568,14 @@ XP, 스트릭, 리그는 따로 저장하지 않고 `review_logs`와 `learning_s
 
 ### 6.1 엔드포인트와 인증
 
-- 주소: `POST https://app.<도메인>/mcp/u/<토큰>`. GET과 DELETE는 405다.
+- 주소: `POST https://app.<도메인>/mcp/u/<토큰>`. 라우트는 모든 메서드를 받아 핸들러로 넘기고, 핸들러가 GET과 DELETE에 405를 돌려준다.
 - 토큰: 256비트 무작위 값(base64url). DB에는 `HMAC-SHA256(TOKEN_PEPPER, 토큰)`만 저장한다. 설정 화면에서 발급하면 주소를 한 번만 보여 주고, 재발급하면 이전 토큰은 바로 무효가 된다. 재발급한 뒤에는 claude.ai에서 커넥터를 지우고 다시 추가해야 한다.
 - 모르는 토큰이나 취소된 토큰은 본문 없이 404를 돌려준다.
 - claude.ai에는 "로그인 없음(No sign in)"으로 추가한다. 개인 Pro·Max 요금제에서는 고정 헤더 인증이 일부 조직만 쓰는 베타라서 기대하지 않는다. OAuth는 MVP 3에서 붙인다.
 - 요청 앞단 검사:
-  - `Host`가 `app.<도메인>`이 아니면 거절한다.
+  - `Host`가 `app.<도메인>`이 아니면 421로 거절한다.
   - `Origin` 헤더가 있는데 `APP_ORIGIN`이 아니면 403이다. Anthropic 클라우드의 서버 간 호출에는 보통 `Origin`이 없다.
-  - 본문이 64KB를 넘으면 413이다.
+  - 본문이 256KB를 넘으면 413이다. 가장 큰 정상 요청(개념 20개, 카드 30장)이 약 52KB라서 여유를 크게 뒀다. 413은 도구 오류(`isError`)가 아니라서 Claude가 고쳐서 다시 보낼 수 없으므로, 정상 요청이 닿지 않을 만큼 넉넉하게 둔다.
 - claude.ai 쪽 조건 (기획서 §5.3):
   - 공개 HTTPS와 IPv4 A 레코드가 필요하다. 호출은 폰 앱에서 쓸 때도 항상 Anthropic 클라우드(`160.79.104.0/21`)에서 온다.
   - 다른 호스트로 리다이렉트하지 않는다.
@@ -567,24 +587,25 @@ XP, 스트릭, 리그는 따로 저장하지 않고 `review_logs`와 `learning_s
 // apps/worker/src/mcp/server.ts (요지)
 import { McpServer, createMcpHandler } from '@modelcontextprotocol/server';
 
-const handler = createMcpHandler(
+export const mcpHandler = createMcpHandler(
   (ctx) => {
-    const userId = ctx.authInfo?.extra?.userId as string;   // 아래 fetch에서 넣은 값
-    const server = new McpServer({ name: 'dwesaegim', version: '1.0.0' });
-    registerFindConcepts(server, userId);
-    registerSaveLearning(server, userId);
-    registerGetLearnerContext(server, userId);
+    const deps = ctx.authInfo?.extra as unknown as McpDeps;   // 라우트가 넣은 { env, userId }
+    const server = new McpServer({ name: 'moai', version: '0.1.0' });
+    server.registerTool('save_learning', { description, inputSchema: SaveLearningInput, annotations }, async (input) => { /* ... */ });
+    // find_concepts, get_learner_context도 같은 방식 (MVP 1)
     return server;
   },
   { legacy: 'stateless' },
 );
 
-// Hono 라우트
-app.post('/mcp/u/:token', async (c) => {
-  const user = await findUserByMcpToken(c.env, c.req.param('token'));  // 해시로 조회
-  if (!user) return c.body(null, 404);
-  return handler.fetch(c.req.raw, {
-    authInfo: { token: user.tokenHash, clientId: 'url-token', scopes: [], extra: { userId: user.id } },
+// apps/worker/src/mcp/route.ts (요지)
+app.all('/mcp/u/:token', async (c) => {
+  // Host·Origin 검사 → 토큰 확인 → 본문 크기 확인(256KB) → JSON 파싱
+  const user = await findUserByMcpToken(c.env, c.req.param('token'));   // MVP 0은 SPIKE_TOKEN과 비교
+  if (!user) return new Response(null, { status: 404 });
+  return mcpHandler.fetch(new Request(c.req.url, { method: c.req.method, headers: c.req.raw.headers, body }), {
+    authInfo: { token: 'url-token', clientId: 'url-token', scopes: [], extra: { env: c.env, userId: user.id } },
+    parsedBody,
   });
 });
 ```
@@ -593,8 +614,9 @@ app.post('/mcp/u/:token', async (c) => {
   - 2026-07-28 방식 요청은 새 경로로 처리한다.
   - 2025년 방식 요청은 `legacy: 'stateless'`(기본값)로 처리한다.
   - 그래서 claude.ai가 어느 버전으로 협상하든 같은 도구가 응답한다.
-- `responseMode`는 2026-07-28 방식에만 적용된다. 2025년 방식 응답은 SSE 형태일 수도 있으므로, 계약 테스트는 두 방식을 다 검사하고 `text/event-stream` 응답도 받아들인다.
-- `authInfo`에는 `token`, `clientId`, `scopes`가 필수다. 사용자 ID는 `extra`로 넘긴다.
+- `responseMode`는 2026-07-28 방식에만 적용된다. 2025년 방식 응답은 실제로 SSE(`event: message`) 형태로 나온다 (MVP 0 로컬 실행에서 확인). 계약 테스트는 두 방식을 다 검사하고 `text/event-stream` 응답도 받아들인다.
+- `authInfo`에는 `token`, `clientId`, `scopes`가 필수다. 사용자 ID와 `env`(D1 바인딩)는 `extra`로 넘긴다. 핸들러는 모듈 범위에서 한 번만 만들고, 요청마다 다른 값은 이렇게 전달한다.
+- 라우트가 본문을 먼저 읽어 크기를 확인하므로, 읽은 본문으로 `Request`를 다시 만들고 파싱한 값은 `parsedBody`로 넘긴다.
 - 핸들러 자체는 Origin·Host 검사를 하지 않으므로 §6.1의 앞단 검사를 라우트에서 한다.
 - 도구에서는 샘플링, elicitation, 진행 알림을 쓰지 않는다.
 
@@ -617,20 +639,20 @@ app.post('/mcp/u/:token', async (c) => {
 ```ts
 const Key = z.string().regex(/^[a-z0-9]+(-[a-z0-9]+)*$/).max(60);
 const Label = z.enum(['맞음', '애매', '틀림', '빠짐']);
-const Rung12 = z.union([z.literal(1), z.literal(2)]);
 
+// 카드에는 rung(단계)이 없다. 서버가 rungOf(card)로 정한다 (§9.4). 보내면 버려진다.
 const Card = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('ox'), concept: Key, rung: Rung12, prompt: z.string().max(500),
+  z.object({ type: z.literal('ox'), concept: Key, prompt: z.string().max(500),
              code: z.string().max(1500).optional(), answer: z.enum(['O', 'X']), explain: z.string().max(400) }),
-  z.object({ type: z.literal('mcq'), concept: Key, rung: Rung12, prompt: z.string().max(500),
+  z.object({ type: z.literal('mcq'), concept: Key, prompt: z.string().max(500),
              code: z.string().max(1500).optional(),
              options: z.array(z.object({ text: z.string().max(300), correct: z.boolean(),
                                          from_my_answer: z.boolean().optional() })).min(3).max(4),
              explain: z.string().max(400) }),
-  z.object({ type: z.literal('cloze'), concept: Key, rung: z.literal(2), prompt: z.string().max(500),
+  z.object({ type: z.literal('cloze'), concept: Key, prompt: z.string().max(500),
              answer: z.string().max(40), choices: z.array(z.string().max(40)).min(3).max(5),
              explain: z.string().max(400) }),
-  z.object({ type: z.literal('explain'), concept: Key, rung: z.literal(3), prompt: z.string().max(300),
+  z.object({ type: z.literal('explain'), concept: Key, prompt: z.string().max(300),
              checklist: z.array(z.string().max(60)).min(2).max(5) }),
 ]);
 
@@ -659,6 +681,18 @@ export const SaveLearningInput = z.object({
 - 빈칸은 `prompt`에 `____`가 정확히 한 번 있고, `choices`에 `answer`가 들어 있다.
 - 연결은 `from`과 `to`가 달라야 한다.
 - 설명하기 카드는 그 개념의 최종 버전이 있을 때만 받는다. 최종 버전은 이번 입력의 개념 `final_answer`, 세션 `final_answer`, 기존 값 중 하나다. 세션 `final_answer`를 썼으면 그 개념의 `final_answer`로도 저장한다.
+- 설명하기 카드가 있는 개념에는 1·2단계 카드(이번 입력 또는 기존 카드)도 있어야 한다. 그래야 사다리로 설명하기까지 올라갈 수 있다.
+- `from_my_answer` 보기는 오답이어야 하고, 개념 key는 한 번만 선언한다.
+
+카드 단계(rung)는 Claude가 정하지 않는다. `rungOf(card)`가 카드 종류로 정한다.
+
+| 카드 | 단계 |
+|---|---|
+| 코드 없는 ox, mcq | 1 알아보기 |
+| cloze, 코드가 있는 ox·mcq | 2 떠올리기 |
+| explain | 3 설명하기 |
+
+단계를 입력으로 받으면 "코드 OX인데 1단계"처럼 서로 어긋나는 값이 생기고, 그때마다 도구 오류가 나서 Claude가 다시 보내야 한다. 종류에서 정하면 그런 오류가 없다. 스키마 상한의 최악값(카드 30장 × 긴 보기)은 256KB 본문 상한보다 커질 수 있지만, 실제 Claude 요청은 최대 크기 견본이 약 52KB라 닿지 않는다.
 
 검사에 걸리면 `isError: true`와 함께 고칠 점을 한국어 목록으로 돌려준다. Claude가 읽고 고쳐서 다시 부를 수 있다.
 
@@ -666,7 +700,7 @@ export const SaveLearningInput = z.object({
 
 1. 입력을 정규화(키 정렬, 공백 정리)해서 SHA-256을 구한다. 같은 사용자에게 같은 `payload_hash`가 있으면, 그때의 `summary`를 그대로 돌려주고 끝낸다. Claude가 재시도해도 중복이 생기지 않는다.
 2. 개념 key를 기존 개념과 맞춘다. 있으면 이름·별칭·`final_answer`를 갱신하고, 없으면 새로 만든다.
-3. 카드마다 FSRS 초기 상태를 `createEmptyCard(now)`로 만든다. 사다리 규칙(§9.4)에 따라 개념의 가장 낮은 단계 카드만 `active`로, 나머지는 `locked`로 둔다.
+3. 카드마다 `rungOf(card)`로 단계를 정하고, FSRS 초기 상태를 `createEmptyCard(now)`로 만든다. 상태는 사다리 규칙(§9.4)을 따른다: 개념의 가장 낮은 단계 카드만 `active`, 나머지는 `locked`. 설명하기 카드는 언제나 `locked`로 저장한다.
 4. 아래를 **`DB.batch()` 한 번**으로 쓴다. batch는 하나의 트랜잭션이라 일부만 저장되지 않는다.
    - 테이블마다 `INSERT ... SELECT ... FROM json_each(?1)` 한 문장으로 쓴다. 모든 행을 JSON 하나로 묶어 바인딩 1개로 보내므로, 문장당 바인딩 개수 제한과 호출당 쿼리 50개 제한에 걸리지 않는다.
    - 대상: 세션, 개념 upsert, 연결, 판정, 다음 질문, 카드. 약 8문장이다.
@@ -677,7 +711,9 @@ export const SaveLearningInput = z.object({
 ### 6.6 `find_concepts`
 
 - 입력: `{ query: string (≤200), limit?: number (≤20, 기본 10) }`. `query`에는 주제나 쉼표로 나눈 개념 이름을 넣는다.
-- 방법: 소문자로 바꾸고 공백·기호를 지운 문자열로 `name`, `aliases`, `key`에 `LIKE`를 건다. 맞은 개념과 바로 연결된 개념(1단계)도 함께 돌려준다.
+- 방법: `query`를 쉼표로 나눠 이름마다 따로 찾는다. 각 이름을 소문자로 바꾸고 공백·기호를 지운 뒤, 저장해 둔 `concepts.search_text`에 `instr(search_text, ?) > 0`으로 찾는다. 맞은 개념과 바로 연결된 개념(1단계)도 함께 돌려준다.
+  - `LIKE`를 쓰지 않는 이유: D1은 LIKE 패턴을 50바이트로 제한한다. 한글은 UTF-8로 3바이트라 17자 정도면 넘는다.
+  - 저장할 때 같은 방식으로 정규화해 두므로 "깊은복사"로 찾아도 "깊은 복사"가 걸린다.
 - 출력: `[{ key, name, aliases, state, last_judgment }]`. 결과가 없으면 "새 개념으로 저장하면 돼요"라고 알린다.
 
 ### 6.7 `get_learner_context`
@@ -715,7 +751,7 @@ export const SaveLearningInput = z.object({
 | 1 | `GET /api/me` | 내 정보, 설정 |
 | 1 | `GET /api/today` | 오늘 남은 카드 수, 예상 시간, 최근 저장 세션, 열린 질문 |
 | 1 | `GET /api/queue?size=8` | 오늘 복습할 카드 (§9.2). 기기에서 채점할 수 있게 정답도 함께 준다 |
-| 1 | `POST /api/reviews` | 답안 묶음 기록, 최대 50건 (§9.5) |
+| 1 | `POST /api/reviews` | 답안 묶음 기록, 최대 20건 (§9.5) |
 | 1 | `GET /api/sessions`, `GET /api/sessions/:id` | 저장 기록과 그 안의 개념·판정·카드 |
 | 1 | `POST /api/cards/:id/suspend`, `/unsuspend` | 카드 끄기와 다시 켜기 |
 | 1 | `GET /api/reminders`, `PUT /api/reminders` | 알림 시간 (최대 3개) |
@@ -793,7 +829,7 @@ export const scheduler = fsrs(generatorParameters({
   request_retention: 0.9,    // 목표 기억률 90%
   maximum_interval: 180,     // 면접 준비 기간에 맞춰 최대 180일
   enable_fuzz: true,
-  enable_short_term: true,   // 틀린 카드는 학습 단계(기본 1분, 10분)를 거친다
+  enable_short_term: true,   // 새 카드는 1분·10분 학습 단계, 복습 중 틀린 카드는 10분 재학습 단계를 거친다 (ts-fsrs 기본값)
 }));
 // 채점: scheduler.next(card, reviewedAt, grade) → { card, log }
 // 미리보기: scheduler.repeat(card, now) → 등급별 다음 상태 (설명하기 버튼의 간격 표시)
@@ -826,8 +862,9 @@ export const scheduler = fsrs(generatorParameters({
 
 ### 9.4 카드 사다리
 
-- 저장할 때 개념마다 가장 낮은 단계의 카드만 `active`, 더 높은 단계는 `locked`다.
-- 복습을 기록한 뒤 그 개념을 검사한다. 현재 열린 가장 높은 단계 r의 활성 카드가 모두 `stability >= 7`(일)이면, r+1단계 카드를 `active`로 바꾸고 `due = now`로 둔다.
+- 카드 단계는 `rungOf(card)`가 카드 종류로 정한다 (§6.4 표).
+- 저장할 때 개념마다 가장 낮은 단계의 카드만 `active`, 더 높은 단계는 `locked`다. 설명하기 카드는 그 개념에 다른 카드가 없어도 언제나 `locked`로 저장한다 (도메인 검사가 1·2단계 카드를 함께 요구한다).
+- 복습을 기록한 뒤 그 개념을 검사한다. 지금 열린 가장 높은 단계 r의 활성 카드가 모두 `stability >= 7`(일)이면, **r보다 높은 잠긴 단계 중 가장 낮은 단계**의 카드를 `active`로 바꾸고 `due = now`로 둔다. 2단계 카드가 없는 개념도 1단계에서 3단계로 올라갈 수 있다.
 - MVP 1은 2단계까지만 연다. 3단계(설명하기)는 MVP 2에서 화면이 생길 때 열기 시작한다.
 - 틀렸을 때 단계를 내리는 규칙은 넣지 않는다. FSRS가 간격을 줄이는 것으로 충분한지 MVP 2 데이터를 보고 정한다.
 
@@ -837,7 +874,7 @@ PWA 쪽:
 
 - 세션을 시작하면 받은 큐를 IndexedDB에 저장한다.
 - 답할 때마다 `{ id: crypto.randomUUID(), card_id, grade, response, elapsed_ms, reviewed_at }`를 outbox에 넣고 바로 보내 본다.
-- 실패하면 `online` 이벤트나 다음 실행 때 다시 보낸다. 화면은 네트워크를 기다리지 않는다.
+- 실패하면 `online` 이벤트나 다음 실행 때 다시 보낸다. 한 번에 20건씩 나눠 보낸다. 화면은 네트워크를 기다리지 않는다.
 
 서버 쪽 (`POST /api/reviews`):
 
@@ -862,10 +899,10 @@ PWA 쪽:
 | 흔들림 | 노랑 | 그 밖 전부 (방금 배운 개념, 틀렸거나 애매했던 개념 포함) |
 
 - 상태는 Claude가 정하지 않고 서버가 계산한다. 판정 이력은 개념 상세에서 보여 준다.
-- "이어서 공부하기"는 아래 형식의 프롬프트를 복사한다. 코치 지침(부록 B)이 `[되새김:key]`를 보면 `get_learner_context`를 먼저 부른다.
+- "이어서 공부하기"는 아래 형식의 프롬프트를 복사한다. 코치 지침(부록 B)이 `[모아이:key]`를 보면 `get_learner_context`를 먼저 부른다.
 
 ```
-[되새김:deep-copy] 깊은 복사와 방어적 복사는 어떻게 다른가요? 먼저 제 말로 답해 볼게요.
+[모아이:deep-copy] 깊은 복사와 방어적 복사는 어떻게 다른가요? 먼저 제 말로 답해 볼게요.
 ```
 
 ---
@@ -892,14 +929,16 @@ PWA 쪽:
       바뀐 행이 없으면 다른 실행이 처리한 것이니 건너뛴다. (최대 한 번 발송)
    b. :now - :old 가 30분을 넘으면 보내지 않는다. 장애 뒤에 늦은 알림이 몰려 오는 것을 막는다.
    c. 오늘 큐 개수를 센다. 0이면 보내지 않는다.
-   d. 메시지를 만든다. 예: 제목 "오늘 되새김 8장", 본문 "약 3분 · 깊은 복사가 흔들려요", url "/review?from=push"
-   e. 구독마다 buildPushPayload(message, subscription, vapid)로 암호화하고, fetch(endpoint, payload)로 보낸다. TTL은 4시간.
+   d. 메시지를 만든다. 예: 제목 "오늘 복습 8장", 본문 "약 3분 · 깊은 복사가 흔들려요", url "/review?from=push"
+   e. 구독마다 buildPushPayload({ data: { title, body, url }, options: { ttl: 14400 } },
+      { endpoint, expirationTime: null, keys: { p256dh, auth } }, vapid)로 암호화하고, fetch(endpoint, payload)로 보낸다.
+      ttl을 빼면 이 라이브러리는 60초로 보낸다.
    f. 201·200이면 last_ok_at을 갱신하고, 404·410이면 구독을 지운다. 그 밖이면 fail_count를 올리고, 5번 연속이면 지운다.
 ```
 
 - 한 틱에 보내는 슬롯 수는 MVP 0에서 잰 푸시 1건의 CPU로 정한다. 10명이 모두 같은 분을 골라도 몇 분 안에 다 나간다.
 - CPU가 빠듯하면 VAPID 헤더를 푸시 서비스별로 캐시한다. 이 라이브러리는 `vapidHeaders`와 `encryptNotification`도 따로 내보낸다.
-- 알림 문구는 4KB를 넘지 않게 한다.
+- `data`의 JSON은 3,993바이트 이하여야 한다 (이 라이브러리의 평문 상한).
 
 ### 10.3 서비스 워커
 
@@ -935,7 +974,9 @@ PWA 쪽:
 import Anthropic from '@anthropic-ai/sdk';
 import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod';
 
-const res = await client.beta.messages.parse({
+// parse()는 JSON이 잘리거나 스키마에 안 맞으면 예외를 던져 stop_reason을 볼 수 없다.
+// 그래서 create()에 같은 output_config.format을 넘기고, stop_reason을 먼저 본 뒤 직접 검증한다.
+const res = await client.beta.messages.create({
   model: env.GRADER_MODEL,                         // 기본 'claude-opus-5-5'
   max_tokens: 4096,                                // 가져오기는 16000
   betas: ['server-side-fallback-2026-07-01'],
@@ -946,11 +987,13 @@ const res = await client.beta.messages.parse({
 });
 if (res.stop_reason === 'refusal') { /* 작업 실패: error = 'refusal' */ }
 if (res.stop_reason === 'max_tokens') { /* 작업 실패: error = 'truncated' */ }
-const result = res.parsed_output;                  // 파싱 실패면 null
+const text = res.content.find((block) => block.type === 'text')?.text ?? '';
+const parsed = GradeResult.safeParse(safeJsonParse(text));
+if (!parsed.success) { /* 작업 실패: error = 'invalid_output' */ }
 ```
 
 - 클라이언트는 첫 사용 때 만들고 재사용한다. `maxRetries`는 1이다.
-- structured outputs가 지원하는 JSON Schema는 범위가 제한될 수 있다. 그래서 응답은 서버에서 zod로 한 번 더 검증한다.
+- structured outputs가 지원하는 JSON Schema는 범위가 제한될 수 있다. 그래서 응답은 서버에서 zod로 검증한다 (위 코드의 `safeParse`).
 - 채점 기준(시스템 프롬프트, 부록 C)은 고정 문자열로 두고 캐시 지점을 건다. Opus 5.5는 512토큰 이상의 앞부분을 캐시한다. 카드의 최종 버전, 체크리스트, 사용자 답은 캐시 지점 뒤에 둔다.
 
 ### 11.2 설명하기 AI 채점
@@ -989,7 +1032,10 @@ runJob(id):
   4. 실패하면 attempts < 3이면 queued로 되돌리고, 아니면 failed
 
 매분 Cron:
-  - queued 상태로 1분 넘게 남은 작업, running 상태로 3분 넘게 갱신이 없는 작업을 1건 집어 runJob 실행
+  1. 오래 멈춘 작업을 되돌린다
+     UPDATE llm_jobs SET status='queued' WHERE status='running' AND updated_at < :stale
+     :stale은 채점 3분 전, 가져오기 15분 전 (가져오기는 정상이어도 몇 분 걸릴 수 있다)
+  2. queued 상태로 1분 넘게 남은 작업을 1건 집어 runJob 실행
 ```
 
 - `waitUntil`은 응답을 보낸 뒤 최대 30초까지 돈다고 알려져 있다. 그 안에 못 끝나도 Cron이 이어 받는다. MVP 2 착수 때 이 시간을 확인한다.
@@ -1055,16 +1101,18 @@ runJob(id):
 ### 13.1 배포
 
 - GitHub Actions:
-  - PR마다: 타입 검사, 린트, 테스트, 웹 빌드.
-  - main에 머지되면: `wrangler d1 migrations apply dwesaegim --remote` → `wrangler deploy`.
-  - 필요한 저장소 비밀값: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`.
+  - `.github/workflows/ci.yml`: main·`claude/**` 브랜치 push와 PR마다 `npm ci` → 타입 검사 → 테스트. (MVP 1부터 웹 빌드를 더한다.)
+  - `.github/workflows/deploy.yml`: main에 머지되거나 직접 실행하면 테스트 → `wrangler d1 migrations apply moai --remote` → `wrangler deploy`.
+    - 저장소 비밀값 `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`가 없으면 경고만 남기고 건너뛴다.
+    - `wrangler.jsonc`에 자리표시자(예시 도메인, 0으로 된 database_id)가 남아 있으면 실패하고 이유를 알린다.
+  - 앱 비밀값(`SPIKE_TOKEN`, `VAPID_PRIVATE_KEY`, 이후 `TOKEN_PEPPER` 등)은 GitHub에 두지 않고 `wrangler secret put`으로 Cloudflare에 한 번 넣는다.
 - 환경은 로컬(`wrangler dev`, 로컬 D1)과 운영 두 개다. 10명 규모라 스테이징은 두지 않는다.
 - 마이그레이션은 항상 로컬 D1에 먼저 적용해서 테스트하고 올린다.
 
 ### 13.2 백업
 
 - D1 Time Travel이 7일 안의 시점으로 되돌려 준다.
-- 주 1회 `wrangler d1 export dwesaegim --remote --output=<파일>`로 내보낸다. 친구들 데이터가 들어 있으므로 레포나 공개 저장소에 올리지 않는다.
+- 주 1회 `wrangler d1 export moai --remote --output=<파일>`로 내보낸다. 친구들 데이터가 들어 있으므로 레포나 공개 저장소에 올리지 않는다.
 
 ### 13.3 Cloudflare 존 설정 체크리스트
 
@@ -1076,11 +1124,10 @@ runJob(id):
 | AI 봇 차단 설정 | Security의 Bots / AI Crawl Control에서 `/mcp`로 오는 Anthropic 에이전트 트래픽을 막지 않는지 확인 | MCP 호출이 막힐 수 있다 (MVP 0 확인 항목 6) |
 | WAF·속도 제한 규칙 | `/mcp/*`에는 걸지 않는다. 걸어야 하면 Anthropic IP 대역을 Skip 예외로 둔다 | 403·429가 나면 연결이 끊긴다 |
 | `workers.dev` | 끈다 (`workers_dev: false`) | 주소가 하나여야 한다 |
-| SSL | Full (strict) | |
 
 ### 13.4 로그와 지표
 
-- 호출 로그는 끈다 (§4.3). 직접 남기는 로그는 이벤트 이름, 사용자 ID, 도구 이름, 걸린 시간만 남긴다. URL과 본문은 남기지 않는다.
+- 호출 로그는 MVP 1부터 끈다 (§4.3). 직접 남기는 로그는 이벤트 이름, 사용자 ID, 도구 이름, 걸린 시간만 남긴다. URL과 본문은 남기지 않는다.
 - 대시보드 지표에서 CPU 시간 p50·p99, 오류율, D1 읽기·쓰기 행 수를 주 1회 본다.
 - MVP 2 관리자 화면에 최근 7일 도구 호출 실패 수, 푸시 실패 수, LLM 지출을 보여 준다.
 
@@ -1089,7 +1136,7 @@ runJob(id):
 | 종류 | 대상 |
 |---|---|
 | 단위 | zod 스키마(실제 Claude 페이로드 견본), 도메인 검사, 등급 매핑, 큐 규칙, 사다리, 다음 발송 시각 계산(자정·04:00 경계), 푸시 응답 처리 |
-| 통합 (`@cloudflare/vitest-pool-workers`, 로컬 D1) | MCP 계약 테스트 2025 방식·2026-07-28 방식, `save_learning` 중복 방지와 원자성, 복습 기록 재전송, Cron 처리(fetch 모의) |
+| 통합 (`@cloudflare/vitest-plugin`, 로컬 D1, Workers 런타임) | MCP 계약 테스트(원시 JSON-RPC와 공식 클라이언트로 2025 방식·2026-07-28 방식), `save_learning` 중복 방지와 원자성, 복습 기록 재전송, Cron 처리(fetch 모의) |
 | 실기기 | MVP마다 iPhone·Android에서 커넥터 저장 → 다음 날 푸시 → 복습 흐름 |
 
 ---
@@ -1129,8 +1176,8 @@ runJob(id):
 ### `save_learning`
 
 ```
-이번 학습 세션에서 확인한 개념, 판정, 카드, 다음에 볼 질문을 사용자의 복습 앱(되새김)에 저장한다.
-호출하기 전에 find_concepts로 기존 개념을 찾고, 같은 개념이면 그 key를 그대로 쓴다.
+이번 학습 세션에서 확인한 개념, 판정, 카드, 다음에 볼 질문을 사용자의 복습 앱(모아이)에 저장한다.
+find_concepts 도구가 있으면 호출하기 전에 그것으로 기존 개념을 찾고, 같은 개념이면 그 key를 그대로 쓴다.
 새 개념의 key는 영어 kebab-case로 짓는다 (예: deep-copy).
 
 [판정]
@@ -1142,8 +1189,8 @@ runJob(id):
 - 정답과 해설은 이번 세션에서 확정된 내용([맞음] 판정을 받은 사용자 설명, 또는 코치가 직접 설명한 부분)에서만 가져온다.
   세션에 없던 사실을 새로 만들지 않는다.
 - 사용자가 [틀림] 또는 [애매] 판정을 받은 설명이 있으면, 그 개념의 객관식 카드에 그 원문을 오답 보기로 넣고 from_my_answer를 true로 한다.
-- 개념마다 카드 2~4장을 서로 다른 단계로 만든다.
-  1단계: ox, mcq / 2단계: cloze, 또는 code가 있는 ox·mcq / 3단계: explain (그 개념의 최종 버전이 확정됐을 때만)
+- 개념마다 카드 2~4장을 서로 다른 단계로 만든다. 단계는 카드 종류로 정해진다.
+  1단계: code 없는 ox, mcq / 2단계: cloze, 또는 code가 있는 ox·mcq / 3단계: explain (그 개념의 최종 버전이 확정됐을 때만, 1·2단계 카드와 함께)
 - mcq는 보기 3~4개에 정답 1개다. cloze는 prompt에 "____"를 한 번 넣고, choices에 정답과 헷갈릴 만한 오답을 함께 넣는다.
 - explain의 checklist에는 면접관이 듣고 싶어 하는 핵심 요소 2~5개를 짧게 쓴다 (예: "첫 문장에 이유", "방어적 복사").
 - explain(해설)은 1~2문장으로, 왜 맞고 왜 틀렸는지 쓴다.
@@ -1168,7 +1215,7 @@ save_learning 전에 이번 세션의 개념 이름들을 쉼표로 이어서 qu
 
 ```
 사용자가 이 주제나 개념에 대해 예전에 확정한 설명, 판정 기록(틀렸던 원문 포함), 약한 카드, 연결된 개념, 열린 질문을 돌려준다.
-코칭을 시작할 때, 또는 사용자 메시지에 [되새김:key]가 있을 때 먼저 호출한다.
+코칭을 시작할 때, 또는 사용자 메시지에 [모아이:key]가 있을 때 먼저 호출한다.
 결과의 정답이나 최종 버전을 사용자에게 먼저 말하지 않는다. 과거에 틀린 지점을 확인하는 질문을 만드는 데 쓴다.
 ```
 
@@ -1177,9 +1224,9 @@ save_learning 전에 이번 세션의 개념 이름들을 쉼표로 이어서 qu
 기존 코치 지침의 `# 세션 정리` 섹션을 지우고 아래를 붙인다.
 
 ```markdown
-# 되새김 연동
+# 모아이 연동
 ## 시작
-- 새 주제로 코칭을 시작하거나 사용자 메시지에 [되새김:key]가 있으면, 먼저 get_learner_context로 과거 기록을 확인한다.
+- 새 주제로 코칭을 시작하거나 사용자 메시지에 [모아이:key]가 있으면, 먼저 get_learner_context로 과거 기록을 확인한다.
 - 과거 [틀림]/[애매] 기록이 있으면 그 지점을 확인하는 질문부터 낸다. 정답은 말하지 않는다.
 
 ## 세션 정리

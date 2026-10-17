@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>모아이</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <meta name="theme-color" content="#2445B8">
+  <style>
+    :root { color-scheme: light dark; --bg: #F5F6F8; --fg: #18202D; --soft: #4A5466; --pen: #2445B8; }
+    @media (prefers-color-scheme: dark) { :root { --bg: #12161E; --fg: #E7EAF0; --soft: #A3ACBB; --pen: #8EA6FF; } }
+    body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 system-ui, -apple-system, "Apple SD Gothic Neo", sans-serif; }
+    main { max-width: 32rem; margin: 0 auto; padding: max(48px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 48px max(16px, env(safe-area-inset-left)); }
+    h1 { font-size: 2rem; margin: 0 0 8px; }
+    p { color: var(--soft); }
+    a { color: var(--pen); }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>모아이</h1>
+    <p>AI와 공부한 내용을 2~3분씩 되새기는 복습 앱이에요. 지금은 연결을 점검하는 단계(MVP 0)예요.</p>
+    <p><a href="/spike">점검 페이지로 가기</a></p>
+  </main>
+</body>
+</html>

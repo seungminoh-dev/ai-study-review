@@ -1,12 +1,12 @@
-# 되새김 (가칭) 서비스 기획서 v0.3
+# 모아이 서비스 기획서 v0.4
 
 > AI와 공부한 대화를 **복습 카드와 지식 지도**로 바꿔서, 지하철이나 침대에서 2~3분씩 되새기게 하는 서비스.
 
-- 작성일: 2026-10-17 (v0.3: TypeScript·Cloudflare Worker로 결정, 기술 내용은 설계서로 옮김)
+- 작성일: 2026-10-17 (v0.4: 이름을 모아이로 정함, MVP 0 코드 완료. v0.3: TypeScript·Cloudflare Worker로 결정, 기술 내용은 설계서로 옮김)
 - 대상: 나 + 친구 10명 클로즈드 베타. 전원 Claude Pro($20) 또는 Max($100) 요금제
 - 가입: 초대받은 사람만
 - 제약: Claude API 월 $100 이하(내 Console API 키, 서버에서만 호출), 인프라 사실상 $0, 웹(모바일 우선)
-- 관련 문서: [설계서](design.md) (구현 설계, MVP별 계획), [ADR 0001](adr/0001-runtime.md) (런타임 결정), [이름 후보](names.md)
+- 관련 문서: [설계서](design.md) (구현 설계, MVP별 계획), [MVP 0 실행 가이드](mvp0-runbook.md), [ADR 0001](adr/0001-runtime.md) (런타임 결정), [이름 후보](names.md)
 
 ---
 
@@ -35,7 +35,7 @@
 
 1. **21:30 침대** — claude.ai 프로젝트 "면접 코치"에서 불변 객체를 코칭받는다. "정리해줘"라고 하면 Claude가 3줄 정리를 하고 `save_learning` 도구를 호출한다.
    → "개념 5개, 카드 7장, 다음에 볼 질문 2개를 저장했어요."
-2. **다음 날 08:10 지하철** — 푸시 알림: "오늘 되새김 8장 · 약 3분". OX → 객관식 → 빈칸 순서로 푼다. 깊은 복사 객관식에서 또 예전 내 오답을 고른다. 해설과 함께 "이 개념은 아직 흔들려요. Claude에서 이어서 공부하기" 버튼이 뜬다.
+2. **다음 날 08:10 지하철** — 푸시 알림: "오늘 복습 8장 · 약 3분". OX → 객관식 → 빈칸 순서로 푼다. 깊은 복사 객관식에서 또 예전 내 오답을 고른다. 해설과 함께 "이 개념은 아직 흔들려요. Claude에서 이어서 공부하기" 버튼이 뜬다.
 3. **버튼 탭** — 이어서 공부할 프롬프트가 복사된다. 프로젝트에 붙여 넣으면 Claude가 `get_learner_context`로 내 기록을 읽고 "지난번엔 깊은 복사를 받아오는 시점으로 설명했죠"라며 시작한다.
 4. **며칠 뒤** — 아래 단계 카드가 익숙해지면 불변 객체가 "설명하기" 카드로 승급한다. 30초 설명을 쓰고, 내가 확정했던 최종 버전과 핵심 요소 체크리스트로 자가 채점한다.
 5. **주말** — 친구 리그에서 이번 주 XP 순위를 본다.
@@ -52,7 +52,7 @@
 지식 지도에 개념/연결 추가, 카드 생성                          │
  │                                                            │
  ▼                                                            │
-되새김: FSRS가 정한 날에 카드 출제 (웹 PWA, 푸시)              │
+복습: FSRS가 정한 날에 카드 출제 (웹 PWA, 푸시)                │
  │                                                            │
  ▼                                                            │
 약점 개념 / 다음에 볼 질문 → "이어서 공부하기" ────────────────┘
@@ -102,18 +102,18 @@ claude.ai 커넥터가 서버에 요구하는 것:
 
 ### 5.5 프로젝트 지침에 추가할 부분
 
-기존 코치 지침의 `# 세션 정리` 섹션을 설계서 부록 B의 "되새김 연동" 블록으로 바꾼다. 앱 설정 화면에서 복사할 수 있게 한다. 바뀌는 점은 세 가지다.
+기존 코치 지침의 `# 세션 정리` 섹션을 설계서 부록 B의 "모아이 연동" 블록으로 바꾼다. 앱 설정 화면에서 복사할 수 있게 한다. 바뀌는 점은 세 가지다.
 
 - 코칭을 시작할 때 `get_learner_context`로 과거 오답부터 확인한다.
 - "정리해줘"를 들으면 3줄 정리와 함께 `find_concepts` → `save_learning`으로 저장한다.
-- "이어서 공부하기"로 붙여 넣은 `[되새김:key]`를 알아본다.
+- "이어서 공부하기"로 붙여 넣은 `[모아이:key]`를 알아본다.
 
 면접 코치가 아닌 일반 Q&A 세션에서도 "이거 저장해줘"라고 하면 카드로 만든다. 판정 데이터가 없으면 오답 보기는 Claude가 만든다.
 
 ### 5.6 Claude Code 플러그인 (MVP 3)
 
 ```
-dwesaegim-plugin/
+moai-plugin/
 ├── .claude-plugin/plugin.json
 ├── skills/
 │   ├── coach/SKILL.md        # 지금 쓰는 코치 지침 이식 (/coach)
@@ -126,7 +126,7 @@ dwesaegim-plugin/
   - 친구가 Claude Code에 구독 계정으로 로그인하면 claude.ai에 추가한 커넥터가 자동으로 보인다.
   - 플러그인 `.mcp.json`에 같은 URL을 넣으면 그쪽이 우선해서 커넥터를 가린다.
   - 게다가 MCP 주소에 사용자별 비밀 토큰이 들어 있어서, 친구 모두가 받는 플러그인 하나에 고정 주소를 넣을 수도 없다.
-- 친구 설치: `/plugin marketplace add seungminoh-dev/ai-study-review` → `/plugin install dwesaegim`.
+- 친구 설치: `/plugin marketplace add seungminoh-dev/ai-study-review` → `/plugin install moai`.
 
 ## 6. 카드
 
@@ -139,7 +139,8 @@ dwesaegim-plugin/
 | 3. 설명하기 | 30초 설명 (텍스트, 나중에 음성) | 내 말로 설명할 수 있나 | 자가 채점 (기본) / AI 채점 (선택, 쿼터) |
 | 보너스 | 꼬리질문 체인 (MVP 3) | 연결된 개념을 이어서 답할 수 있나 | 단계별 |
 
-- 개념 안에서 아래 단계 카드의 FSRS 안정도(stability)가 모두 7일을 넘으면 다음 단계 카드가 열린다.
+- 카드의 단계는 Claude가 정하지 않고 서버가 카드 종류로 정한다. 코드 없는 OX·객관식은 1단계, 빈칸과 코드가 있는 OX·객관식은 2단계, 설명하기는 3단계다.
+- 개념 안에서 지금 열린 단계 카드의 FSRS 안정도(stability)가 모두 7일을 넘으면 그다음 단계 카드가 열린다. 설명하기 카드는 처음에 늘 잠겨 있다.
 - 틀렸을 때 단계를 내리는 규칙은 넣지 않는다. FSRS가 간격을 줄이는 것으로 충분한지 MVP 2 데이터를 보고 정한다.
 - 설명하기 카드의 자가 채점: 내가 확정한 최종 버전 + 핵심 요소 체크리스트 + 두괄식 여부를 보고 4단계(다시/어려움/좋음/쉬움)로 매긴다. 무료다.
 - AI 채점: 코치 지침과 같은 `[맞음]/[애매]/[틀림]/[빠짐]` 기준으로 판정만 하고 정답은 말하지 않는다.
@@ -154,7 +155,7 @@ dwesaegim-plugin/
 
 ### 6.3 `save_learning` 페이로드 예시 (불변 객체 세션)
 
-전체 스키마는 설계서 §6.4에 있다.
+전체 스키마는 설계서 §6.4에 있고, 같은 내용이 테스트 견본 `packages/shared/fixtures/immutable-object.json`에 있다 (빈칸 카드 1장이 더 있다). 카드에 단계(rung)는 넣지 않는다.
 
 ```json
 {
@@ -193,14 +194,14 @@ dwesaegim-plugin/
   ],
   "cards": [
     {
-      "concept": "final-variable", "type": "ox", "rung": 2,
+      "concept": "final-variable", "type": "ox",
       "prompt": "이 코드는 컴파일 에러가 난다.",
       "code": "final List<String> names = new ArrayList<>();\nnames.add(\"kim\");",
       "answer": "X",
       "explain": "변수에 붙인 final은 재할당만 막는다. 리스트 내부 변경은 막지 않는다."
     },
     {
-      "concept": "deep-copy", "type": "mcq", "rung": 1,
+      "concept": "deep-copy", "type": "mcq",
       "prompt": "깊은 복사를 가장 정확하게 설명한 것은?",
       "options": [
         { "text": "객체가 참조하는 내부 객체까지 새로 만들어, 원본과 공유하는 상태가 없게 복사하는 것", "correct": true },
@@ -210,7 +211,13 @@ dwesaegim-plugin/
       "explain": "세 번째는 얕은 복사. 깊은/얕은 복사는 '어디까지 복사하나'의 구분이고, 받는 시점과는 관계없다."
     },
     {
-      "concept": "immutable-object", "type": "explain", "rung": 3,
+      "concept": "immutable-object", "type": "ox",
+      "prompt": "필드를 모두 private final로 두고 setter를 없애면, 필드에 가변 리스트가 있어도 그 객체는 불변이다.",
+      "answer": "X",
+      "explain": "final은 재할당만 막는다. 가변 리스트를 그대로 받거나 내보내면 바깥에서 내용을 바꿀 수 있으니 방어적 복사가 필요하다."
+    },
+    {
+      "concept": "immutable-object", "type": "explain",
       "prompt": "불변 객체를 쓰는 이유와 만드는 방법을 30초 안에 설명해 보세요.",
       "checklist": ["첫 문장에 이유", "private final 필드 + setter 없음", "가변 필드는 방어적 복사", "스레드 안전"]
     }
@@ -267,7 +274,7 @@ dwesaegim-plugin/
 
 - 단가 기준: Haiku 5.5 $0.10/$0.50, Sonnet 5.5 $2/$10, Opus 5.5 $4/$20 (입력/출력, 100만 토큰당, 2026-10 기준).
 - 토큰 수는 가정이다. 위 표는 사용량을 넉넉하게 잡은 값이고, 실제 값은 관리자 사용량 화면에서 잰다.
-- 세 모델 모두 기본으로 adaptive thinking이 켜져 있고, thinking 토큰은 출력 단가로 과금된다. Haiku 5.5와 Sonnet 5.5는 thinking을 끌 수 있지만, Opus 5.5는 끌 수 없고 effort만 낮출 수 있다.
+- 세 모델 모두 기본으로 adaptive thinking이 켜져 있고, thinking 토큰은 출력 단가로 과금된다. 끄는 방법은 모델마다 다르다. Haiku 5.5는 effort가 high 이하일 때만 `disabled`로 끌 수 있다. Sonnet 5.5는 `disabled`가 400 에러이고, effort high 이하에서 `between_tools`로만 끌 수 있다. Opus 5.5는 끌 수 없고 effort만 낮출 수 있다.
 - 기본 모델은 Opus 5.5(effort low)이고 설정값 하나로 바꿀 수 있다. 예산 가드가 사용자당 월 $6, 전체 월 $90에서 AI 채점을 멈추고 자가 채점으로 돌린다. 실측 비용을 보고 모델을 정한다 (결정 필요).
 - 채점 결과 JSON은 structured outputs(`output_config.format`)로 받는다. 도구 호출을 강제하는 방식(`tool_choice`)은 Sonnet 5.5와 Opus 5.5에서 400 에러가 난다.
 - 그 밖의 안전장치: Console 지출 한도, 채점 기준 프롬프트 캐싱. 과거 대화 일괄 가져오기는 Batch API(50% 할인)로 한다.
@@ -293,7 +300,7 @@ TypeScript, Hono, `@modelcontextprotocol/server`, `ts-fsrs`, `@block65/webcrypto
 
 | MVP | 기간 | 범위 | 끝났다는 기준 |
 |---|---|---|---|
-| **0. 연결 검증** | 주말 1회 | 도구 2개짜리 MCP 서버를 Worker에 올리고 claude.ai 커넥터로 붙인다. 폰 앱 프로젝트 대화, 친구 Pro 계정, CPU 시간, iPhone 푸시, Cloudflare 봇 설정을 확인한다 | 설계서 §2.1 필수 항목 통과 |
+| **0. 연결 검증** | 주말 1회 (코드 완료) | 도구 2개짜리 MCP 서버를 Worker에 올리고 claude.ai 커넥터로 붙인다. 실행 순서는 [MVP 0 실행 가이드](mvp0-runbook.md). 폰 앱 프로젝트 대화, 친구 Pro 계정, CPU 시간, iPhone 푸시, Cloudflare 봇 설정을 확인한다 | 설계서 §2.1 필수 항목 통과 |
 | **1. 나 혼자 루프** | 2주 | MCP 도구 3개, 카드 3종(OX·객관식·빈칸), FSRS, 복습 화면, 오프라인 답안, 웹 푸시, 카드 끄기 | 14일 중 10일 이상 복습 |
 | **2. 친구 베타** | 3주 | 초대 가입, 온보딩, 설명하기 카드, 지식 지도, 스트릭·XP·리그, 카드 신고·수정, AI 채점, 붙여넣기 가져오기, 내보내기·삭제 | 아래 지표 |
 | **3. 확장** | 이후 | Claude Code 플러그인, 채팅 복습 도구, 꼬리물기 체인·모의면접, 질문 은행 공유, zip 가져오기, OAuth | 기능별로 정함 |
@@ -327,12 +334,12 @@ MVP별 작업 목록, 하지 않는 것, 막혔을 때의 대안은 설계서 §
 
 ## 15. 결정이 필요한 것
 
-1. 서비스 이름 (가칭 "되새김"). 후보 50개와 추천은 [names.md](names.md)
-2. AI 채점 모델: 실측 비용을 보고 Opus 5.5 / Sonnet 5.5 / Haiku 5.5 중에서 고른다 (MVP 2)
-3. 친구끼리 질문 은행(질문만, 답은 제외) 공유를 기본값으로 할지 (MVP 3)
+1. AI 채점 모델: 실측 비용을 보고 Opus 5.5 / Sonnet 5.5 / Haiku 5.5 중에서 고른다 (MVP 2)
+2. 친구끼리 질문 은행(질문만, 답은 제외) 공유를 기본값으로 할지 (MVP 3)
 
 정해진 것:
 
+- 서비스 이름: **모아이** (지식을 "모아" + AI, 🗿). 코드 식별자는 `moai`. 후보 50개는 [names.md](names.md)
 - 런타임: TypeScript, Cloudflare Worker 하나 ([ADR 0001](adr/0001-runtime.md)). 포트폴리오 용도가 아니라서 단순함·속도·비용을 우선했다.
 - 친구 요금제: Pro($20) / Max($100). 둘 다 커스텀 커넥터를 쓸 수 있다.
 - 서버 LLM 호출은 내 Console API 키로 한다. 가입은 초대받은 사람만 한다.
