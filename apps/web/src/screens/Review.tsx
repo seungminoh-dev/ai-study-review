@@ -171,13 +171,9 @@ function Session({ initial, offline }: { initial: QueueCard[]; offline: boolean 
     setBusy(true);
     setNotice(null);
     try {
+      // 보내는 중이던 답은 전송이 끝난 뒤에 판단한다. 기기에 남아 있으면 서버는 모르는 답이라 기기에서만 지운다
       const removedLocally = await removeFromOutbox(last.reviewId);
-      try {
-        await request(`/reviews/${last.reviewId}/undo`, { method: 'POST' });
-      } catch (error) {
-        // 기기에서 지웠으면 서버에는 없는 게 맞다 (404). 오프라인이어도 괜찮다
-        if (!removedLocally) throw error;
-      }
+      if (!removedLocally) await request(`/reviews/${last.reviewId}/undo`, { method: 'POST' });
       setCards((list) => [...list.slice(0, index), last.card, ...list.slice(index)]);
       setResults((list) => list.slice(0, -1));
       setLast(null);

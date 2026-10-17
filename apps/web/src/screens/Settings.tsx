@@ -3,6 +3,7 @@ import { MAX_REMINDERS } from '@moai/shared/client';
 import { useEffect, useState, type FormEvent } from 'react';
 import { errorMessage, request } from '../api';
 import { COACH_INSTRUCTIONS } from '../coach';
+import { forgetAiStatus } from '../ai';
 import { copyText } from '../copy';
 import { clearDeviceData, flushReviews, pendingCount } from '../offline/store';
 import { disablePush, dropLocalPush, enablePush, isStandalone, pushState, type PushState } from '../push';
@@ -262,6 +263,7 @@ function AccountSection({ me, onLogout }: { me: Me; onLogout: () => void }) {
       const endpoint = await dropLocalPush();
       await request('/auth/logout', { method: 'POST', json: endpoint ? { endpoint } : {} });
       await clearDeviceData();
+      forgetAiStatus();
       onLogout();
     } catch (error) {
       setMessage({ text: errorMessage(error), tone: 'bad' });
@@ -389,7 +391,7 @@ function InviteSection() {
                 </option>
               ))}
             </select>
-            {bind ? <span className="muted small">이 코드로 들어오면 그 사람 계정으로 로그인하고, GitHub를 새로 잇고, 다른 기기의 로그인은 모두 끝나요.</span> : null}
+            {bind ? <span className="muted small">이 코드로 들어오면 그 사람 계정으로 로그인하고 GitHub를 새로 이어요. 다른 기기의 로그인, 커넥터 URL, 알림 구독은 모두 끊겨서 커넥터 URL을 다시 만들어야 해요.</span> : null}
           </label>
         ) : null}
         <div className="actions">
@@ -524,6 +526,7 @@ function DataSection({ me, onDeleted }: { me: Me; onDeleted: () => void }) {
       await dropLocalPush();
       await request('/me', { method: 'DELETE', json: { confirm: name } });
       await clearDeviceData();
+      forgetAiStatus();
       onDeleted();
     } catch (error) {
       setMessage({ text: errorMessage(error), tone: 'bad' });

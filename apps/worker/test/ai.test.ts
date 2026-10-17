@@ -71,6 +71,18 @@ describe('AI grading', () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
+  it('never has more than three grading jobs in flight, even with requests sent at once', async () => {
+    const cardId = await explainCardId();
+    // 응답이 오지 않는 API: 작업은 끝나지 않고 쌓인다
+    vi.spyOn(globalThis, 'fetch').mockImplementation(() => new Promise<Response>(() => undefined));
+    const statuses = await Promise.all(
+      Array.from({ length: 12 }, () => api(user, `/cards/${cardId}/grade-ai`, { method: 'POST', json: { answer: '설명' } }).then((response) => response.status)),
+    );
+    expect(statuses.filter((status) => status === 202)).toHaveLength(3);
+    const jobs = await env.DB.prepare("SELECT count(*) AS n FROM llm_jobs WHERE user_id = ?1 AND kind = 'grade'").bind(user.id).first<number>('n');
+    expect(jobs).toBe(3);
+  });
+
   it('only grades my own explain cards', async () => {
     const cardId = await explainCardId();
     expect((await api(await newUser(), `/cards/${cardId}/grade-ai`, { method: 'POST', json: { answer: '설명' } })).status).toBe(404);

@@ -59,7 +59,9 @@ cards.post('/reviews/:id/undo', async (c) => {
     `SELECT r.id, r.card_id, r.reviewed_at, r.prev_card, c.reps
        FROM review_logs r JOIN cards c ON c.id = r.card_id
       WHERE r.id = ?1 AND r.user_id = ?2
-        AND NOT EXISTS (SELECT 1 FROM review_logs later WHERE later.card_id = r.card_id AND later.reviewed_at > r.reviewed_at)`,
+        AND NOT EXISTS (SELECT 1 FROM review_logs later WHERE later.card_id = r.card_id AND later.reviewed_at > r.reviewed_at)
+        -- 채점 시각은 같을 수 있다 (늦게 온 답은 마지막 복습 시각으로 자른다). 카드에 마지막으로 반영된 기록인지는 reps로 본다
+        AND c.reps = json_extract(r.prev_card, '$.reps') + 1`,
   )
     .bind(c.req.param('id'), userId)
     .first<{ id: string; card_id: string; reviewed_at: number; prev_card: string; reps: number }>();

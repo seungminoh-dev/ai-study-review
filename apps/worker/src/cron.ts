@@ -1,6 +1,7 @@
 import { deliverDueReminders } from './domain/reminders';
 import { runPendingJobs } from './llm/jobs';
 import type { Env } from './env';
+import { DAY_MS } from './lib/kst';
 
 /** 매분 Cron (설계서 §10.4). 일은 이 순서대로 하고, CPU를 많이 쓰는 일은 한 실행에 하나만 한다. */
 export async function runCron(env: Env, now: number): Promise<void> {
@@ -21,6 +22,8 @@ export async function runCron(env: Env, now: number): Promise<void> {
       env.DB.prepare('DELETE FROM auth_sessions WHERE expires_at <= ?1').bind(now),
       env.DB.prepare('DELETE FROM login_codes WHERE expires_at <= ?1').bind(now),
       env.DB.prepare('DELETE FROM pending_signups WHERE expires_at <= ?1').bind(now),
+      // AI 작업 결과(채점 결과에는 사용자 문장이 들어 있다)는 30일 뒤 지운다. 비용 기록(llm_usage)은 남긴다
+      env.DB.prepare("DELETE FROM llm_jobs WHERE created_at <= ?1 AND status IN ('done', 'failed')").bind(now - 30 * DAY_MS),
     ]);
     if (sessions!.meta.changes > 0) console.log(JSON.stringify({ event: 'sessions_expired', removed: sessions!.meta.changes }));
   }

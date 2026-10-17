@@ -24,8 +24,12 @@ export async function clearDeviceData(): Promise<void> {
   await clear(store);
 }
 
-/** 아직 보내지 않은 답이면 outbox에서 지우고 true. 이미 보냈으면 false */
+/**
+ * 아직 보내지 않은 답이면 outbox에서 지우고 true. 이미 보냈으면 false.
+ * 보내는 중인 묶음에 들어 있을 수 있으니, 진행 중인 전송이 끝난 뒤에 본다.
+ */
 export async function removeFromOutbox(id: string): Promise<boolean> {
+  await flushing?.catch(() => undefined);
   let removed = false;
   await update<ReviewItem[]>(
     OUTBOX,

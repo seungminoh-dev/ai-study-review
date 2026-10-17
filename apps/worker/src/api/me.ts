@@ -83,6 +83,8 @@ export function deleteUserStatements(env: Env, userId: string): D1PreparedStatem
     run('DELETE FROM llm_jobs WHERE user_id = ?1'),
     run("UPDATE llm_usage SET user_id = 'deleted' WHERE user_id = ?1"),
     run('UPDATE invites SET used_by = NULL WHERE used_by = ?1'),
+    // 이 사람에게 묶인 안 쓴 복구 초대는 지운다. 남겨 두면 묶임이 풀린 채 새 가입 초대가 된다
+    run('DELETE FROM invites WHERE bind_user_id = ?1 AND used_at IS NULL'),
     run('UPDATE invites SET bind_user_id = NULL WHERE bind_user_id = ?1'),
     run('DELETE FROM invites WHERE created_by = ?1'),
     run('DELETE FROM users WHERE id = ?1'),

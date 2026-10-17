@@ -195,7 +195,7 @@ auth.post('/join', async (c) => {
 
 /**
  * 기기 복구 초대 (설계서 §8.5): 새 계정 대신 기존 계정에 이 GitHub를 잇고 로그인한다.
- * 잃어버린 기기가 다른 사람 손에 있을 수 있으니 그 계정의 다른 로그인은 모두 끝낸다.
+ * 잃어버린 기기가 다른 사람 손에 있을 수 있으니 그 계정의 다른 로그인, 커넥터 URL, 푸시 구독을 모두 끊는다.
  */
 async function recoverAccount(c: Context<AppEnv>, pending: PendingRow, invite: string, userId: string, now: number): Promise<Response> {
   // 초대를 이 요청이 차지했을 때만 나머지를 쓴다 (used_at·used_by가 이 요청 값이면 차지한 것)
@@ -212,7 +212,11 @@ async function recoverAccount(c: Context<AppEnv>, pending: PendingRow, invite: s
       pending.subject,
       pending.login,
     ),
+    // 잃어버린 기기에 남은 접근을 모두 끊는다: 로그인, 로그인 코드, 커넥터 URL, 푸시 구독
     c.env.DB.prepare(`DELETE FROM auth_sessions WHERE user_id = ?2 AND ${claimed}`).bind(invite, userId, now),
+    c.env.DB.prepare(`DELETE FROM login_codes WHERE user_id = ?2 AND ${claimed}`).bind(invite, userId, now),
+    c.env.DB.prepare(`UPDATE mcp_tokens SET revoked_at = ?3 WHERE user_id = ?2 AND revoked_at IS NULL AND ${claimed}`).bind(invite, userId, now),
+    c.env.DB.prepare(`DELETE FROM push_subscriptions WHERE user_id = ?2 AND ${claimed}`).bind(invite, userId, now),
     ]);
   } catch {
     // 그사이 이 GitHub가 다른 계정에 이어졌다. batch 전체가 되돌아갔다

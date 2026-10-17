@@ -20,7 +20,7 @@ export type CallResult =
   /** 돈은 들었지만 쓸 수 없는 응답 (거절, 잘림) */
   | { ok: false; error: 'refusal' | 'truncated' | 'empty'; model: string; usage: Usage }
   /** 요청이 실패했다. retry면 잠시 뒤에 다시 해 볼 만하다 */
-  | { ok: false; error: 'api'; retry: boolean; status: number; model?: undefined; usage?: undefined };
+  | { ok: false; error: 'api'; retry: boolean; status: number; timedOut?: boolean; model?: undefined; usage?: undefined };
 
 export function llmConfigured(env: Env): boolean {
   return Boolean(env.ANTHROPIC_API_KEY && env.GRADER_MODEL);
@@ -67,8 +67,10 @@ export async function callClaude(env: Env, request: CallRequest): Promise<CallRe
       response = await post(env, { ...base, output_config: { format: { type: 'json_schema', schema: request.schema } } }, false, request.timeoutMs);
     }
   } catch (error) {
-    console.error(JSON.stringify({ event: 'llm_network_error', message: (error as Error).message }));
-    return { ok: false, error: 'api', retry: true, status: 0 };
+    // 기다리다 끊은 요청도 Anthropic 쪽에서는 끝까지 돌고 청구될 수 있다. 부르는 쪽이 비용을 넉넉히 적어 둔다
+    const timedOut = (error as Error).name === 'TimeoutError' || (error as Error).name === 'AbortError';
+    console.error(JSON.stringify({ event: timedOut ? 'llm_timeout' : 'llm_network_error', message: (error as Error).message }));
+    return { ok: false, error: 'api', retry: true, status: 0, timedOut };
   }
   if (!response.ok) {
     const detail = (await response.text().catch(() => '')).slice(0, 300);

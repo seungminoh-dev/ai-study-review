@@ -14,9 +14,6 @@ export const ai = new Hono<AppEnv>();
 
 const UNAVAILABLE = () => errorJson(503, 'ai_unavailable', '서버에 AI 설정이 없어요. 자가 채점으로 진행해요.');
 const OVER_BUDGET = () => errorJson(429, 'budget', '이번 달 AI 한도에 닿았어요. 자가 채점으로 진행해요.');
-/** 한 사람이 동시에 기다리게 할 수 있는 가져오기 수 */
-const MAX_PENDING_IMPORTS = 3;
-const MAX_PENDING_GRADES = 3;
 
 ai.get('/ai/status', async (c) => {
   const available = llmConfigured(c.env);
@@ -33,15 +30,13 @@ ai.post('/cards/:id/grade-ai', async (c) => {
     .bind(c.req.param('id'), c.var.userId)
     .first<string>('id');
   if (!card) return errorJson(404, 'not_found', '설명하기 카드를 찾지 못했어요.');
-  // 비용은 응답이 와야 기록된다. 동시에 많이 보내 한도를 넘기지 않게, 끝나지 않은 채점은 사람마다 3개까지만 둔다
-  const inflight = await c.env.DB.prepare("SELECT count(*) AS n FROM llm_jobs WHERE user_id = ?1 AND kind = 'grade' AND status IN ('queued', 'running')")
-    .bind(c.var.userId)
-    .first<number>('n');
-  if ((inflight ?? 0) >= MAX_PENDING_GRADES) return errorJson(429, 'too_many', '채점이 이미 진행 중이에요. 끝나면 다시 해 주세요.');
-  if (await overBudget(c.env, c.var.userId, now)) return OVER_BUDGET();
+  // 비용은 응답이 와야 기록된다. 끝나지 않은 작업은 예상 비용으로 더해서 한도를 본다
+  if (await overBudget(c.env, c.var.userId, now, true)) return OVER_BUDGET();
+  // 끝나지 않은 채점은 사람마다 3개까지 (세기와 넣기를 한 문장으로 한다)
   const id = await createJob(c.env, c.var.userId, 'grade', body.answer, { cardId: card }, now);
-  // 응답을 보낸 뒤에도 돌린다. 끊기면 매분 Cron이 이어 받는다
-  c.executionCtx.waitUntil(runJob(c.env, id));
+  if (!id) return errorJson(429, 'too_many', '채점이 이미 진행 중이에요. 끝나면 다시 해 주세요.');
+  // 응답을 보낸 뒤에도 돌린다 (30초까지). 끊기면 매분 Cron이 이어 받는다
+  c.executionCtx.waitUntil(runJob(c.env, id, 'request'));
   return c.json({ job_id: id }, 202);
 });
 
@@ -64,15 +59,13 @@ ai.post('/import', async (c) => {
   const userId = c.var.userId;
   // 같은 대화를 다시 보내면 이전 작업을 돌려준다 (실패한 것은 다시 할 수 있다)
   const hash = await sha256Hex(body.text.replace(/\s+/g, ' '));
-  const [same, pending] = await c.env.DB.batch([
-    c.env.DB.prepare("SELECT id FROM llm_jobs WHERE user_id = ?1 AND kind = 'import' AND input_hash = ?2 AND status != 'failed' LIMIT 1").bind(userId, hash),
-    c.env.DB.prepare("SELECT count(*) AS n FROM llm_jobs WHERE user_id = ?1 AND kind = 'import' AND status IN ('queued', 'running')").bind(userId),
-  ]);
-  const existing = (same!.results[0] as { id: string } | undefined)?.id;
+  const existing = await c.env.DB.prepare("SELECT id FROM llm_jobs WHERE user_id = ?1 AND kind = 'import' AND input_hash = ?2 AND status != 'failed' LIMIT 1")
+    .bind(userId, hash)
+    .first<string>('id');
   if (existing) return c.json({ job_id: existing, duplicate: true });
-  if ((pending!.results[0] as { n: number }).n >= MAX_PENDING_IMPORTS) return errorJson(429, 'too_many', '가져오기가 이미 3개 기다리고 있어요. 끝나면 다시 해 주세요.');
-  if (await overBudget(c.env, userId, now)) return OVER_BUDGET();
+  if (await overBudget(c.env, userId, now, true)) return OVER_BUDGET();
   const id = await createJob(c.env, userId, 'import', body.text, { inputHash: hash }, now);
+  if (!id) return errorJson(429, 'too_many', '가져오기가 이미 3개 기다리고 있어요. 끝나면 다시 해 주세요.');
   return c.json({ job_id: id, duplicate: false }, 202);
 });
 

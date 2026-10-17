@@ -26,7 +26,8 @@ export function AiGrade({ cardId, text, onSuggest }: { cardId: string; text: str
     setState({ step: 'waiting' });
     try {
       const { job_id } = await request<{ job_id: string }>(`/cards/${cardId}/grade-ai`, { method: 'POST', json: { answer: text } });
-      const job = await waitForJob(job_id, 60_000, abort.current.signal);
+      // 25초 안에 못 끝나면 서버의 매분 작업이 이어 받는다. 그만큼 더 기다린다
+      const job = await waitForJob(job_id, 150_000, abort.current.signal);
       if (job.status === 'done') {
         const result = job.result as GradeResult;
         setState({ step: 'done', result });
@@ -50,7 +51,7 @@ export function AiGrade({ cardId, text, onSuggest }: { cardId: string; text: str
       </button>
     );
   }
-  if (state.step === 'waiting') return <p className="notice">AI가 채점하는 중이에요… (5~20초)</p>;
+  if (state.step === 'waiting') return <p className="notice">AI가 채점하는 중이에요… (보통 5~20초, 길면 2분). 기다리지 않고 자가 채점해도 돼요.</p>;
   if (state.step === 'error') return <p className="notice bad">{state.message}</p>;
   const { result } = state;
   return (

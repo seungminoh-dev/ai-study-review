@@ -7,6 +7,8 @@ export interface Usage {
   output_tokens: number;
   cache_read_input_tokens?: number | null;
   cache_creation_input_tokens?: number | null;
+  /** server-side fallback이 돌면 모델마다(거절한 모델 포함) 한 줄씩 온다 */
+  iterations?: (Usage & { model?: string | null; type?: string })[] | null;
 }
 
 /** 100만 토큰당 달러 = 토큰당 마이크로달러 */
@@ -17,7 +19,15 @@ const PRICES: { match: string; input: number; output: number }[] = [
 ];
 const UNKNOWN = { input: 10, output: 50 };
 
+/** 응답 전체의 비용. 모델별 줄이 있으면 줄마다 그 모델 단가로 더하고, 맨 위 합계로 센 값과 비교해 큰 쪽을 쓴다 */
 export function costMicroUsd(model: string, usage: Usage): number {
+  const total = hopCost(model, usage);
+  const hops = (usage.iterations ?? []).filter((hop) => hop.type !== 'compaction');
+  if (hops.length === 0) return total;
+  return Math.max(total, hops.reduce((sum, hop) => sum + hopCost(hop.model ?? model, hop), 0));
+}
+
+function hopCost(model: string, usage: Usage): number {
   const price = PRICES.find((entry) => model.toLowerCase().includes(entry.match)) ?? UNKNOWN;
   const cacheRead = usage.cache_read_input_tokens ?? 0;
   const cacheWrite = usage.cache_creation_input_tokens ?? 0;

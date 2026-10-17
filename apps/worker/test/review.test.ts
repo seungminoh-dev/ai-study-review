@@ -248,6 +248,20 @@ describe('card ladder', () => {
     expect((await api(await newUser(), `/reviews/${first.id}/undo`, { method: 'POST' })).status).toBe(404);
   });
 
+  it('undoes only the answer applied last when two answers share a time', async () => {
+    await saveExample();
+    const mcq = await cardOf('deep-copy', 'mcq');
+    const now = Date.now();
+    const phone = answer(mcq.id, 3, now);
+    await api(user, '/reviews', { method: 'POST', json: { reviews: [phone] } });
+    // 오프라인이던 PC의 더 오래된 답은 마지막 복습 시각으로 잘려 같은 시각이 된다
+    const pc = answer(mcq.id, 1, now - 60_000);
+    await api(user, '/reviews', { method: 'POST', json: { reviews: [pc] } });
+    expect((await api(user, `/reviews/${phone.id}/undo`, { method: 'POST' })).status).toBe(404);
+    expect((await api(user, `/reviews/${pc.id}/undo`, { method: 'POST' })).status).toBe(204);
+    expect((await cardOf('deep-copy', 'mcq')).reps).toBe(1);
+  });
+
   it("returns 404 for another user's card", async () => {
     await saveExample();
     const card = await cardOf('deep-copy', 'mcq');
