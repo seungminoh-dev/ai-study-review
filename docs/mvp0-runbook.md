@@ -38,7 +38,7 @@ npx wrangler d1 create moai --location apac
 | 1 | `routes[0].pattern` | 쓸 서브도메인. 예: `moai.<내 도메인>` (도메인은 Cloudflare에 있어야 한다) |
 | 2 | `database_id` | 위 `d1 create`가 출력한 값 |
 | 3 | `vars.APP_ORIGIN` | `https://` + 1번 주소 |
-| 4 | `vars.VAPID_PUBLIC_KEY`, `vars.VAPID_SUBJECT` | `npm run gen:vapid`(레포 루트에서)가 출력한 공개 키, `mailto:<내 연락처>` |
+| 4 | `vars.VAPID_PUBLIC_KEY`, `vars.VAPID_SUBJECT` | `npm run gen:vapid`(레포 루트에서)가 출력한 공개 키, 3번 주소 (공개 레포라 메일 주소 대신 https 주소를 쓴다. RFC 8292가 둘 다 허용한다) |
 
 - `npm run gen:vapid`가 함께 출력한 **개인 키는 2단계에서 secret으로 넣는다.** 파일에 쓰거나 커밋하지 않는다.
 - 위 네 값은 비밀이 아니라서 커밋해도 된다. 값을 알려 주면 내가(Claude) 넣어서 커밋해도 된다.
