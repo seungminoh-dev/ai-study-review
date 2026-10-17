@@ -1,4 +1,4 @@
-import { InviteBody, type InviteSummary, type LoginCode } from '@moai/shared';
+import { InviteBody, type InviteSummary, type LoginCode, type MemberSummary } from '@moai/shared';
 import { Hono, type MiddlewareHandler } from 'hono';
 import type { AppEnv } from '../context';
 import { INVITE_CODE_LENGTH, LOGIN_CODE_LENGTH, formatCode, randomCode } from '../lib/codes';
@@ -33,11 +33,22 @@ export const requireOwner: MiddlewareHandler<AppEnv> = async (c, next) => {
 };
 account.use('/invites', requireOwner);
 account.use('/invites/*', requireOwner);
+account.use('/members', requireOwner);
+
+/** 기기 복구 초대를 만들 때 고를 회원 목록 */
+account.get('/members', async (c) => {
+  const { results } = await c.env.DB.prepare(
+    `SELECT u.id, u.display_name, i.login AS github_login, u.created_at
+       FROM users u LEFT JOIN user_identities i ON i.user_id = u.id AND i.provider = 'github'
+      WHERE u.role = 'member' ORDER BY u.created_at`,
+  ).all<MemberSummary>();
+  return c.json({ members: results });
+});
 
 account.get('/invites', async (c) => {
   const { results } = await c.env.DB.prepare(
-    `SELECT i.id, i.label, i.created_at, i.expires_at, i.used_at, u.display_name AS used_by_name
-       FROM invites i LEFT JOIN users u ON u.id = i.used_by
+    `SELECT i.id, i.label, i.created_at, i.expires_at, i.used_at, u.display_name AS used_by_name, b.display_name AS bind_name
+       FROM invites i LEFT JOIN users u ON u.id = i.used_by LEFT JOIN users b ON b.id = i.bind_user_id
       WHERE i.created_by = ?1 ORDER BY i.created_at DESC LIMIT 50`,
   )
     .bind(c.var.userId)
@@ -50,9 +61,23 @@ account.post('/invites', async (c) => {
   if (body instanceof Response) return body;
   const now = Date.now();
   const code = randomCode(INVITE_CODE_LENGTH);
-  const invite: InviteSummary = { id: crypto.randomUUID(), label: body.label, created_at: now, expires_at: now + INVITE_TTL_MS, used_at: null, used_by_name: null };
-  await c.env.DB.prepare('INSERT INTO invites (id, code_hash, label, created_by, created_at, expires_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)')
-    .bind(invite.id, await hashToken(c.env.TOKEN_PEPPER, `invite:${code}`), invite.label, c.var.userId, now, invite.expires_at)
+  // 기기 복구 초대는 오너가 아닌 기존 회원에게만 만든다
+  let bindName: string | null = null;
+  if (body.bind_user_id) {
+    bindName = await c.env.DB.prepare("SELECT display_name FROM users WHERE id = ?1 AND role = 'member'").bind(body.bind_user_id).first<string>('display_name');
+    if (!bindName) return errorJson(404, 'not_found', '복구할 회원을 찾지 못했어요.');
+  }
+  const invite: InviteSummary = {
+    id: crypto.randomUUID(),
+    label: body.label,
+    bind_name: bindName,
+    created_at: now,
+    expires_at: now + INVITE_TTL_MS,
+    used_at: null,
+    used_by_name: null,
+  };
+  await c.env.DB.prepare('INSERT INTO invites (id, code_hash, label, created_by, created_at, expires_at, bind_user_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)')
+    .bind(invite.id, await hashToken(c.env.TOKEN_PEPPER, `invite:${code}`), invite.label, c.var.userId, now, invite.expires_at, body.bind_user_id ?? null)
     .run();
   return c.json({ invite, code: formatCode(code) }, 201);
 });

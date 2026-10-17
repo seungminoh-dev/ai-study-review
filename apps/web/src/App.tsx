@@ -97,7 +97,7 @@ export function App() {
     );
   }
   if (auth.state === 'out') {
-    return <Bare>{path === '/join' ? <Join onDone={(me) => signedIn(me, '/settings')} /> : <Login github={auth.github} onDone={(me) => signedIn(me)} />}</Bare>;
+    return <Bare>{path === '/join' ? <Join onDone={(me) => signedIn(me, '/')} /> : <Login github={auth.github} onDone={(me) => signedIn(me)} />}</Bare>;
   }
 
   const sessionMatch = /^\/sessions\/([\w-]+)$/.exec(path);

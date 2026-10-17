@@ -28,7 +28,14 @@ export type LoginCodeBody = z.infer<typeof LoginCodeBody>;
 export const LogoutBody = z.object({ endpoint: z.string().min(1).max(2000).optional() });
 export type LogoutBody = z.infer<typeof LogoutBody>;
 
-export const InviteBody = z.object({ label: z.string().trim().min(1).max(30) });
+export const InviteBody = z.object({
+  label: z.string().trim().min(1).max(30),
+  /** 기기를 다 잃은 사람에게: 이 초대로 들어오면 새 계정 대신 이 계정으로 로그인한다 */
+  bind_user_id: z.uuid().optional(),
+});
+
+/** 계정 지우기. 실수를 막으려고 내 이름을 그대로 다시 쓴다 */
+export const DeleteAccountBody = z.object({ confirm: z.string().min(1).max(30) });
 export type InviteBody = z.infer<typeof InviteBody>;
 
 export const ReviewGrade = z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]);
@@ -209,9 +216,18 @@ export interface LoginCode {
   expires_at: number;
 }
 
+export interface MemberSummary {
+  id: string;
+  display_name: string;
+  github_login: string | null;
+  created_at: number;
+}
+
 export interface InviteSummary {
   id: string;
   label: string;
+  /** 기기 복구 초대면 그 사람 이름 */
+  bind_name?: string | null;
   created_at: number;
   expires_at: number;
   used_at: number | null;

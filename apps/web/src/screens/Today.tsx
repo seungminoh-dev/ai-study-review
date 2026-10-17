@@ -1,4 +1,6 @@
-import type { StatsResponse, TodayResponse } from '@moai/shared';
+import type { McpTokenStatus, StatsResponse, TodayResponse } from '@moai/shared';
+import { request } from '../api';
+import { isStandalone, pushState } from '../push';
 import { useEffect, useState } from 'react';
 import { cachedQueue } from '../offline/store';
 import { Link } from '../router';
@@ -7,6 +9,69 @@ import { formatDate, useApi } from '../useApi';
 // 오늘 화면 (설계서 §12.1): 남은 카드 수와 예상 시간, 시작 버튼, 스트릭과 하루 목표, 최근 저장 세션, 열린 질문
 
 const WEEKDAYS = ['월', '화', '수', '목', '금', '토', '일'];
+const ONBOARDED = 'moai:onboarded';
+
+interface Steps {
+  installed: boolean;
+  push: boolean;
+  connector: boolean;
+  saved: boolean;
+}
+
+/** 처음 쓰는 사람의 시작 체크리스트 (설계서 §2.3 2번). 다 하면 다시 보이지 않는다 */
+function Onboarding({ saved }: { saved: boolean }) {
+  const [steps, setSteps] = useState<Steps | null>(null);
+  const [hidden, setHidden] = useState(() => {
+    try {
+      return localStorage.getItem(ONBOARDED) === '1';
+    } catch {
+      return false;
+    }
+  });
+  useEffect(() => {
+    if (hidden) return;
+    void (async () => {
+      const [push, token] = await Promise.all([pushState().catch(() => 'off'), request<McpTokenStatus>('/mcp-token').catch(() => null)]);
+      setSteps({ installed: isStandalone(), push: push === 'on', connector: token?.active ?? false, saved });
+    })();
+  }, [hidden, saved]);
+  const done = steps ? Object.values(steps).every(Boolean) : false;
+  const hide = () => {
+    try {
+      localStorage.setItem(ONBOARDED, '1');
+    } catch {
+      // 저장소를 못 쓰면 다음에 또 보일 뿐이다
+    }
+    setHidden(true);
+  };
+  useEffect(() => {
+    if (done) hide();
+  }, [done]);
+  if (hidden || !steps || done) return null;
+  const items: { key: keyof Steps; label: string; href: string }[] = [
+    { key: 'installed', label: '홈 화면에 추가 (브라우저 메뉴 → 앱 설치)', href: '/settings' },
+    { key: 'push', label: '이 기기에서 알림 켜기', href: '/settings' },
+    { key: 'connector', label: '커넥터 URL 만들어 claude.ai에 추가 ("No sign in", 도구는 "Always allow")', href: '/settings' },
+    { key: 'saved', label: 'claude.ai에서 공부하고 "모아이에 저장해줘"', href: '/sessions' },
+  ];
+  return (
+    <section className="onboarding">
+      <h2>시작하기</h2>
+      <ol className="checklist">
+        {items.map((item) => (
+          <li key={item.key} className={steps[item.key] ? 'done' : ''}>
+            <Link href={item.href}>
+              {steps[item.key] ? '✓' : '○'} {item.label}
+            </Link>
+          </li>
+        ))}
+      </ol>
+      <button type="button" className="text-button" onClick={hide}>
+        그만 보기
+      </button>
+    </section>
+  );
+}
 
 /** 스트릭, 오늘 목표, 이번 주 (설계서 §9.6) */
 function StreakCard({ stats }: { stats: StatsResponse }) {
@@ -89,6 +154,7 @@ export function Today({ name }: { name: string }) {
         )}
       </section>
 
+      <Onboarding saved={data.sessions.length > 0} />
       {stats ? <StreakCard stats={stats} /> : null}
 
       {!data.reminders_set ? (

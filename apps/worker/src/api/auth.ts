@@ -163,12 +163,14 @@ auth.post('/join', async (c) => {
   }
 
   const code = normalizeCode(body.code, INVITE_CODE_LENGTH);
-  const invite = code
-    ? await c.env.DB.prepare('SELECT id FROM invites WHERE code_hash = ?1 AND used_at IS NULL AND expires_at > ?2')
+  const row = code
+    ? await c.env.DB.prepare('SELECT id, bind_user_id FROM invites WHERE code_hash = ?1 AND used_at IS NULL AND expires_at > ?2')
         .bind(await hashToken(c.env.TOKEN_PEPPER, `invite:${code}`), now)
-        .first<string>('id')
+        .first<{ id: string; bind_user_id: string | null }>()
     : null;
-  if (!invite) return errorJson(403, 'wrong_code', `초대 코드가 맞지 않거나 만료됐어요. (남은 시도 ${MAX_JOIN_ATTEMPTS - attempts}번)`);
+  if (!row) return errorJson(403, 'wrong_code', `초대 코드가 맞지 않거나 만료됐어요. (남은 시도 ${MAX_JOIN_ATTEMPTS - attempts}번)`);
+  const invite = row.id;
+  if (row.bind_user_id) return recoverAccount(c, pending, invite, row.bind_user_id, now);
 
   // batch는 한 트랜잭션이라 중간에 끼어드는 요청이 없다. 초대가 아직 안 쓰였을 때만 계정이 생기고, 계정이 생겼을 때만 나머지를 쓴다.
   const userId = crypto.randomUUID();
@@ -190,6 +192,37 @@ auth.post('/join', async (c) => {
   await finishJoin(c, pending.token_hash, userId, now);
   return c.json(await loadMe(c.env, userId), 201);
 });
+
+/**
+ * 기기 복구 초대 (설계서 §8.5): 새 계정 대신 기존 계정에 이 GitHub를 잇고 로그인한다.
+ * 잃어버린 기기가 다른 사람 손에 있을 수 있으니 그 계정의 다른 로그인은 모두 끝낸다.
+ */
+async function recoverAccount(c: Context<AppEnv>, pending: PendingRow, invite: string, userId: string, now: number): Promise<Response> {
+  // 초대를 이 요청이 차지했을 때만 나머지를 쓴다 (used_at·used_by가 이 요청 값이면 차지한 것)
+  const claimed = 'EXISTS (SELECT 1 FROM invites WHERE id = ?1 AND used_by = ?2 AND used_at = ?3)';
+  let claim: D1Result | undefined;
+  try {
+    [claim] = await c.env.DB.batch([
+    c.env.DB.prepare('UPDATE invites SET used_at = ?3, used_by = ?2 WHERE id = ?1 AND used_at IS NULL AND EXISTS (SELECT 1 FROM users WHERE id = ?2)').bind(invite, userId, now),
+    c.env.DB.prepare(`DELETE FROM user_identities WHERE user_id = ?2 AND provider = 'github' AND ${claimed}`).bind(invite, userId, now),
+    c.env.DB.prepare(`INSERT INTO user_identities (provider, subject, user_id, login, created_at) SELECT 'github', ?4, ?2, ?5, ?3 WHERE ${claimed}`).bind(
+      invite,
+      userId,
+      now,
+      pending.subject,
+      pending.login,
+    ),
+    c.env.DB.prepare(`DELETE FROM auth_sessions WHERE user_id = ?2 AND ${claimed}`).bind(invite, userId, now),
+    ]);
+  } catch {
+    // 그사이 이 GitHub가 다른 계정에 이어졌다. batch 전체가 되돌아갔다
+    return errorJson(409, 'github_taken', '이 GitHub 계정은 이미 다른 모아이 계정에 이어져 있어요.');
+  }
+  if (claim!.meta.changes === 0) return errorJson(403, 'wrong_code', '방금 이 초대 코드를 누가 썼어요.');
+  console.log(JSON.stringify({ event: 'account_recovered', user_id: userId }));
+  await finishJoin(c, pending.token_hash, userId, now);
+  return c.json(await loadMe(c.env, userId));
+}
 
 async function finishJoin(c: Context<AppEnv>, pendingHash: string, userId: string, now: number): Promise<void> {
   await c.env.DB.prepare('DELETE FROM pending_signups WHERE token_hash = ?1').bind(pendingHash).run();

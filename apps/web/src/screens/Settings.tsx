@@ -1,4 +1,4 @@
-import type { AuthOptions, InviteSummary, LoginCode, McpTokenStatus, Me, Reminder, UsageReport } from '@moai/shared';
+import type { AuthOptions, InviteSummary, LoginCode, McpTokenStatus, Me, MemberSummary, Reminder, UsageReport } from '@moai/shared';
 import { MAX_REMINDERS } from '@moai/shared/client';
 import { useEffect, useState, type FormEvent } from 'react';
 import { errorMessage, request } from '../api';
@@ -27,6 +27,7 @@ export function Settings({ me, onLogout }: { me: Me; onLogout: () => void }) {
         </>
       ) : null}
       <CoachSection />
+      <DataSection me={me} onDeleted={onLogout} />
     </div>
   );
 }
@@ -307,10 +308,12 @@ function AccountSection({ me, onLogout }: { me: Me; onLogout: () => void }) {
 }
 
 function inviteState(invite: InviteSummary): string {
-  if (invite.used_at) return `${invite.used_by_name ?? '누군가'}님이 가입했어요`;
-  if (invite.expires_at <= Date.now()) return '만료됐어요';
-  return `${formatDate(invite.expires_at)}까지`;
+  const kind = invite.bind_name ? `${invite.bind_name}님 기기 복구 · ` : '';
+  if (invite.used_at) return `${kind}${invite.used_by_name ?? '누군가'}님이 ${invite.bind_name ? '들어왔어요' : '가입했어요'}`;
+  if (invite.expires_at <= Date.now()) return `${kind}만료됐어요`;
+  return `${kind}${formatDate(invite.expires_at)}까지`;
 }
+
 
 function InviteSection() {
   const { data, reload } = useApi<{ invites: InviteSummary[] }>('/invites');
@@ -318,11 +321,17 @@ function InviteSection() {
   const [created, setCreated] = useState<{ label: string; code: string } | null>(null);
   const [message, setMessage] = useState<{ text: string; tone: 'good' | 'bad' } | null>(null);
 
+  const { data: members } = useApi<{ members: MemberSummary[] }>('/members');
+  const [bind, setBind] = useState('');
+
   const create = async (event: FormEvent) => {
     event.preventDefault();
     setMessage(null);
     try {
-      const result = await request<{ invite: InviteSummary; code: string }>('/invites', { method: 'POST', json: { label } });
+      const result = await request<{ invite: InviteSummary; code: string }>('/invites', {
+        method: 'POST',
+        json: bind ? { label, bind_user_id: bind } : { label },
+      });
       setCreated({ label: result.invite.label, code: result.code });
       setLabel('');
       reload();
@@ -368,6 +377,21 @@ function InviteSection() {
           <span>누구에게 보낼까요?</span>
           <input value={label} onChange={(event) => setLabel(event.target.value)} maxLength={30} placeholder="예: 민수" required />
         </label>
+        {members && members.members.length > 0 ? (
+          <label className="field">
+            <span>종류</span>
+            <select value={bind} onChange={(event) => setBind(event.target.value)}>
+              <option value="">새 친구 가입</option>
+              {members.members.map((member) => (
+                <option key={member.id} value={member.id}>
+                  기기 복구: {member.display_name}
+                  {member.github_login ? ` (@${member.github_login})` : ''}
+                </option>
+              ))}
+            </select>
+            {bind ? <span className="muted small">이 코드로 들어오면 그 사람 계정으로 로그인하고, GitHub를 새로 잇고, 다른 기기의 로그인은 모두 끝나요.</span> : null}
+          </label>
+        ) : null}
         <div className="actions">
           <button type="submit" className="button">
             초대 코드 만들기
@@ -466,6 +490,76 @@ function UsageSection() {
             .join(', ')}
         </p>
       ) : null}
+    </section>
+  );
+}
+
+/** 내 데이터 내보내기와 계정 지우기 (설계서 §14) */
+function DataSection({ me, onDeleted }: { me: Me; onDeleted: () => void }) {
+  const [message, setMessage] = useState<{ text: string; tone: 'good' | 'bad' } | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const [name, setName] = useState('');
+
+  const download = async () => {
+    setMessage(null);
+    try {
+      const response = await fetch('/api/export', { credentials: 'same-origin' });
+      if (!response.ok) throw new Error('내보내지 못했어요. 잠시 뒤에 다시 해 주세요.');
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `moai-export-${new Date().toISOString().slice(0, 10)}.json`;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+      setMessage({ text: '내려받았어요.', tone: 'good' });
+    } catch (error) {
+      setMessage({ text: errorMessage(error), tone: 'bad' });
+    }
+  };
+
+  const remove = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!confirm('정말 지울까요? 저장한 개념, 카드, 복습 기록이 모두 사라지고 되돌릴 수 없어요.')) return;
+    try {
+      await dropLocalPush();
+      await request('/me', { method: 'DELETE', json: { confirm: name } });
+      await clearDeviceData();
+      onDeleted();
+    } catch (error) {
+      setMessage({ text: errorMessage(error), tone: 'bad' });
+    }
+  };
+
+  return (
+    <section>
+      <h2>내 데이터</h2>
+      <div className="actions">
+        <button type="button" className="button" onClick={() => void download()}>
+          내 데이터 내보내기 (JSON)
+        </button>
+      </div>
+      {message ? <Status text={message.text} tone={message.tone} /> : null}
+      {me.role === 'owner' ? null : confirming ? (
+        <form className="danger" onSubmit={(event) => void remove(event)}>
+          <p className="small">계정을 지우면 저장한 개념, 카드, 복습 기록, 알림 설정이 모두 사라져요. 먼저 내보내기를 해 두세요.</p>
+          <label className="field">
+            <span>확인을 위해 내 이름을 그대로 써 주세요: {me.display_name}</span>
+            <input value={name} onChange={(event) => setName(event.target.value)} autoComplete="off" required />
+          </label>
+          <div className="actions">
+            <button type="button" className="button" onClick={() => setConfirming(false)}>
+              취소
+            </button>
+            <button type="submit" className="button danger-button" disabled={name.trim() !== me.display_name}>
+              계정 지우기
+            </button>
+          </div>
+        </form>
+      ) : (
+        <button type="button" className="text-button" onClick={() => setConfirming(true)}>
+          계정 지우기
+        </button>
+      )}
     </section>
   );
 }

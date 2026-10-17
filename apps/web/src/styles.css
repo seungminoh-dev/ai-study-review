@@ -1034,3 +1034,53 @@ a.chip {
   background: var(--pen-soft);
   color: var(--text);
 }
+
+/* 시작하기 체크리스트 */
+.onboarding {
+  margin: 4px 0 8px;
+  padding: 4px 16px 8px;
+  background: var(--pen-soft);
+  border-radius: var(--radius);
+}
+
+.onboarding h2 {
+  margin-top: 12px;
+  color: var(--pen);
+}
+
+.onboarding a {
+  color: var(--text);
+  text-decoration: none;
+  display: block;
+  padding: 6px 0;
+}
+
+.onboarding .done a {
+  color: var(--good);
+}
+
+/* 계정 지우기 */
+.danger {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--bad);
+  border-radius: var(--radius);
+}
+
+.danger p {
+  margin: 0;
+}
+
+.button.danger-button {
+  background: var(--bad);
+  border-color: var(--bad);
+  color: #fff;
+}
+
+.field select {
+  min-height: var(--tap);
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}

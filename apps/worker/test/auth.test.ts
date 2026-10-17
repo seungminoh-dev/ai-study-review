@@ -217,6 +217,29 @@ describe('joining with an invite', () => {
   });
 });
 
+describe('recovery invites', () => {
+  it('log a new GitHub into the bound member, replace the old GitHub and end the lost devices', async () => {
+    const member = await newUser('민수');
+    await viaGithub(githubUser('lost-account'), { intent: 'link', cookie: member.cookie });
+    expect((await api(owner, '/invites', { method: 'POST', json: { label: '민수 복구', bind_user_id: owner.id } })).status).toBe(404);
+    const { members } = (await (await api(owner, '/members')).json()) as { members: { id: string }[] };
+    expect(members.map((item) => item.id)).toContain(member.id);
+    const { code } = (await (await api(owner, '/invites', { method: 'POST', json: { label: '민수 복구', bind_user_id: member.id } })).json()) as { code: string };
+
+    const response = await viaGithub(githubUser('new-account'));
+    const join = cookieOf(response, '__Host-moai-join')!;
+    const joined = await api(asUser(join), '/auth/join', { method: 'POST', json: { code, display_name: '무시되는 이름' } });
+    expect(await joined.json()).toMatchObject({ id: member.id, display_name: '민수', github_login: 'new-account' });
+    expect((await api(member, '/me')).status).toBe(401);
+    expect((await api(asUser(cookieOf(joined, '__Host-sid')!), '/me')).status).toBe(200);
+  });
+
+  it('are for the owner only', async () => {
+    const member = await newUser();
+    expect((await api(member, '/members')).status).toBe(403);
+  });
+});
+
 describe('invites', () => {
   it('are for the owner only', async () => {
     const member = await newUser();
