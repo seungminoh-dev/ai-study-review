@@ -127,6 +127,22 @@ claude.ai에서 공부하다가 "정리해줘"라고 하면, 대화 중인 Claud
   - tools/call, 실제 크기 예시(약 2KB): 14~16ms → 8~10ms
   - 이미 데워진 isolate에서는 둘 다 1~2ms다. 막 뜬 isolate의 첫 요청(보통 initialize)은 여전히 20ms 넘게 쓴다.
 
+**실측 기록 (2026-10-18, 폰·웹 점검)**
+
+| # | 결과 |
+|---|---|
+| 1 | 통과. 웹 claude.ai에서 ping 응답 |
+| 2 | Android 앱 프로젝트 대화에서 통과 (개념 6개, 카드 15장 저장). 친구 Pro 계정과 새 Projects 베타 여부는 아직 |
+| 3 | 수정 후 CPU는 아직 못 쟀다 |
+| 4 | claude.ai(웹·폰)는 **2026-07-28** 방식이다. 도구 호출 한 번이 `server/discover` → `tools/call` 두 요청이고, tools/list는 매번 보내지 않는다. 요청은 **IAD**(미국 동부) 데이터센터로 들어온다. replay(로컬, 2025-06-18 방식)는 NRT로 들어온다 |
+| 5 | Android 푸시 도착. 지연 57초는 거의 다 Cron 대기다. "1분 뒤"는 초 단위 시각이라 다음 매분 Cron까지 최대 60초를 기다린다. 실제 복습 알림은 HH:MM에 맞춰 예약하므로 몇 초 안에 간다. 사용자가 iPhone을 쓰지 않아 iPhone은 친구 기기로 MVP 2 전에 확인한다 |
+| 6 | 통과. 존 설정을 마친 뒤 1, 2가 됐다 |
+| 7 | 아직 |
+| 8 | 통과. replay p95 tools/list 144ms, tools/call(가장 큰 페이로드) 341ms |
+| 9 | 통과. 로컬 Claude Code에서 ping 응답 |
+
+- 설계에 주는 영향: claude.ai 요청은 IAD에서 처리되는데 D1은 APAC에 있다. 그래서 MCP 경로의 D1 왕복은 태평양을 건넌다. MVP 1의 `save_learning`은 읽기 한 번, 쓰기 한 번(`DB.batch`)으로 왕복을 줄이고, Smart Placement를 켠 경우와 비교한다. PWA 요청은 한국에서 오므로 APAC D1이 맞다.
+
 **끝났다는 기준**: 1~6 통과. 7~9는 기록만 하면 된다.
 
 ### 2.2 MVP 1: 나 혼자 루프 (2주)
