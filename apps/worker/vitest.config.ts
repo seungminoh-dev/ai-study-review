@@ -20,7 +20,8 @@ export default defineConfig(async () => {
           bindings: {
             TEST_MIGRATIONS: migrations,
             APP_ORIGIN: 'https://moai.test',
-            SPIKE_TOKEN: 'test-spike-token',
+            TOKEN_PEPPER: 'test-token-pepper',
+            BOOTSTRAP_CODE: 'test-bootstrap-code',
             VAPID_PUBLIC_KEY: vapid.publicKey,
             VAPID_PRIVATE_KEY: vapid.privateKey,
             VAPID_SUBJECT: 'mailto:test@example.com',

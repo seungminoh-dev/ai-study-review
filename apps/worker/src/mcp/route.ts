@@ -1,37 +1,33 @@
-import { PROTOCOL_VERSION_META_KEY } from '@modelcontextprotocol/server';
 import type { Context } from 'hono';
+import type { AppEnv } from '../context';
 import type { Env } from '../env';
-import { byteLength, safeEqual } from '../lib/crypto';
+import { byteLength, hashToken } from '../lib/crypto';
 import { MAX_BODY_BYTES, checkHost, checkOrigin, tooLarge } from '../lib/guard';
 import { mcpHandler, type McpDeps } from './server';
 
-interface RpcSummary {
-  rpcMethod: string | null;
-  toolName: string | null;
-  protocolBody: string | null;
-}
-
-function summarize(body: unknown): RpcSummary {
-  const messages = Array.isArray(body) ? body : [body];
-  const first = messages[0] as { method?: unknown; params?: Record<string, unknown> } | undefined;
-  const params = first?.params ?? {};
-  const meta = (params._meta ?? {}) as Record<string, unknown>;
-  const version = params.protocolVersion ?? meta[PROTOCOL_VERSION_META_KEY];
+function summarize(body: unknown): { method: string | null; tool: string | null } {
+  const first = (Array.isArray(body) ? body[0] : body) as { method?: unknown; params?: { name?: unknown } } | undefined;
   return {
-    rpcMethod: messages.map((m) => (m as { method?: unknown })?.method).filter((m) => typeof m === 'string').join(',') || null,
-    toolName: typeof params.name === 'string' ? params.name : null,
-    protocolBody: typeof version === 'string' ? version : null,
+    method: typeof first?.method === 'string' ? first.method : null,
+    tool: typeof first?.params?.name === 'string' ? first.params.name : null,
   };
 }
 
-/** POST /mcp/u/:token (설계서 §6.1, §6.2). MVP 0은 SPIKE_TOKEN 하나로만 연다. */
-export async function handleMcp(c: Context<{ Bindings: Env }>): Promise<Response> {
-  const started = Date.now();
+/** 커넥터 URL의 토큰으로 사용자를 찾는다. 모르거나 취소된 토큰이면 null이다 (설계서 §6.1). */
+export async function findMcpUser(env: Env, token: string): Promise<string | null> {
+  if (!token || !env.TOKEN_PEPPER) return null;
+  const row = await env.DB.prepare('SELECT user_id FROM mcp_tokens WHERE token_hash = ?1 AND revoked_at IS NULL')
+    .bind(await hashToken(env.TOKEN_PEPPER, token))
+    .first<{ user_id: string }>();
+  return row?.user_id ?? null;
+}
+
+/** POST /mcp/u/:token (설계서 §6.1, §6.2) */
+export async function handleMcp(c: Context<AppEnv>): Promise<Response> {
   const rejected = checkHost(c.req.raw, c.env) ?? checkOrigin(c.req.raw, c.env);
   if (rejected) return rejected;
-  if (!c.env.SPIKE_TOKEN || !(await safeEqual(c.req.param('token') ?? '', c.env.SPIKE_TOKEN))) {
-    return new Response(null, { status: 404 });
-  }
+  const userId = await findMcpUser(c.env, c.req.param('token') ?? '');
+  if (!userId) return new Response(null, { status: 404 });
 
   let body: string | undefined;
   let parsed: unknown;
@@ -46,29 +42,13 @@ export async function handleMcp(c: Context<{ Bindings: Env }>): Promise<Response
     }
   }
 
-  const deps: McpDeps = { env: c.env, userId: 'spike-owner' };
+  const deps: McpDeps = { env: c.env, userId };
   const request = new Request(c.req.url, { method: c.req.method, headers: c.req.raw.headers, body: body ?? null });
   const response = await mcpHandler.fetch(request, {
     authInfo: { token: 'url-token', clientId: 'url-token', scopes: [], extra: deps as unknown as Record<string, unknown> },
     ...(parsed === undefined ? {} : { parsedBody: parsed }),
   });
-
-  const summary = summarize(parsed);
-  // Workers는 I/O를 기다릴 때만 시계가 움직이고 SSE 응답은 도구가 끝나기 전에 돌아오므로, duration_ms는 거의 늘 0이다.
-  // 화면에는 보여 주지 않는다. 응답 시간은 scripts/replay.mjs로 잰다.
-  const cf = (c.req.raw as Request & { cf?: { colo?: string } }).cf;
-  c.executionCtx.waitUntil(
-    c.env.DB.prepare(
-      `INSERT INTO spike_mcp_requests (id, at, http_method, rpc_method, tool_name, protocol_header, protocol_body, user_agent, colo, status, duration_ms)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)`,
-    )
-      .bind(
-        crypto.randomUUID(), started, c.req.method, summary.rpcMethod, summary.toolName,
-        c.req.header('mcp-protocol-version') ?? null, summary.protocolBody,
-        c.req.header('user-agent') ?? null, cf?.colo ?? null, response.status, Date.now() - started,
-      )
-      .run()
-      .catch((error: Error) => console.error(JSON.stringify({ event: 'spike_log_failed', message: error.message }))),
-  );
+  // 로그에는 URL(토큰)과 본문을 남기지 않는다 (설계서 §13.4)
+  console.log(JSON.stringify({ event: 'mcp', user_id: userId, ...summarize(parsed), status: response.status }));
   return response;
 }

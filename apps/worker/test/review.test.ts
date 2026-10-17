@@ -1,0 +1,169 @@
+import type { QueueResponse, ReviewItem, SessionDetail, TodayResponse } from '@moai/shared';
+import { env } from 'cloudflare:workers';
+import { beforeEach, describe, expect, it } from 'vitest';
+import example from '../../../packages/shared/fixtures/immutable-object.json';
+import { loadTodayQueue } from '../src/domain/queue';
+import { recordReviews } from '../src/domain/reviews';
+import { api, callTool, mcpUrl, newUser, type TestUser } from './helpers';
+
+let user: TestUser;
+
+async function saveExample(): Promise<string> {
+  const result = await callTool(await mcpUrl(user), 'save_learning', example);
+  return result.structuredContent.session_id as string;
+}
+
+const answer = (cardId: string, grade: ReviewItem['grade'], reviewedAt = Date.now()): ReviewItem => ({
+  id: crypto.randomUUID(),
+  card_id: cardId,
+  grade,
+  reviewed_at: reviewedAt,
+});
+
+const cardOf = async (key: string, type: string) =>
+  (await env.DB.prepare('SELECT c.* FROM cards c JOIN concepts k ON k.id = c.concept_id WHERE c.user_id = ?1 AND k.key = ?2 AND c.type = ?3')
+    .bind(user.id, key, type)
+    .first<Record<string, any>>())!;
+
+beforeEach(async () => {
+  user = await newUser();
+});
+
+describe('today and queue', () => {
+  it('starts empty', async () => {
+    const today = (await (await api(user, '/today')).json()) as TodayResponse;
+    expect(today).toEqual({ remaining: 0, minutes: 0, reviewed_today: 0, sessions: [], followups: [], reminders_set: false });
+  });
+
+  it('serves one card per concept with answers for on-device grading', async () => {
+    await saveExample();
+    const queue = (await (await api(user, '/queue?size=8')).json()) as QueueResponse;
+    expect(queue.remaining).toBe(3);
+    expect(queue.cards.map((card) => card.concept_key).sort()).toEqual(['deep-copy', 'final-variable', 'immutable-object']);
+    const mcq = queue.cards.find((card) => card.type === 'mcq')!;
+    expect(mcq.options!.filter((option) => option.correct)).toHaveLength(1);
+    expect(mcq.options!.some((option) => option.from_my_answer)).toBe(true);
+
+    const today = (await (await api(user, '/today')).json()) as TodayResponse;
+    expect(today).toMatchObject({ remaining: 3, minutes: 1, sessions: [{ topic: example.topic, concepts: 5, cards: 5 }] });
+    expect(today.followups.map((followup) => followup.concept_name).sort()).toEqual(['깊은 복사', '방어적 복사']);
+  });
+
+  it('records answers once and keeps the rest of a reviewed concept for another day', async () => {
+    await saveExample();
+    const { cards } = (await (await api(user, '/queue')).json()) as QueueResponse;
+    const reviews = cards.map((card) => answer(card.id, 3));
+    const first = await api(user, '/reviews', { method: 'POST', json: { reviews } });
+    expect(await first.json()).toEqual({ recorded: 3, skipped: 0, unlocked: 0 });
+    const again = await api(user, '/reviews', { method: 'POST', json: { reviews } });
+    expect(await again.json()).toEqual({ recorded: 0, skipped: 3, unlocked: 0 });
+
+    const today = (await (await api(user, '/today')).json()) as TodayResponse;
+    expect(today).toMatchObject({ remaining: 0, reviewed_today: 3 });
+  });
+
+  it('brings a failed card back after its relearning step, but not other cards of the concept', async () => {
+    await saveExample();
+    const now = Date.now();
+    const ox = await cardOf('final-variable', 'ox');
+    await recordReviews(env, user.id, [answer(ox.id, 1, now)], now);
+    expect((await loadTodayQueue(env, user.id, now + 30_000)).map((card) => card.id)).not.toContain(ox.id);
+    const later = await loadTodayQueue(env, user.id, now + 2 * 60_000);
+    expect(later.filter((card) => card.concept_key === 'final-variable').map((card) => card.id)).toEqual([ox.id]);
+  });
+
+  it('limits new cards per day', async () => {
+    await env.DB.prepare('UPDATE users SET daily_new_limit = 1 WHERE id = ?1').bind(user.id).run();
+    await saveExample();
+    expect(await loadTodayQueue(env, user.id, Date.now())).toHaveLength(1);
+  });
+
+  it('rejects more than 20 answers at once', async () => {
+    const reviews = Array.from({ length: 21 }, () => answer(crypto.randomUUID(), 3));
+    expect((await api(user, '/reviews', { method: 'POST', json: { reviews } })).status).toBe(400);
+  });
+
+  it("ignores answers for another user's card", async () => {
+    await saveExample();
+    const card = await cardOf('deep-copy', 'mcq');
+    const other = await newUser();
+    const response = await api(other, '/reviews', { method: 'POST', json: { reviews: [answer(card.id, 3)] } });
+    expect(await response.json()).toEqual({ recorded: 0, skipped: 1, unlocked: 0 });
+  });
+});
+
+describe('card ladder', () => {
+  async function addLockedCloze() {
+    await callTool(await mcpUrl(user), 'save_learning', {
+      topic: '깊은 복사',
+      concepts: [{ key: 'deep-copy', name: '깊은 복사' }],
+      cards: [{ type: 'cloze', concept: 'deep-copy', prompt: '깊은 복사는 ____까지 새로 만든다.', answer: '내부 객체', choices: ['내부 객체', '참조', '변수'], explain: '참조만 복사하면 얕은 복사다.' }],
+    });
+    expect((await cardOf('deep-copy', 'cloze')).status).toBe('locked');
+  }
+
+  it('opens the next rung once every card of the open rung is stable for 7 days', async () => {
+    await saveExample();
+    await addLockedCloze();
+    const mcq = await cardOf('deep-copy', 'mcq');
+    const now = Date.now();
+    await env.DB.prepare('UPDATE cards SET state = 2, stability = 30, difficulty = 5, reps = 3, last_review = ?2, due = ?2 WHERE id = ?1')
+      .bind(mcq.id, now - 20 * 86_400_000)
+      .run();
+    expect(await recordReviews(env, user.id, [answer(mcq.id, 3, now)], now)).toMatchObject({ recorded: 1, unlocked: 1 });
+    expect(await cardOf('deep-copy', 'cloze')).toMatchObject({ status: 'active', due: now });
+  });
+
+  it('keeps the next rung locked while the open rung is still fresh', async () => {
+    await saveExample();
+    await addLockedCloze();
+    const mcq = await cardOf('deep-copy', 'mcq');
+    expect(await recordReviews(env, user.id, [answer(mcq.id, 3)], Date.now())).toMatchObject({ unlocked: 0 });
+    expect((await cardOf('deep-copy', 'cloze')).status).toBe('locked');
+  });
+
+  it('opens the next rung when the only open card is turned off, and turns it back on', async () => {
+    await saveExample();
+    await addLockedCloze();
+    const mcq = await cardOf('deep-copy', 'mcq');
+    expect((await api(user, `/cards/${mcq.id}/suspend`, { method: 'POST' })).status).toBe(204);
+    expect((await cardOf('deep-copy', 'mcq')).status).toBe('suspended');
+    expect((await cardOf('deep-copy', 'cloze')).status).toBe('active');
+    expect((await loadTodayQueue(env, user.id, Date.now())).map((card) => card.id)).not.toContain(mcq.id);
+
+    expect((await api(user, `/cards/${mcq.id}/unsuspend`, { method: 'POST' })).status).toBe(204);
+    expect((await cardOf('deep-copy', 'mcq')).status).toBe('active');
+  });
+
+  it('never opens explain cards in MVP 1', async () => {
+    await saveExample();
+    const ox = await cardOf('immutable-object', 'ox');
+    await api(user, `/cards/${ox.id}/suspend`, { method: 'POST' });
+    expect((await cardOf('immutable-object', 'explain')).status).toBe('locked');
+  });
+
+  it("returns 404 for another user's card", async () => {
+    await saveExample();
+    const card = await cardOf('deep-copy', 'mcq');
+    expect((await api(await newUser(), `/cards/${card.id}/suspend`, { method: 'POST' })).status).toBe(404);
+  });
+});
+
+describe('saved sessions', () => {
+  it('lists sessions and shows concepts, judgments, cards and follow-ups', async () => {
+    const id = await saveExample();
+    const list = (await (await api(user, '/sessions')).json()) as { sessions: { id: string }[] };
+    expect(list.sessions.map((session) => session.id)).toEqual([id]);
+
+    const detail = (await (await api(user, `/sessions/${id}`)).json()) as SessionDetail;
+    expect(detail).toMatchObject({ topic: example.topic, final_answer: example.final_answer, key_terms: example.key_terms });
+    expect(detail.concepts.map((concept) => concept.key).sort()).toEqual(['deep-copy', 'defensive-copy', 'final-variable', 'immutable-object']);
+    expect(detail.judgments.map((judgment) => judgment.label)).toEqual(['틀림', '애매']);
+    expect(detail.cards).toHaveLength(5);
+    expect(detail.cards.find((card) => card.type === 'cloze')!.choices).toHaveLength(4);
+    expect(detail.cards.find((card) => card.type === 'explain')).toMatchObject({ status: 'locked', checklist: expect.any(Array) });
+    expect(detail.followups).toHaveLength(2);
+
+    expect((await api(await newUser(), `/sessions/${id}`)).status).toBe(404);
+  });
+});

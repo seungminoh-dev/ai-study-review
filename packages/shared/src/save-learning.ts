@@ -8,7 +8,9 @@ export const ConceptKey = z
   .max(60);
 
 export const JudgmentLabel = z.enum(['맞음', '애매', '틀림', '빠짐']);
+export type JudgmentLabel = z.infer<typeof JudgmentLabel>;
 export const EdgeType = z.enum(['prerequisite', 'follow_up', 'contrast', 'part_of']);
+export type EdgeType = z.infer<typeof EdgeType>;
 
 const OxCard = z.object({
   type: z.literal('ox'),

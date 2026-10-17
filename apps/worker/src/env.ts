@@ -4,8 +4,10 @@ export interface Env {
   APP_ORIGIN: string;
   VAPID_PUBLIC_KEY: string;
   VAPID_SUBJECT: string;
-  /** secret */
+  /** secret. 푸시 서명 키 */
   VAPID_PRIVATE_KEY: string;
-  /** secret. MVP 0 전용 MCP·스파이크 API 토큰. MVP 1에서 지운다 */
-  SPIKE_TOKEN: string;
+  /** secret. 세션·커넥터 토큰을 해시하는 HMAC 키 (설계서 §14) */
+  TOKEN_PEPPER: string;
+  /** secret. 오너 계정을 한 번 만들 때만 쓴다 (설계서 §8.3) */
+  BOOTSTRAP_CODE: string;
 }

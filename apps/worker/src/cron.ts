@@ -1,8 +1,12 @@
+import { deliverDueReminders } from './domain/reminders';
 import type { Env } from './env';
-import { deliverDueJobs } from './spike/jobs';
 
-/** 매분 Cron (설계서 §10.4). MVP 0은 예약한 테스트 푸시만 보낸다. */
+/** 매분 Cron (설계서 §10.4). 일은 이 순서대로 하고, CPU를 많이 쓰는 일은 한 실행에 하나만 한다. */
 export async function runCron(env: Env, now: number): Promise<void> {
-  const sent = await deliverDueJobs(env, now);
-  if (sent > 0) console.log(JSON.stringify({ event: 'cron_push', sent }));
+  await deliverDueReminders(env, now);
+  // 매시 0분: 만료된 로그인 세션을 지운다
+  if (new Date(now).getUTCMinutes() === 0) {
+    const removed = await env.DB.prepare('DELETE FROM auth_sessions WHERE expires_at <= ?1').bind(now).run();
+    if (removed.meta.changes > 0) console.log(JSON.stringify({ event: 'sessions_expired', removed: removed.meta.changes }));
+  }
 }

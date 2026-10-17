@@ -21,3 +21,9 @@ export function checkOrigin(request: Request, env: Env): Response | null {
 export function tooLarge(): Response {
   return errorJson(413, 'too_large', '요청 본문이 너무 커요.');
 }
+
+/** PWA의 상태 변경 요청은 Origin이 우리 주소여야 한다. 브라우저는 POST·PUT·DELETE에 항상 Origin을 붙인다 (CSRF 방어). */
+export function requireSameOrigin(request: Request, env: Env): Response | null {
+  if (request.headers.get('origin') !== env.APP_ORIGIN) return errorJson(403, 'wrong_origin', '허용되지 않은 출처예요.');
+  return null;
+}
