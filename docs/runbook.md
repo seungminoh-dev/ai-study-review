@@ -13,15 +13,16 @@ MVP 1(나 혼자 루프)부터 쓰는 가이드다. MVP 0 점검 기록은 [MVP 
 
 ### 1-1. secret 넣기 (🙋 직접, 로컬 터미널)
 
-```bash
-# 레포 루트에서 값을 하나씩 만든다
-npm run gen:token   # → TOKEN_PEPPER 값
-npm run gen:token   # → BOOTSTRAP_CODE 값. 1-3에서 한 번 입력하니 적어 둔다
+모두 `apps/worker` 폴더 안에서 **한 줄씩** 실행한다. wrangler는 지금 폴더의 `wrangler.jsonc`로 Worker를 찾는다. 레포 루트에서 실행하면 "Required Worker name missing" 오류가 난다. `secret put`은 값을 물어보므로 여러 줄을 한 번에 붙여 넣지 않는다.
 
-cd apps/worker
-npx wrangler secret put TOKEN_PEPPER     # 첫 번째 값
-npx wrangler secret put BOOTSTRAP_CODE   # 두 번째 값
-npx wrangler secret delete SPIKE_TOKEN   # MVP 0 전용이라 지운다
+```bash
+cd apps/worker                          # Windows PowerShell: cd apps\worker
+node ../../scripts/gen-token.mjs        # 출력값 1 → TOKEN_PEPPER
+node ../../scripts/gen-token.mjs        # 출력값 2 → BOOTSTRAP_CODE. 1-3에서 한 번 입력하니 적어 둔다
+npx wrangler secret put TOKEN_PEPPER    # "Enter a secret value"에 출력값 1을 붙여 넣는다
+npx wrangler secret put BOOTSTRAP_CODE  # 출력값 2
+npx wrangler secret delete SPIKE_TOKEN  # MVP 0 전용이라 지운다
+npx wrangler secret list                # TOKEN_PEPPER, BOOTSTRAP_CODE, VAPID_PRIVATE_KEY가 보이면 된다
 ```
 
 - `TOKEN_PEPPER`는 세션과 커넥터 토큰을 해시하는 키다. **바꾸면 모든 로그인과 커넥터 URL이 무효가 된다.** 한 번 넣고 그대로 둔다.
