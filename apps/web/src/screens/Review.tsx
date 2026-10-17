@@ -1,9 +1,10 @@
-import type { QueueCard, QueueResponse } from '@moai/shared';
+import type { QueueCard, QueueResponse, ReportReason, ReviewGrade } from '@moai/shared';
 import { MAX_ELAPSED_MS, gradeAnswer } from '@moai/shared/client';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { OfflineError, errorMessage, request } from '../api';
+import { ExplainCard } from '../cards/ExplainCard';
 import { QuestionCard, choicesOf, type Choice } from '../cards/QuestionCard';
-import { cacheQueue, cachedQueue, enqueueReview, flushReviews, forgetAnswered, pendingCardIds } from '../offline/store';
+import { cacheQueue, cachedQueue, enqueueReview, flushReviews, forgetAnswered, pendingCardIds, removeFromOutbox } from '../offline/store';
 import { Link, navigate } from '../router';
 
 // 복습 세션 (설계서 §12.1, §12.2). 카드 한 장씩: 답 고르기 → 맞음·틀림과 해설 → 다음.
@@ -69,6 +70,18 @@ export function Review({ size }: { size: number }) {
   return <Session initial={load.cards} offline={load.offline} />;
 }
 
+interface Recorded {
+  reviewId: string;
+  card: QueueCard;
+}
+
+const REPORT_REASONS: { reason: ReportReason; label: string }[] = [
+  { reason: 'wrong', label: '정답이나 해설이 틀렸어요' },
+  { reason: 'unclear', label: '문제가 애매해요' },
+  { reason: 'duplicate', label: '다른 카드와 같아요' },
+  { reason: 'other', label: '그 밖의 문제' },
+];
+
 function Session({ initial, offline }: { initial: QueueCard[]; offline: boolean }) {
   const [cards, setCards] = useState(initial);
   const [index, setIndex] = useState(0);
@@ -78,6 +91,9 @@ function Session({ initial, offline }: { initial: QueueCard[]; offline: boolean 
   /** "틀린 카드 다시 보기"는 연습이라 기록하지 않는다. 방금 정답을 봤으니 기록하면 재학습 단계를 건너뛰게 된다 */
   const [practice, setPractice] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  /** 방금 기록한 답. 잘못 눌렀으면 다음 카드에서 되돌릴 수 있다 */
+  const [last, setLast] = useState<Recorded | null>(null);
+  const [reporting, setReporting] = useState(false);
   /** 두 번 탭해도 한 번만 기록한다 */
   const moving = useRef(false);
   const shownAt = useRef(Date.now());
@@ -93,6 +109,7 @@ function Session({ initial, offline }: { initial: QueueCard[]; offline: boolean 
   const advance = () => {
     setPicked(null);
     setNotice(null);
+    setReporting(false);
     setIndex((value) => value + 1);
     moving.current = false;
   };
@@ -101,6 +118,7 @@ function Session({ initial, offline }: { initial: QueueCard[]; offline: boolean 
     setPicked(null);
     setResults([]);
     setPractice(true);
+    setLast(null);
     setCards(wrong);
     setIndex(0);
   };
@@ -111,24 +129,62 @@ function Session({ initial, offline }: { initial: QueueCard[]; offline: boolean 
     navigator.vibrate?.(choice.correct ? 10 : [30, 40, 30]);
   };
 
-  const next = async (easy = false) => {
-    if (!card || !picked || moving.current) return;
-    moving.current = true;
+  /** 답 하나를 outbox에 넣고 다음 카드로 간다 */
+  const record = async (current: QueueCard, grade: ReviewGrade, response: string, correct: boolean) => {
     // 앱을 켜 둔 채 자리를 비운 시간까지 세지 않도록 자른다
     const elapsed = Math.min(Math.max(0, Math.round(answeredAt.current - shownAt.current)), MAX_ELAPSED_MS);
     if (!practice) {
+      const id = crypto.randomUUID();
       await enqueueReview({
-        id: crypto.randomUUID(),
-        card_id: card.id,
-        grade: gradeAnswer({ correct: picked.correct, elapsedMs: elapsed, easy }),
-        response: picked.value,
+        id,
+        card_id: current.id,
+        grade,
+        ...(response ? { response } : {}),
         elapsed_ms: elapsed,
         reviewed_at: answeredAt.current,
       });
-      await forgetAnswered([card.id]);
+      await forgetAnswered([current.id]);
+      setLast({ reviewId: id, card: current });
     }
-    setResults((list) => [...list, { card, correct: picked.correct }]);
+    setResults((list) => [...list, { card: current, correct }]);
     advance();
+  };
+
+  const next = async (easy = false) => {
+    if (!card || !picked || moving.current) return;
+    moving.current = true;
+    const elapsed = answeredAt.current - shownAt.current;
+    await record(card, gradeAnswer({ correct: picked.correct, elapsedMs: elapsed, easy }), picked.value, picked.correct);
+  };
+
+  const gradeExplain = async (grade: ReviewGrade, text: string) => {
+    if (!card || moving.current) return;
+    moving.current = true;
+    answeredAt.current = Date.now();
+    await record(card, grade, text.trim(), grade >= 2);
+  };
+
+  /** 방금 기록한 답을 지우고 그 카드를 다시 보여 준다. 아직 안 보냈으면 기기에서만 지운다 */
+  const undo = async () => {
+    if (!last || busy) return;
+    setBusy(true);
+    setNotice(null);
+    try {
+      const removedLocally = await removeFromOutbox(last.reviewId);
+      try {
+        await request(`/reviews/${last.reviewId}/undo`, { method: 'POST' });
+      } catch (error) {
+        // 기기에서 지웠으면 서버에는 없는 게 맞다 (404). 오프라인이어도 괜찮다
+        if (!removedLocally) throw error;
+      }
+      setCards((list) => [...list.slice(0, index), last.card, ...list.slice(index)]);
+      setResults((list) => list.slice(0, -1));
+      setLast(null);
+    } catch (error) {
+      setNotice(errorMessage(error));
+    } finally {
+      setBusy(false);
+    }
   };
 
   // 컴퓨터에서는 키보드로 푼다: 1~9 고르기(OX는 O·X도), Enter·Space 다음, E 너무 쉬웠어요, Esc 그만하기
@@ -140,6 +196,8 @@ function Session({ initial, offline }: { initial: QueueCard[]; offline: boolean 
       const key = event.key.toLowerCase();
       if (key === 'escape') {
         navigate('/');
+      } else if (card.type === 'explain') {
+        // 설명하기는 카드가 직접 키를 받는다
       } else if (!picked) {
         const index = /^[1-9]$/.test(key) ? Number(key) - 1 : card.type === 'ox' ? ['o', 'x'].indexOf(key) : -1;
         const choice = choices[index];
@@ -161,13 +219,12 @@ function Session({ initial, offline }: { initial: QueueCard[]; offline: boolean 
     return () => window.removeEventListener('keydown', onKey);
   });
 
-  if (!card) return <Summary results={results} practice={practice} onRetry={retry} />;
+  if (!card) return <Summary results={results} practice={practice} onRetry={retry} onUndo={last ? () => void undo() : null} notice={notice} />;
 
-  const suspend = async () => {
-    if (!confirm('이 카드를 끌까요? 다시 나오지 않아요. 저장 기록 화면에서 다시 켤 수 있어요.')) return;
+  const report = async (reason: ReportReason) => {
     setBusy(true);
     try {
-      await request(`/cards/${card.id}/suspend`, { method: 'POST' });
+      await request(`/cards/${card.id}/report`, { method: 'POST', json: { reason } });
       await forgetAnswered([card.id]);
       advance();
     } catch (error) {
@@ -176,6 +233,24 @@ function Session({ initial, offline }: { initial: QueueCard[]; offline: boolean 
       setBusy(false);
     }
   };
+
+  const reportArea = reporting ? (
+    <div className="report-panel">
+      <p className="small">무엇이 문제인가요? 신고하면 이 카드는 바로 꺼져요. 기록 탭에서 고치거나 다시 켤 수 있어요.</p>
+      {REPORT_REASONS.map((item) => (
+        <button key={item.reason} type="button" className="button" disabled={busy} onClick={() => void report(item.reason)}>
+          {item.label}
+        </button>
+      ))}
+      <button type="button" className="text-button" onClick={() => setReporting(false)}>
+        취소
+      </button>
+    </div>
+  ) : (
+    <button type="button" className="text-button" onClick={() => setReporting(true)}>
+      이 카드가 이상해요 · 신고하고 끄기
+    </button>
+  );
 
   return (
     <div className="review">
@@ -192,36 +267,62 @@ function Session({ initial, offline }: { initial: QueueCard[]; offline: boolean 
       </header>
       {offline ? <p className="notice">오프라인이에요. 답은 저장해 두었다가 연결되면 보내요.</p> : null}
       {practice ? <p className="notice">다시 보기는 연습이라 기록하지 않아요. 틀린 카드는 곧 다시 나와요.</p> : null}
-      <QuestionCard key={`${card.id}-${index}`} card={card} choices={choices} picked={picked} onPick={pick} />
-      {picked ? (
-        <div className="answer-panel" aria-live="polite">
-          <p className={picked.correct ? 'verdict right' : 'verdict wrong'}>{picked.correct ? '맞았어요' : '틀렸어요'}</p>
-          {!picked.correct && card.type !== 'ox' ? <p className="correct">정답: {choices.find((choice) => choice.correct)?.label}</p> : null}
-          {card.explain ? <p className="explain">{card.explain}</p> : null}
-          {notice ? <p className="notice bad">{notice}</p> : null}
-          <div className="actions">
-            {picked.correct && !practice ? (
-              <button type="button" className="button" onClick={() => void next(true)}>
-                너무 쉬웠어요
-              </button>
-            ) : null}
-            <button type="button" className="button primary" onClick={() => void next(false)}>
-              다음
-            </button>
-          </div>
-          <button type="button" className="text-button" disabled={busy} onClick={() => void suspend()}>
-            이 카드가 틀렸어요 · 끄기
-          </button>
-        </div>
+      {last && !picked ? (
+        <button type="button" className="text-button undo" disabled={busy} onClick={() => void undo()}>
+          ↶ 방금 답 되돌리기
+        </button>
       ) : null}
-      <p className="kbd-hint muted small">
-        키보드: {card.type === 'ox' ? 'O·X' : `1~${choices.length}`} 고르기 · Enter 다음{picked?.correct && !practice ? ' · E 너무 쉬웠어요' : ''} · Esc 그만하기
-      </p>
+      {card.type === 'explain' ? (
+        <>
+          <ExplainCard key={`${card.id}-${index}`} card={card} onGrade={(grade, text) => void gradeExplain(grade, text)} />
+          {notice ? <p className="notice bad">{notice}</p> : null}
+          {reportArea}
+        </>
+      ) : (
+        <>
+          <QuestionCard key={`${card.id}-${index}`} card={card} choices={choices} picked={picked} onPick={pick} />
+          {!picked && notice ? <p className="notice bad">{notice}</p> : null}
+          {picked ? (
+            <div className="answer-panel" aria-live="polite">
+              <p className={picked.correct ? 'verdict right' : 'verdict wrong'}>{picked.correct ? '맞았어요' : '틀렸어요'}</p>
+              {!picked.correct && card.type !== 'ox' ? <p className="correct">정답: {choices.find((choice) => choice.correct)?.label}</p> : null}
+              {card.explain ? <p className="explain">{card.explain}</p> : null}
+              {notice ? <p className="notice bad">{notice}</p> : null}
+              <div className="actions">
+                {picked.correct && !practice ? (
+                  <button type="button" className="button" onClick={() => void next(true)}>
+                    너무 쉬웠어요
+                  </button>
+                ) : null}
+                <button type="button" className="button primary" onClick={() => void next(false)}>
+                  다음
+                </button>
+              </div>
+              {reportArea}
+            </div>
+          ) : null}
+          <p className="kbd-hint muted small">
+            키보드: {card.type === 'ox' ? 'O·X' : `1~${choices.length}`} 고르기 · Enter 다음{picked?.correct && !practice ? ' · E 너무 쉬웠어요' : ''} · Esc 그만하기
+          </p>
+        </>
+      )}
     </div>
   );
 }
 
-function Summary({ results, practice, onRetry }: { results: Result[]; practice: boolean; onRetry: (cards: QueueCard[]) => void }) {
+function Summary({
+  results,
+  practice,
+  onRetry,
+  onUndo,
+  notice,
+}: {
+  results: Result[];
+  practice: boolean;
+  onRetry: (cards: QueueCard[]) => void;
+  onUndo: (() => void) | null;
+  notice: string | null;
+}) {
   const wrong = results.filter((result) => !result.correct).map((result) => result.card);
   const right = results.length - wrong.length;
   return (
@@ -245,6 +346,12 @@ function Summary({ results, practice, onRetry }: { results: Result[]; practice: 
       ) : (
         <p className="muted">{practice ? '다시 보기에서 다 맞혔어요.' : '다 맞혔어요. 다음 복습은 알림으로 알려 드릴게요.'}</p>
       )}
+      {onUndo ? (
+        <button type="button" className="text-button" onClick={onUndo}>
+          ↶ 마지막 답 되돌리기
+        </button>
+      ) : null}
+      {notice ? <p className="notice bad">{notice}</p> : null}
       <Link className="button" href="/">
         오늘 화면으로
       </Link>

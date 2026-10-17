@@ -34,12 +34,45 @@ export type InviteBody = z.infer<typeof InviteBody>;
 export const ReviewGrade = z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]);
 export type ReviewGrade = z.infer<typeof ReviewGrade>;
 
+export const ReportReason = z.enum(['wrong', 'unclear', 'duplicate', 'other']);
+export type ReportReason = z.infer<typeof ReportReason>;
+
+/** 카드 신고. 신고하면 그 카드는 바로 꺼진다 */
+export const ReportBody = z.object({ reason: ReportReason, note: z.string().trim().max(300).optional() });
+
+const EditText = z.string().trim().min(1);
+/** 카드 고치기. 카드 종류는 바꾸지 않고 글자와 정답만 고친다 */
+export const CardEditBody = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('ox'), prompt: EditText.max(500), answer: z.enum(['O', 'X']), explain: EditText.max(400) }),
+  z.object({
+    type: z.literal('mcq'),
+    prompt: EditText.max(500),
+    options: z
+      .array(z.object({ text: EditText.max(300), correct: z.boolean(), from_my_answer: z.boolean().optional() }))
+      .min(3)
+      .max(4)
+      .refine((options) => options.filter((option) => option.correct).length === 1, '정답은 하나여야 해요'),
+    explain: EditText.max(400),
+  }),
+  z.object({
+    type: z.literal('cloze'),
+    prompt: EditText.max(500).refine((prompt) => prompt.split('____').length === 2, '빈칸(____)이 한 번 있어야 해요'),
+    answer: EditText.max(40),
+    choices: z.array(EditText.max(40)).min(3).max(5),
+    explain: EditText.max(400),
+  }).refine((card) => card.choices.includes(card.answer), '보기에 정답이 있어야 해요'),
+  z.object({ type: z.literal('explain'), prompt: EditText.max(300), checklist: z.array(EditText.max(60)).min(2).max(5) }),
+]);
+export type CardEditBody = z.infer<typeof CardEditBody>;
+
+export const DailyGoalBody = z.object({ daily_goal: z.int().min(1).max(50) });
+
 export const ReviewItem = z.object({
   /** 기기에서 만든 UUID. 같은 답을 다시 보내도 한 번만 기록한다 */
   id: z.uuid(),
   card_id: z.uuid(),
   grade: ReviewGrade,
-  /** 고른 보기 글자 그대로 (ox는 'O'·'X') */
+  /** 고른 보기 글자 그대로 (ox는 'O'·'X'). 설명하기는 사용자가 쓴 설명 */
   response: z.string().max(2000).optional(),
   /** 너무 크면 버리지 않고 MAX_ELAPSED_MS로 자른다 */
   elapsed_ms: z
@@ -128,12 +161,15 @@ export interface InviteSummary {
   used_by_name: string | null;
 }
 
+/** 등급(1 다시, 2 어려움, 3 좋음, 4 쉬움)별로 다음 복습까지 남는 시간(ms). 설명하기 버튼에 보여 준다 */
+export type GradeIntervals = Record<'1' | '2' | '3' | '4', number>;
+
 /** 복습 화면에서 한 장. 기기에서 채점하므로 정답이 함께 온다 */
 export interface QueueCard {
   id: string;
   concept_key: string;
   concept_name: string;
-  type: Exclude<CardType, 'explain'>;
+  type: CardType;
   rung: number;
   prompt: string;
   code: string | null;
@@ -144,6 +180,12 @@ export interface QueueCard {
   /** cloze만 */
   choices: string[] | null;
   explain: string | null;
+  /** 설명하기만: 면접관이 듣고 싶어 하는 핵심 요소 */
+  checklist: string[] | null;
+  /** 설명하기만: 내가 예전에 확정한 최종 버전 (개념의 final_answer) */
+  final_answer: string | null;
+  /** 설명하기만: 등급별 다음 간격 */
+  intervals: GradeIntervals | null;
   /** FSRS 상태: 0 새 카드, 1 학습, 2 복습, 3 재학습 */
   state: number;
 }

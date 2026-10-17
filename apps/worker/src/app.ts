@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { account } from './api/account';
 import { auth } from './api/auth';
+import { cards } from './api/cards';
 import { review } from './api/review';
 import { sessions } from './api/sessions';
 import { settings } from './api/settings';
@@ -33,6 +34,7 @@ app.get('/api/health', (c) => c.json({ ok: true, time: new Date().toISOString() 
 app.route('/api/setup', setup);
 app.route('/api/auth', auth);
 app.route('/api', account);
+app.route('/api', cards);
 app.route('/api', review);
 app.route('/api', sessions);
 app.route('/api', settings);

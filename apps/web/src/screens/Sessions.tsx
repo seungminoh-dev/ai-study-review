@@ -1,11 +1,11 @@
-import type { SessionCard, SessionDetail as Detail, SessionSummary } from '@moai/shared';
-import { useState } from 'react';
+import type { CardEditBody, SessionCard, SessionDetail as Detail, SessionSummary } from '@moai/shared';
+import { useState, type FormEvent } from 'react';
 import { errorMessage, request } from '../api';
 import { CodeBlock } from '../cards/CodeBlock';
 import { Link } from '../router';
 import { formatDate, formatDateTime, useApi } from '../useApi';
 
-// 저장 기록 (설계서 §12.1): 세션별 개념·판정·카드, 카드 끄기
+// 저장 기록 (설계서 §12.1): 세션별 개념·판정·카드, 카드 고치기·끄기
 
 export function Sessions() {
   const { data, error } = useApi<{ sessions: SessionSummary[] }>('/sessions');
@@ -56,7 +56,144 @@ function CardAnswer({ card }: { card: SessionCard }) {
   }
 }
 
-function CardRow({ card }: { card: SessionCard }) {
+type Draft = CardEditBody;
+
+function draftOf(card: SessionCard): Draft {
+  switch (card.type) {
+    case 'ox':
+      return { type: 'ox', prompt: card.prompt, answer: card.answer === 'X' ? 'X' : 'O', explain: card.explain ?? '' };
+    case 'mcq':
+      return { type: 'mcq', prompt: card.prompt, options: (card.options ?? []).map((option) => ({ ...option })), explain: card.explain ?? '' };
+    case 'cloze':
+      return { type: 'cloze', prompt: card.prompt, answer: card.answer ?? '', choices: [...(card.choices ?? [])], explain: card.explain ?? '' };
+    case 'explain':
+      return { type: 'explain', prompt: card.prompt, checklist: [...(card.checklist ?? [])] };
+  }
+}
+
+function applyDraft(card: SessionCard, draft: Draft): SessionCard {
+  switch (draft.type) {
+    case 'ox':
+      return { ...card, prompt: draft.prompt, answer: draft.answer, explain: draft.explain };
+    case 'mcq':
+      return { ...card, prompt: draft.prompt, options: draft.options, explain: draft.explain };
+    case 'cloze':
+      return { ...card, prompt: draft.prompt, answer: draft.answer, choices: draft.choices, explain: draft.explain };
+    case 'explain':
+      return { ...card, prompt: draft.prompt, checklist: draft.checklist };
+  }
+}
+
+/** 카드 고치기 (설계서 §2.3 7번). 종류는 그대로 두고 글자와 정답만 고친다 */
+function EditForm({ card, onSaved, onCancel }: { card: SessionCard; onSaved: (card: SessionCard) => void; onCancel: () => void }) {
+  const [draft, setDraft] = useState<Draft>(() => draftOf(card));
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const set = (patch: Partial<Draft>) => setDraft((value) => ({ ...value, ...patch }) as Draft);
+
+  const save = async (event: FormEvent) => {
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await request(`/cards/${card.id}`, { method: 'PATCH', json: draft });
+      onSaved(applyDraft(card, draft));
+    } catch (reason) {
+      setError(errorMessage(reason));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <form className="edit-form" onSubmit={(event) => void save(event)}>
+      <label className="field">
+        <span>문제{draft.type === 'cloze' ? ' (빈칸은 ____)' : ''}</span>
+        <textarea value={draft.prompt} onChange={(event) => set({ prompt: event.target.value })} rows={3} maxLength={500} required />
+      </label>
+      {draft.type === 'ox' ? (
+        <div className="field">
+          <span>정답</span>
+          <div className="actions">
+            {(['O', 'X'] as const).map((value) => (
+              <label key={value} className="radio">
+                <input type="radio" name={`ox-${card.id}`} checked={draft.answer === value} onChange={() => set({ answer: value })} /> {value}
+              </label>
+            ))}
+          </div>
+        </div>
+      ) : null}
+      {draft.type === 'mcq' ? (
+        <div className="field">
+          <span>보기 (정답 하나를 고르세요)</span>
+          {draft.options.map((option, index) => (
+            <div key={index} className="option-edit">
+              <input
+                type="radio"
+                name={`mcq-${card.id}`}
+                aria-label={`${index + 1}번을 정답으로`}
+                checked={option.correct}
+                onChange={() => set({ options: draft.options.map((item, i) => ({ ...item, correct: i === index })) })}
+              />
+              <input
+                value={option.text}
+                maxLength={300}
+                required
+                aria-label={`${index + 1}번 보기`}
+                onChange={(event) => set({ options: draft.options.map((item, i) => (i === index ? { ...item, text: event.target.value } : item)) })}
+              />
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {draft.type === 'cloze' ? (
+        <>
+          <label className="field">
+            <span>정답</span>
+            <input value={draft.answer} maxLength={40} required onChange={(event) => set({ answer: event.target.value })} />
+          </label>
+          <label className="field">
+            <span>보기 (쉼표로 나눠요. 정답도 넣어요)</span>
+            <input
+              value={draft.choices.join(', ')}
+              onChange={(event) => set({ choices: event.target.value.split(',').map((item) => item.trim()).filter(Boolean) })}
+              required
+            />
+          </label>
+        </>
+      ) : null}
+      {draft.type === 'explain' ? (
+        <label className="field">
+          <span>핵심 요소 (한 줄에 하나, 2~5개)</span>
+          <textarea
+            value={draft.checklist.join('\n')}
+            rows={4}
+            onChange={(event) => set({ checklist: event.target.value.split('\n').map((item) => item.trim()).filter(Boolean) })}
+            required
+          />
+        </label>
+      ) : (
+        <label className="field">
+          <span>해설</span>
+          <textarea value={draft.explain} onChange={(event) => set({ explain: event.target.value })} rows={2} maxLength={400} required />
+        </label>
+      )}
+      {error ? <p className="notice bad">{error}</p> : null}
+      <div className="actions">
+        <button type="button" className="button" onClick={onCancel}>
+          취소
+        </button>
+        <button type="submit" className="button primary" disabled={busy}>
+          저장
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function CardRow({ card: initial }: { card: SessionCard }) {
+  const [card, setCard] = useState(initial);
+  const [editing, setEditing] = useState(false);
   const [status, setStatus] = useState(card.status);
   const [error, setError] = useState<string | null>(null);
   const toggle = async () => {
@@ -78,14 +215,32 @@ function CardRow({ card }: { card: SessionCard }) {
           {TYPE[card.type]} · {card.rung}단계 · {STATUS[status]}
         </span>
       </div>
-      <p>{card.prompt}</p>
-      {card.code ? <CodeBlock code={card.code} /> : null}
-      <CardAnswer card={card} />
-      {card.explain ? <p className="muted small">{card.explain}</p> : null}
-      {error ? <p className="notice bad">{error}</p> : null}
-      <button type="button" className="text-button" onClick={() => void toggle()}>
-        {status === 'suspended' ? '다시 켜기' : '끄기'}
-      </button>
+      {editing ? (
+        <EditForm
+          card={card}
+          onCancel={() => setEditing(false)}
+          onSaved={(saved) => {
+            setCard(saved);
+            setEditing(false);
+          }}
+        />
+      ) : (
+        <>
+          <p>{card.prompt}</p>
+          {card.code ? <CodeBlock code={card.code} /> : null}
+          <CardAnswer card={card} />
+          {card.explain ? <p className="muted small">{card.explain}</p> : null}
+          {error ? <p className="notice bad">{error}</p> : null}
+          <div className="row-actions">
+            <button type="button" className="text-button" onClick={() => setEditing(true)}>
+              고치기
+            </button>
+            <button type="button" className="text-button" onClick={() => void toggle()}>
+              {status === 'suspended' ? '다시 켜기' : '끄기'}
+            </button>
+          </div>
+        </>
+      )}
     </li>
   );
 }

@@ -1,3 +1,4 @@
+import type { GradeIntervals } from '@moai/shared';
 import { createEmptyCard, fsrs, generatorParameters, type Card, type Grade } from 'ts-fsrs';
 
 // FSRS 설정 (설계서 §9.1)
@@ -67,4 +68,11 @@ export function nextFsrsFields(fields: FsrsFields, reviewedAt: number, grade: 1 
 export function pickFsrsFields(row: FsrsFields): FsrsFields {
   const { due, stability, difficulty, elapsed_days, scheduled_days, learning_steps, reps, lapses, state, last_review } = row;
   return { due, stability, difficulty, elapsed_days, scheduled_days, learning_steps, reps, lapses, state, last_review };
+}
+
+/** 지금 등급마다 답하면 다음 복습까지 얼마나 남는지 (설명하기 버튼의 간격 표시, 설계서 §9.1) */
+export function previewIntervals(fields: FsrsFields, now: number): GradeIntervals {
+  const preview = scheduler.repeat(toFsrsCard(fields), new Date(now));
+  const after = (grade: Grade) => Math.max(0, preview[grade].card.due.getTime() - now);
+  return { '1': after(1 as Grade), '2': after(2 as Grade), '3': after(3 as Grade), '4': after(4 as Grade) };
 }

@@ -24,6 +24,21 @@ export async function clearDeviceData(): Promise<void> {
   await clear(store);
 }
 
+/** 아직 보내지 않은 답이면 outbox에서 지우고 true. 이미 보냈으면 false */
+export async function removeFromOutbox(id: string): Promise<boolean> {
+  let removed = false;
+  await update<ReviewItem[]>(
+    OUTBOX,
+    (items) => {
+      const rest = (items ?? []).filter((item) => item.id !== id);
+      removed = rest.length !== (items ?? []).length;
+      return rest;
+    },
+    store,
+  );
+  return removed;
+}
+
 /** 아직 서버에 보내지 못한 답의 카드 id */
 export async function pendingCardIds(): Promise<Set<string>> {
   return new Set(((await get<ReviewItem[]>(OUTBOX, store)) ?? []).map((item) => item.card_id));

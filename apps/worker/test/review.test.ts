@@ -220,11 +220,32 @@ describe('card ladder', () => {
     expect((await cardOf('deep-copy', 'mcq')).status).toBe('active');
   });
 
-  it('never opens explain cards in MVP 1', async () => {
+  it('opens the explain card when the lower rungs are done, and serves it with interval previews', async () => {
     await saveExample();
+    expect((await cardOf('immutable-object', 'explain')).status).toBe('locked');
     const ox = await cardOf('immutable-object', 'ox');
     await api(user, `/cards/${ox.id}/suspend`, { method: 'POST' });
-    expect((await cardOf('immutable-object', 'explain')).status).toBe('locked');
+    const explain = await cardOf('immutable-object', 'explain');
+    expect(explain.status).toBe('active');
+    const queued = (await loadTodayQueue(env, user.id, Date.now())).find((card) => card.id === explain.id)!;
+    expect(queued).toMatchObject({ type: 'explain', checklist: expect.any(Array), final_answer: expect.any(String) });
+    expect(queued.intervals!['1']).toBeLessThan(queued.intervals!['3']);
+  });
+
+  it('undoes only the latest grade of a card and restores its state', async () => {
+    await saveExample();
+    const mcq = await cardOf('deep-copy', 'mcq');
+    const first = answer(mcq.id, 3, Date.now() - 1000);
+    const second = answer(mcq.id, 1);
+    await api(user, '/reviews', { method: 'POST', json: { reviews: [first, second] } });
+    expect((await api(user, `/reviews/${first.id}/undo`, { method: 'POST' })).status).toBe(404);
+    expect((await api(user, `/reviews/${second.id}/undo`, { method: 'POST' })).status).toBe(204);
+    const card = await cardOf('deep-copy', 'mcq');
+    expect(card).toMatchObject({ reps: 1, lapses: 0 });
+    const logs = await env.DB.prepare('SELECT id FROM review_logs WHERE card_id = ?1').bind(mcq.id).all<{ id: string }>();
+    expect(logs.results.map((log) => log.id)).toEqual([first.id]);
+    // 남의 기록은 되돌릴 수 없다
+    expect((await api(await newUser(), `/reviews/${first.id}/undo`, { method: 'POST' })).status).toBe(404);
   });
 
   it("returns 404 for another user's card", async () => {

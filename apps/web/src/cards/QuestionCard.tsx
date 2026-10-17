@@ -34,10 +34,12 @@ export function choicesOf(card: QueueCard): Choice[] {
       return shuffle(card.options ?? []).map((option) => ({ value: option.text, label: option.text, correct: option.correct, mine: option.from_my_answer === true }));
     case 'cloze':
       return shuffle(card.choices ?? []).map((choice) => ({ value: choice, label: choice, correct: choice === card.answer, mine: false }));
+    case 'explain':
+      return [];
   }
 }
 
-const KIND: Record<QueueCard['type'], string> = { ox: 'OX', mcq: '객관식', cloze: '빈칸' };
+const KIND: Record<QueueCard['type'], string> = { ox: 'OX', mcq: '객관식', cloze: '빈칸', explain: '설명하기' };
 
 function ClozePrompt({ prompt, filled }: { prompt: string; filled: string | null }) {
   const [before, after] = prompt.split('____');

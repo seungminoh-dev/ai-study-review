@@ -1,6 +1,7 @@
 import type { McqOption, QueueCard } from '@moai/shared';
 import type { Env } from '../env';
 import { studyDayStart } from '../lib/kst';
+import { pickFsrsFields, previewIntervals, type FsrsFields } from './fsrs';
 
 // 오늘 큐 (설계서 §9.2)
 
@@ -57,7 +58,7 @@ export function selectQueue<T extends QueueCandidate>(candidates: readonly T[], 
   return picked;
 }
 
-interface CandidateRow extends QueueCandidate {
+interface CandidateRow extends QueueCandidate, FsrsFields {
   concept_key: string;
   concept_name: string;
   type: QueueCard['type'];
@@ -67,15 +68,18 @@ interface CandidateRow extends QueueCandidate {
   answer: string | null;
   options: string | null;
   explain: string | null;
+  checklist: string | null;
+  final_answer: string | null;
 }
 
 /** 후보는 넉넉히 읽되 끝없이 읽지는 않는다. 종류마다 따로 읽어서, 밀린 새 카드가 복습 카드를 밀어내지 않게 한다 */
 const CANDIDATE_LIMIT = 200;
 
 const CANDIDATES = `SELECT c.id, c.concept_id, c.state, c.due, c.created_at, c.type, c.rung, c.prompt, c.code, c.answer, c.options, c.explain,
-                          k.key AS concept_key, k.name AS concept_name
+                          c.checklist, c.stability, c.difficulty, c.elapsed_days, c.scheduled_days, c.learning_steps, c.reps, c.lapses,
+                          c.last_review, k.key AS concept_key, k.name AS concept_name, k.final_answer
                      FROM cards c JOIN concepts k ON k.id = c.concept_id
-                    WHERE c.user_id = ?1 AND c.status = 'active' AND c.due <= ?2 AND c.type != 'explain'`;
+                    WHERE c.user_id = ?1 AND c.status = 'active' AND c.due <= ?2`;
 
 /** 오늘 복습할 카드 전체를 순서대로 돌려준다. 앞에서 원하는 장수만 쓴다. */
 export async function loadTodayQueue(env: Env, userId: string, now: number): Promise<QueueCard[]> {
@@ -105,11 +109,12 @@ export async function loadTodayQueue(env: Env, userId: string, now: number): Pro
     reviewedConcepts: new Set(logs.map((log) => log.concept_id)),
     reviewedCards: new Set(logs.map((log) => log.card_id)),
   });
-  return picked.map(toQueueCard);
+  return picked.map((row) => toQueueCard(row, now));
 }
 
-function toQueueCard(row: CandidateRow): QueueCard {
+function toQueueCard(row: CandidateRow, now: number): QueueCard {
   const parsed = row.options ? (JSON.parse(row.options) as unknown) : null;
+  const explain = row.type === 'explain';
   return {
     id: row.id,
     concept_key: row.concept_key,
@@ -122,6 +127,9 @@ function toQueueCard(row: CandidateRow): QueueCard {
     options: row.type === 'mcq' ? (parsed as McqOption[]) : null,
     choices: row.type === 'cloze' ? (parsed as string[]) : null,
     explain: row.explain,
+    checklist: explain && row.checklist ? (JSON.parse(row.checklist) as string[]) : null,
+    final_answer: explain ? row.final_answer : null,
+    intervals: explain ? previewIntervals(pickFsrsFields(row), now) : null,
     state: row.state,
   };
 }

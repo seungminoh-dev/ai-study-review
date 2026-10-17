@@ -684,3 +684,113 @@ blockquote {
     display: block;
   }
 }
+
+/* 설명하기 카드 */
+.answer-input {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  resize: vertical;
+  line-height: 1.6;
+}
+
+.answer-input[readonly] {
+  background: var(--surface-2);
+}
+
+.checklist {
+  list-style: none;
+  padding: 0;
+  margin: 4px 0 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.checklist label {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-height: 36px;
+}
+
+.grades {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.grade {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: 64px;
+  border-radius: var(--radius);
+  border: 2px solid var(--border);
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.grade-1 {
+  border-color: var(--bad);
+  color: var(--bad);
+}
+
+.grade-3 {
+  border-color: var(--good);
+  color: var(--good);
+}
+
+.grade.suggested {
+  box-shadow: 0 0 0 3px var(--pen);
+}
+
+.report-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.report-panel p {
+  margin: 0;
+}
+
+.text-button.undo {
+  align-self: flex-start;
+  padding: 4px;
+  min-height: 36px;
+}
+
+.edit-form textarea,
+.edit-form input:not([type='radio']) {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.option-edit {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.radio {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  min-height: 44px;
+}
+
+.row-actions {
+  display: flex;
+  gap: 16px;
+}

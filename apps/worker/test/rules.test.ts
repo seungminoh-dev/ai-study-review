@@ -62,10 +62,10 @@ describe('cardsToUnlock (설계서 §9.4)', () => {
     expect(cardsToUnlock([ladder('a', 'x', 1, 'active', 8), ladder('b', 'x', 1, 'active', 3), ladder('c', 'x', 2, 'locked', 0)])).toEqual([]);
   });
 
-  it('never opens rung 3 in MVP 1, but can jump from 1 to 3 when allowed', () => {
+  it('can jump from rung 1 to 3, and respects a lower cap', () => {
     const cards = [ladder('a', 'x', 1, 'active', 9), ladder('e', 'x', 3, 'locked', 0)];
-    expect(cardsToUnlock(cards)).toEqual([]);
-    expect(cardsToUnlock(cards, 3)).toEqual(['e']);
+    expect(cardsToUnlock(cards)).toEqual(['e']);
+    expect(cardsToUnlock(cards, 2)).toEqual([]);
   });
 
   it('opens the lowest locked rung when every card of a concept is turned off', () => {

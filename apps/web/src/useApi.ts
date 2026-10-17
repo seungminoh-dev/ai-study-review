@@ -30,3 +30,14 @@ const timeFormat = new Intl.DateTimeFormat('ko-KR', { hour: '2-digit', minute: '
 
 export const formatDate = (ms: number) => dateFormat.format(ms);
 export const formatDateTime = (ms: number) => `${dateFormat.format(ms)} ${timeFormat.format(ms)}`;
+
+/** 다음 복습까지 남은 시간: '1분', '10분', '3시간', '4일', '2개월' */
+export function formatInterval(ms: number): string {
+  const minutes = Math.max(1, Math.round(ms / 60_000));
+  if (minutes < 60) return `${minutes}분`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}시간`;
+  const days = Math.round(hours / 24);
+  if (days < 31) return `${days}일`;
+  return `${Math.round(days / 30)}개월`;
+}

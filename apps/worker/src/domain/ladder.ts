@@ -2,8 +2,8 @@
 
 /** 이 안정도(일)를 넘으면 그 단계는 익혔다고 본다 */
 export const LADDER_STABILITY_DAYS = 7;
-/** MVP 1은 2단계(떠올리기)까지만 연다. 3단계(설명하기)는 화면이 생기는 MVP 2에서 연다 */
-export const MAX_OPEN_RUNG = 2;
+/** 3단계(설명하기)까지 연다. MVP 1은 설명하기 화면이 없어서 2단계까지만 열었다 */
+export const MAX_OPEN_RUNG = 3;
 
 export interface LadderCard {
   id: string;
