@@ -122,6 +122,37 @@ describe('today and queue', () => {
     expect((await cardOf('deep-copy', 'mcq')).reps).toBe(1);
   });
 
+  it('grades again on the fresh card when another device answered it in between', async () => {
+    await saveExample();
+    const mcq = await cardOf('deep-copy', 'mcq');
+    const now = Date.now();
+    // 이 기기가 카드를 읽은 직후, 다른 기기(폰)의 답이 먼저 기록된다
+    let raced = false;
+    const db = new Proxy(env.DB, {
+      get(target, prop) {
+        if (prop === 'batch') {
+          return async (statements: D1PreparedStatement[]) => {
+            const results = await target.batch(statements);
+            if (!raced) {
+              raced = true;
+              await recordReviews(env, user.id, [answer(mcq.id, 3, now - 1000)], now);
+            }
+            return results;
+          };
+        }
+        const value = Reflect.get(target, prop);
+        return typeof value === 'function' ? value.bind(target) : value;
+      },
+    });
+    expect(await recordReviews({ ...env, DB: db }, user.id, [answer(mcq.id, 1, now)], now)).toMatchObject({ recorded: 1, skipped: 0 });
+    const card = await cardOf('deep-copy', 'mcq');
+    // 두 답이 모두 반영됐다. 나중 답(틀림)이 앞의 답을 덮어쓰지 않고 이어서 채점됐다
+    expect(card.reps).toBe(2);
+    expect(card.lapses).toBe(0);
+    const logs = await env.DB.prepare('SELECT grade FROM review_logs WHERE card_id = ?1 ORDER BY reviewed_at').bind(mcq.id).all<{ grade: number }>();
+    expect(logs.results.map((log) => log.grade)).toEqual([3, 1]);
+  });
+
   it('rejects more than 20 answers at once', async () => {
     const reviews = Array.from({ length: 21 }, () => answer(crypto.randomUUID(), 3));
     expect((await api(user, '/reviews', { method: 'POST', json: { reviews } })).status).toBe(400);

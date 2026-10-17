@@ -9,16 +9,21 @@ interface CardRow extends FsrsFields, LadderCard {
   created_at: number;
 }
 
+/** 다른 기기가 같은 카드를 동시에 바꿨을 때 다시 채점하는 횟수 */
+const MAX_RETRIES = 2;
+
 /**
  * 답안 묶음을 기록한다.
  * 이미 기록한 id는 건너뛰고, 같은 카드의 답은 시각 순으로 이어서 채점한다.
  * 카드 갱신, 기록, 사다리 잠금 해제를 한 번의 batch(트랜잭션)로 쓴다.
+ * 읽은 뒤에 다른 기기가 그 카드를 채점했으면(reps가 달라졌으면) 그 카드는 쓰지 않고 새 상태로 다시 채점한다 (낙관적 잠금).
  */
 export async function recordReviews(
   env: Env,
   userId: string,
   items: readonly ReviewItem[],
   now: number,
+  attempt = 0,
 ): Promise<Omit<ReviewsResponse, 'rejected'>> {
   // 같은 요청 안에 같은 id가 두 번 있어도 한 번만 채점한다
   const reviews = [...new Map(items.map((review) => [review.id, review])).values()];
@@ -43,8 +48,11 @@ export async function recordReviews(
 
   const logs: Record<string, unknown>[] = [];
   const touched = new Map<string, CardRow>();
+  /** 읽었을 때의 reps. 복습할 때마다 1씩 늘어서 버전으로 쓴다 */
+  const readReps = new Map<string, number>();
   for (const review of fresh) {
     const row = rows.get(review.card_id)!;
+    if (!readReps.has(row.id)) readReps.set(row.id, row.reps);
     // 채점 시각은 기기 시각을 쓰되, 그 카드의 마지막 복습과 서버 현재 시각 사이로 자른다
     const lower = row.last_review ?? row.created_at;
     const reviewedAt = Math.min(Math.max(review.reviewed_at, lower), now);
@@ -59,20 +67,25 @@ export async function recordReviews(
       elapsed_ms: review.elapsed_ms ?? null,
       reviewed_at: reviewedAt,
       prev_card: JSON.stringify(prev),
+      read_reps: readReps.get(row.id),
     });
   }
 
   const unlock = cardsToUnlock([...rows.values()]);
+  let recorded = 0;
+  let unlocked = unlock.length;
   if (logs.length > 0 || unlock.length > 0) {
     const statements = [];
     if (logs.length > 0) {
+      // 기록과 카드 갱신은 둘 다 "읽은 뒤로 카드가 그대로일 때"만 쓴다. 같은 트랜잭션이라 둘의 판단이 같다
       statements.push(
         env.DB.prepare(
           `INSERT OR IGNORE INTO review_logs (id, user_id, card_id, grade, response, elapsed_ms, reviewed_at, prev_card)
-           SELECT json_extract(value, '$.id'), ?1, json_extract(value, '$.card_id'), json_extract(value, '$.grade'),
-                  json_extract(value, '$.response'), json_extract(value, '$.elapsed_ms'), json_extract(value, '$.reviewed_at'),
-                  json_extract(value, '$.prev_card')
-             FROM json_each(?2)`,
+           SELECT json_extract(j.value, '$.id'), ?1, c.id, json_extract(j.value, '$.grade'),
+                  json_extract(j.value, '$.response'), json_extract(j.value, '$.elapsed_ms'), json_extract(j.value, '$.reviewed_at'),
+                  json_extract(j.value, '$.prev_card')
+             FROM json_each(?2) AS j
+             JOIN cards c ON c.id = json_extract(j.value, '$.card_id') AND c.user_id = ?1 AND c.reps = json_extract(j.value, '$.read_reps')`,
         ).bind(userId, JSON.stringify(logs)),
         env.DB.prepare(
           `UPDATE cards SET
@@ -82,8 +95,8 @@ export async function recordReviews(
              reps = json_extract(j.value, '$.reps'), lapses = json_extract(j.value, '$.lapses'),
              state = json_extract(j.value, '$.state'), last_review = json_extract(j.value, '$.last_review')
            FROM json_each(?2) AS j
-           WHERE cards.user_id = ?1 AND cards.id = json_extract(j.value, '$.id')`,
-        ).bind(userId, JSON.stringify([...touched.values()].map((row) => ({ id: row.id, ...pickFsrsFields(row) })))),
+           WHERE cards.user_id = ?1 AND cards.id = json_extract(j.value, '$.id') AND cards.reps = json_extract(j.value, '$.read_reps')`,
+        ).bind(userId, JSON.stringify([...touched.values()].map((row) => ({ id: row.id, read_reps: readReps.get(row.id), ...pickFsrsFields(row) })))),
       );
     }
     if (unlock.length > 0) {
@@ -93,9 +106,18 @@ export async function recordReviews(
         ).bind(userId, JSON.stringify(unlock), now),
       );
     }
-    await env.DB.batch(statements);
+    const results = await env.DB.batch(statements);
+    if (logs.length > 0) {
+      recorded = results[0]!.meta.changes;
+      if (results[1]!.meta.changes < touched.size && attempt < MAX_RETRIES) {
+        // 못 쓴 카드의 답은 기록도 안 됐으니, 다시 읽으면 새 답으로 보인다
+        const again = await recordReviews(env, userId, items, now, attempt + 1);
+        recorded += again.recorded;
+        unlocked += again.unlocked;
+      }
+    }
   }
-  return { recorded: logs.length, skipped: items.length - logs.length, unlocked: unlock.length };
+  return { recorded, skipped: items.length - recorded, unlocked };
 }
 
 /**
