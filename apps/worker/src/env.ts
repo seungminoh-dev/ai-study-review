@@ -10,4 +10,7 @@ export interface Env {
   TOKEN_PEPPER: string;
   /** secret. 오너 계정을 한 번 만들 때만 쓴다 (설계서 §8.3) */
   BOOTSTRAP_CODE: string;
+  /** secret. GitHub OAuth 앱 (설계서 §8.4). 둘 다 없으면 GitHub 로그인을 감춘다 */
+  GITHUB_CLIENT_ID?: string;
+  GITHUB_CLIENT_SECRET?: string;
 }

@@ -2,6 +2,7 @@ import { isHhmm } from '@moai/shared';
 
 /** 한국 표준시는 UTC+9이고 일광 절약 시간이 없다 (설계서 §10.1). */
 export const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
+export const MINUTE_MS = 60 * 1000;
 export const DAY_MS = 24 * 60 * 60 * 1000;
 /** 하루의 경계는 04:00 KST다. 새벽 복습은 전날로 센다 (설계서 §5.1) */
 const STUDY_DAY_SHIFT_MS = KST_OFFSET_MS - 4 * 60 * 60 * 1000;

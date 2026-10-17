@@ -23,7 +23,7 @@ setup.post('/', async (c) => {
   if (!(await safeEqual(body.code, c.env.BOOTSTRAP_CODE))) return errorJson(403, 'wrong_code', '설정 코드가 맞지 않아요.');
 
   const now = Date.now();
-  const me: Me = { id: crypto.randomUUID(), display_name: body.display_name, role: 'owner', daily_new_limit: 10, daily_review_limit: 30 };
+  const me: Me = { id: crypto.randomUUID(), display_name: body.display_name, role: 'owner', daily_new_limit: 10, daily_review_limit: 30, github_login: null };
   // 동시에 두 번 눌러도 오너는 한 명만 생긴다
   const inserted = await c.env.DB.prepare(
     "INSERT INTO users (id, display_name, role, created_at) SELECT ?1, ?2, 'owner', ?3 WHERE NOT EXISTS (SELECT 1 FROM users WHERE role = 'owner')",

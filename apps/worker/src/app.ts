@@ -1,4 +1,6 @@
 import { Hono } from 'hono';
+import { account } from './api/account';
+import { auth } from './api/auth';
 import { review } from './api/review';
 import { sessions } from './api/sessions';
 import { settings } from './api/settings';
@@ -24,10 +26,13 @@ app.use('/api/*', async (c, next) => {
 
 // 로그인 전에 쓰는 경로를 빼고는 모두 로그인이 필요하다
 const PUBLIC_API = new Set(['/api/health', '/api/setup']);
-app.use('/api/*', async (c, next) => (PUBLIC_API.has(c.req.path) ? next() : requireUser(c, next)));
+const isPublic = (path: string) => PUBLIC_API.has(path) || path.startsWith('/api/auth/');
+app.use('/api/*', async (c, next) => (isPublic(c.req.path) ? next() : requireUser(c, next)));
 
 app.get('/api/health', (c) => c.json({ ok: true, time: new Date().toISOString() }));
 app.route('/api/setup', setup);
+app.route('/api/auth', auth);
+app.route('/api', account);
 app.route('/api', review);
 app.route('/api', sessions);
 app.route('/api', settings);

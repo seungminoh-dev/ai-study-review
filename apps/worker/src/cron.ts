@@ -8,9 +8,13 @@ export async function runCron(env: Env, now: number): Promise<void> {
   } catch (error) {
     console.error(JSON.stringify({ event: 'cron_reminders_failed', message: (error as Error).message }));
   }
-  // 매시 0분: 만료된 로그인 세션을 지운다
+  // 매시 0분: 만료된 로그인 세션, 로그인 코드, 끝내지 않은 가입을 지운다
   if (new Date(now).getUTCMinutes() === 0) {
-    const removed = await env.DB.prepare('DELETE FROM auth_sessions WHERE expires_at <= ?1').bind(now).run();
-    if (removed.meta.changes > 0) console.log(JSON.stringify({ event: 'sessions_expired', removed: removed.meta.changes }));
+    const [sessions] = await env.DB.batch([
+      env.DB.prepare('DELETE FROM auth_sessions WHERE expires_at <= ?1').bind(now),
+      env.DB.prepare('DELETE FROM login_codes WHERE expires_at <= ?1').bind(now),
+      env.DB.prepare('DELETE FROM pending_signups WHERE expires_at <= ?1').bind(now),
+    ]);
+    if (sessions!.meta.changes > 0) console.log(JSON.stringify({ event: 'sessions_expired', removed: sessions!.meta.changes }));
   }
 }

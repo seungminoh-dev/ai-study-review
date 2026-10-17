@@ -4,8 +4,9 @@ import { hashToken, randomToken } from '../src/lib/crypto';
 export const ORIGIN = 'https://moai.test';
 export const BOOTSTRAP_CODE = 'test-bootstrap-code';
 
+/** 브라우저처럼 Worker를 부른다. 리다이렉트는 따라가지 않고 그대로 돌려준다 (GitHub 로그인 검사용). */
 export function workerFetch(input: string | URL, init?: RequestInit): Promise<Response> {
-  return exports.default.fetch(new Request(input, init));
+  return exports.default.fetch(new Request(input, { redirect: 'manual', ...init }));
 }
 
 export interface TestUser {
@@ -13,13 +14,13 @@ export interface TestUser {
   cookie: string;
 }
 
-/** 테스트끼리 데이터가 섞이지 않게 테스트마다 새 사용자(일반 회원)와 세션을 DB에 바로 만든다. */
-export async function newUser(name = '테스터'): Promise<TestUser> {
+/** 테스트끼리 데이터가 섞이지 않게 테스트마다 새 사용자(기본은 일반 회원)와 세션을 DB에 바로 만든다. */
+export async function newUser(name = '테스터', role: 'member' | 'owner' = 'member'): Promise<TestUser> {
   const id = crypto.randomUUID();
   const token = randomToken();
   const now = Date.now();
   await env.DB.batch([
-    env.DB.prepare("INSERT INTO users (id, display_name, role, created_at) VALUES (?1, ?2, 'member', ?3)").bind(id, name, now),
+    env.DB.prepare('INSERT INTO users (id, display_name, role, created_at) VALUES (?1, ?2, ?4, ?3)').bind(id, name, now, role),
     env.DB.prepare('INSERT INTO auth_sessions (token_hash, user_id, created_at, last_seen_at, expires_at) VALUES (?1, ?2, ?3, ?3, ?4)').bind(
       await hashToken(env.TOKEN_PEPPER, token),
       id,

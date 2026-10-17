@@ -187,15 +187,27 @@ textarea {
   margin-top: 12px;
 }
 
-/* 주요 버튼은 화면 아래쪽에 둔다 */
+/* 주요 버튼은 화면 아래쪽에 둔다.
+   아래 탭 바로 위에 붙인다: 탭 높이 = 위 여백 8 + 버튼 48 + 아래 여백 max(8px, 안전 영역) + 테두리 1.
+   틈이 있으면 그 사이로 뒤의 목록 글자가 비친다. */
 .bottom-actions {
   position: sticky;
-  bottom: calc(76px + env(safe-area-inset-bottom));
+  bottom: calc(57px + max(8px, env(safe-area-inset-bottom)));
   display: flex;
   gap: 10px;
   margin-top: 24px;
-  padding-top: 12px;
-  background: linear-gradient(to bottom, transparent, var(--bg) 30%);
+  padding: 16px 0 12px;
+  background: linear-gradient(to bottom, transparent, var(--bg) 16px);
+}
+
+/* 로그인 전 화면에는 아래 탭이 없다 */
+.app.no-tabs {
+  padding-bottom: max(16px, env(safe-area-inset-bottom));
+}
+
+.app.no-tabs .bottom-actions {
+  bottom: 0;
+  padding-bottom: max(12px, env(safe-area-inset-bottom));
 }
 
 .notice {
@@ -635,5 +647,40 @@ blockquote {
   * {
     transition: none !important;
     animation: none !important;
+  }
+}
+
+/* 계정 · 초대 */
+.login-code {
+  font-size: 1.5rem;
+  letter-spacing: 0.08em;
+  text-align: center;
+}
+
+.invites {
+  margin-top: 16px;
+}
+
+.invites > li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.invites p {
+  margin: 0;
+}
+
+/* 키보드 안내는 마우스·트랙패드가 있는 기기(컴퓨터)에서만 보인다 */
+.kbd-hint {
+  display: none;
+  margin: 16px 0 0;
+  text-align: center;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .kbd-hint {
+    display: block;
   }
 }

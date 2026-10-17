@@ -183,7 +183,15 @@ claude.ai에서 공부하다가 "정리해줘"라고 하면, 대화 중인 Claud
   - 중복 저장 판단(payload hash)은 앞뒤 공백만 정리한다. 코드 들여쓰기를 고친 재전송은 새 내용으로 본다.
   - 푸시 구독 키는 길이를 검사하고, 암호화에 실패한 구독은 실패 한 번으로 센다. 한 사람의 실패가 같은 Cron 실행의 다른 일을 막지 않는다.
   - PWA: "틀린 카드 다시 보기"는 연습이라 기록하지 않는다. 방금 정답을 본 뒤라 기록하면 재학습 단계를 건너뛰게 된다. 큐를 받기 전에 밀린 답을 먼저 보내고, 아직 못 보낸 카드는 큐에서 뺀다. "다음"을 두 번 눌러도 한 번만 기록한다. 오프라인이면 오늘 화면에서 저장해 둔 카드로 시작할 수 있다.
-  - 아직 남은 것: 두 기기에서 같은 카드에 동시에 답하면 한쪽 갱신이 묻힐 수 있다. MVP 1은 기기가 하나라 그대로 두고, MVP 2(기기 로그인)에서 낙관적 잠금을 더한다.
+  - 두 기기에서 같은 카드에 동시에 답하면 한쪽 갱신이 묻힐 수 있던 문제는 1.5단계에서 낙관적 잠금으로 고쳤다 (아래).
+
+**1.5단계 (2026-10-18)**: MVP 1을 쓰면서 바로 필요해진 것을 MVP 2보다 먼저 넣었다.
+
+- 지침 없이 쓰기: MCP 서버가 `initialize`에서 공통 지침(언제 정리·저장하는지, 언제 판정을 넣는지, 언제 과거 기록을 보는지)을 준다. `save_learning` 설명에도 "정리해줘·저장해줘·모아이에 저장"을 적었다. 코치 지침(부록 B)은 선택이 됐다.
+- 판정은 사용자가 직접 설명하거나 답했을 때만 넣는다. 설명만 들은 대화는 개념과 카드만 저장한다.
+- 여러 기기: GitHub 로그인, 초대 코드 가입, 다른 기기 로그인 코드, 로그아웃 (§8.4, §8.5). 마이그레이션 `0002_accounts.sql`.
+- 답안 기록에 낙관적 잠금: 카드를 읽은 뒤 다른 기기가 그 카드를 채점했으면(`reps`가 달라졌으면) 그 카드의 기록과 갱신을 쓰지 않고 새 상태로 다시 채점한다(최대 2번).
+- 컴퓨터 키보드 복습, Android 내비게이션 바 색, 아래 고정 버튼과 탭 사이 틈 (§12.2).
 
 **끝났다는 기준**
 
@@ -198,8 +206,8 @@ claude.ai에서 공부하다가 "정리해줘"라고 하면, 대화 중인 Claud
 
 **만드는 것**
 
-1. 초대와 로그인 (§8): 관리자 화면에서 초대 코드 발급, 홈 화면 앱 안에서 코드 입력으로 가입, 기기 로그인 코드, 로그아웃.
-2. 온보딩 4단계: 홈 화면에 추가 → 알림 켜기 → 웹 claude.ai에서 커넥터 추가("로그인 없음", 도구는 "항상 허용") → 코치 지침 붙여넣기.
+1. 초대와 로그인은 1.5단계에서 만들었다 (§8.4, §8.5). 남은 것: 기기를 다 잃은 사람을 위한 `bind_user_id` 초대.
+2. 온보딩 3단계: 홈 화면에 추가 → 알림 켜기 → 웹 claude.ai에서 커넥터 추가("로그인 없음", 도구는 "항상 허용"). 코치 지침은 선택이다.
 3. 설명하기 카드와 자가 채점 (§9.3): 내 최종 버전, 체크리스트, 두괄식 여부를 보고 4단계 버튼으로 매긴다. 버튼마다 다음 복습 간격을 미리 보여 준다.
 4. 카드 사다리 2→3단계 잠금 해제.
 5. 지식 지도와 개념 상세 (§9.7): 상태 3색, 연결선, 점선 노드를 누르면 "Claude에서 이어서 공부하기" 프롬프트를 복사한다.
@@ -273,7 +281,7 @@ apps/
       db/                      # SQL과 행 변환 (ORM 없음)
       auth/                    # 토큰 해시, 세션, 초대
       cron.ts                  # 매분 작업 순서
-    migrations/                # 0000_spike.sql(MVP 0), 0001_init.sql, 0002_beta.sql, ...
+    migrations/                # 0000_spike.sql(MVP 0), 0001_init.sql, 0002_accounts.sql, 0003_beta.sql, ...
     test/
     wrangler.jsonc
   web/                         # React PWA
@@ -364,6 +372,7 @@ docs/
 | `SPIKE_TOKEN` | secret | 0 | MVP 0 전용. MVP 1에서 지운다 |
 | `TOKEN_PEPPER` | secret | 1 | 토큰 해시용 HMAC 키 |
 | `BOOTSTRAP_CODE` | secret | 1 | 오너 계정을 한 번 만들 때만 쓴다 |
+| `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | secret | 1.5 | GitHub OAuth 앱 (§8.4). 둘 다 없으면 로그인 화면에서 GitHub 버튼을 감춘다. ID는 비밀이 아니지만 코드 수정 없이 넣으려고 secret으로 둔다 |
 | `ANTHROPIC_API_KEY` | secret | 2 | 내 Console API 키 |
 | `GRADER_MODEL` | var | 2 | 기본 `claude-opus-5-5` (§11.1) |
 | `LLM_USER_CAP_USD`, `LLM_MONTHLY_CAP_USD` | var | 2 | 기본 6, 90 |
@@ -538,26 +547,24 @@ CREATE TABLE reminder_slots (
 CREATE INDEX reminder_due ON reminder_slots (enabled, next_fire_at);
 ```
 
-### 5.3 MVP 2에서 더하는 것 (`migrations/0002_beta.sql`)
+### 5.3 1.5단계: 계정 (`migrations/0002_accounts.sql`)
+
+GitHub 로그인, 초대 코드 가입, 다른 기기 로그인 코드 (§8.4, §8.5). 코드와 토큰은 모두 `HMAC(TOKEN_PEPPER)` 해시로만 저장한다.
+
+| 테이블 | 내용 |
+|---|---|
+| `user_identities` | `(provider, subject)`가 키. GitHub 숫자 id → `user_id`, 표시용 `login`. 한 사람에 GitHub 하나 (`UNIQUE (user_id, provider)`) |
+| `invites` | 초대. `code_hash`, `label`, `created_by`, `expires_at`, `used_at`, `used_by` |
+| `login_codes` | 다른 기기 로그인 코드. 사람마다 하나 (`user_id UNIQUE`) |
+| `pending_signups` | GitHub 확인은 끝났지만 아직 초대 코드를 넣지 않은 가입. 30분, 코드 5번까지 |
+
+만료된 `login_codes`, `pending_signups`는 매시 Cron이 지운다.
+
+### 5.4 MVP 2에서 더하는 것 (`migrations/0003_beta.sql`)
 
 ```sql
-CREATE TABLE invites (
-  id           TEXT PRIMARY KEY,
-  code_hash    TEXT NOT NULL UNIQUE,
-  label        TEXT NOT NULL,                      -- 예: "민수"
-  bind_user_id TEXT REFERENCES users(id),          -- 기기를 다 잃은 사람에게 기존 계정으로 다시 초대할 때
-  created_by   TEXT NOT NULL REFERENCES users(id),
-  expires_at   INTEGER NOT NULL,
-  used_at      INTEGER,
-  used_by      TEXT
-) STRICT;
-
-CREATE TABLE login_codes (
-  code_hash  TEXT PRIMARY KEY,
-  user_id    TEXT NOT NULL REFERENCES users(id),
-  expires_at INTEGER NOT NULL,
-  attempts   INTEGER NOT NULL DEFAULT 0
-) STRICT;
+-- 기기를 다 잃은 사람에게 기존 계정으로 다시 초대할 때
+ALTER TABLE invites ADD COLUMN bind_user_id TEXT REFERENCES users(id);
 
 CREATE TABLE llm_jobs (
   id         TEXT PRIMARY KEY,
@@ -607,7 +614,7 @@ ALTER TABLE users ADD COLUMN daily_goal INTEGER NOT NULL DEFAULT 5;
 
 XP, 스트릭, 리그는 따로 저장하지 않고 `review_logs`와 `learning_sessions`에서 계산한다 (§9.6).
 
-### 5.4 용량 감각
+### 5.5 용량 감각
 
 10명이 각자 카드 수천 장을 쌓아도 몇 MB다. 저장 한 번에 약 20행, 복습 한 장에 약 2행을 쓴다. 하루 쓰기 10만 행, DB 500MB 한도와 비교하면 여유가 크다.
 
@@ -807,9 +814,12 @@ export const SaveLearningInput = z.object({
 | 1 | `POST /api/push/subscriptions`, `DELETE /api/push/subscriptions` | 푸시 구독 저장과 해제 (endpoint 기준) |
 | 1 | `GET /api/push/config`, `POST /api/push/test` | 구독에 쓸 VAPID 공개 키, 지금 테스트 알림 보내기 |
 | 1 | `GET /api/mcp-token`, `POST /api/mcp-token`, `DELETE /api/mcp-token` | 커넥터 URL이 있는지, 발급·재발급, 취소 |
-| 2 | `POST /api/join` (로그인 전) | 초대 코드와 이름으로 가입 |
-| 2 | `POST /api/login-codes`, `POST /api/login` (로그인 전) | 기기 로그인 코드 만들기와 쓰기 |
-| 2 | `POST /api/logout` | 현재 세션 끝내기 |
+| 1.5 | `GET /api/auth/options` (로그인 전) | 로그인 화면이 고를 방법: 오너 설정 가능 여부, GitHub 로그인 설정 여부 |
+| 1.5 | `GET /api/auth/github/start?intent=login\|link`, `GET /api/auth/github/callback` (로그인 전) | GitHub로 보내고 돌아오기 (§8.4). JSON 대신 앱 주소로 리다이렉트한다 |
+| 1.5 | `GET /api/auth/join`, `POST /api/auth/join` (로그인 전) | GitHub 확인을 마친 브라우저가 초대 코드와 이름으로 가입 |
+| 1.5 | `POST /api/login-codes`, `POST /api/auth/login` (로그인 전) | 다른 기기 로그인 코드 만들기와 쓰기 (§8.5) |
+| 1.5 | `POST /api/auth/logout` | 이 기기의 세션만 끝내기 |
+| 1.5 | `GET /api/invites`, `POST /api/invites`, `DELETE /api/invites/:id` | 초대 목록, 만들기(코드는 이때 한 번만), 안 쓴 초대 지우기 (오너만) |
 | 2 | `GET /api/map`, `GET /api/concepts/:key` | 지식 지도, 개념 상세 |
 | 2 | `GET /api/stats`, `GET /api/league` | 스트릭·XP·목표, 이번 주 친구 리그 |
 | 2 | `POST /api/cards/:id/report`, `PATCH /api/cards/:id` | 카드 신고(즉시 정지), 카드 수정 |
@@ -817,7 +827,7 @@ export const SaveLearningInput = z.object({
 | 2 | `POST /api/cards/:id/grade-ai`, `GET /api/jobs/:id` | AI 채점 요청(202)과 결과 확인 |
 | 2 | `POST /api/import` | 붙여넣기 가져오기 요청(202) |
 | 2 | `GET /api/export`, `DELETE /api/me` | 내 데이터 내보내기(JSON), 계정 삭제 |
-| 2 | `POST /api/admin/invites`, `GET /api/admin/invites`, `GET /api/admin/usage` | 초대 발급과 목록, LLM 사용량 (오너만) |
+| 2 | `GET /api/admin/usage` | LLM 사용량 (오너만) |
 
 ---
 
@@ -825,36 +835,50 @@ export const SaveLearningInput = z.object({
 
 ### 8.1 목표
 
-- 초대받은 사람만 가입한다.
-- 비밀번호, 이메일 발송, 외부 로그인(OAuth 앱)이 없다.
-- 홈 화면 앱 밖으로 나가는 리다이렉트가 없다. iOS에서는 Safari와 홈 화면 앱의 저장소가 따로라서 외부 로그인 리다이렉트가 잘 깨진다.
+- 초대받은 사람만 가입한다. 가입에는 GitHub 계정과 초대 코드가 둘 다 필요하다.
+- 비밀번호와 이메일 발송이 없다. 로그인은 GitHub로 하고, GitHub 리다이렉트가 불편한 기기(iPhone 홈 화면 앱)는 로그인된 기기에서 받은 코드로 한다.
+- 폰과 컴퓨터를 함께 쓴다. 기기마다 세션이 따로이고, 로그아웃은 그 기기만 끝낸다.
+
+처음 설계는 "외부 로그인 없음"이었다. iOS에서는 Safari와 홈 화면 앱의 저장소가 따로라서 외부 로그인 리다이렉트가 잘 깨지기 때문이다. 컴퓨터에서도 쓰고 싶다는 요구로 GitHub 로그인을 더하고(1.5단계), iOS는 로그인 코드로 받친다. Android Chrome에 설치한 앱은 GitHub 화면을 앱 안 브라우저로 열고 같은 쿠키 저장소를 쓴다.
 
 ### 8.2 세션
 
 - 세션 토큰은 256비트 무작위 값이고, DB에는 해시만 저장한다.
-- 쿠키: `__Host-sid`, `HttpOnly`, `Secure`, `SameSite=Lax`, `Path=/`. 180일이고 쓸 때마다 연장한다.
-- 기기마다 세션이 따로다.
+- 쿠키: `__Host-sid`, `HttpOnly`, `Secure`, `SameSite=Lax`, `Path=/`. 180일이고 쓸 때마다(하루 한 번) 연장한다.
+- 기기마다 세션이 따로다. 로그아웃(`POST /api/auth/logout`)은 그 쿠키의 세션만 지운다. PWA는 로그아웃할 때 이 기기의 푸시 구독, 답안 outbox, 저장한 큐도 지운다.
 
 ### 8.3 MVP 1: 오너 계정
 
 - 처음 배포한 뒤 `/setup`에서 `BOOTSTRAP_CODE`와 이름을 넣으면 오너 계정과 세션이 생긴다. 오너가 생긴 뒤에는 `/api/setup`이 410을 돌려준다.
 - 홈 화면에 추가한 앱 안에서 `/setup`을 하면 쿠키 문제가 생기지 않는다.
+- 오너는 설정 → "GitHub 연결"로 GitHub 계정을 잇는다. 그다음부터 컴퓨터에서 GitHub로 로그인한다.
 
-### 8.4 MVP 2: 초대 코드로 가입
+### 8.4 GitHub 로그인과 초대 코드 가입 (1.5단계)
 
-1. 오너가 관리자 화면에서 초대를 만든다.
-   - 10자 코드(Crockford Base32, 약 50비트), 1회용, 7일 유효, 해시로만 저장한다.
-   - 라벨(예: "민수")을 붙인다.
-2. 카카오톡으로 코드와 안내 링크(`https://app.<도메인>`)를 보낸다. 코드는 링크에 넣지 않는다. 그래야 로그에 남지 않고, 사용자가 홈 화면 앱 안에서 직접 입력하게 된다.
-3. 친구는 Safari나 Chrome에서 주소를 열고, 안내에 따라 홈 화면에 추가한다.
-4. 홈 화면 앱을 열고 코드와 이름을 입력한다. `POST /api/join`이 계정과 세션을 만들고 초대를 사용 처리한다.
-5. 코드 입력은 같은 코드로 5번 틀리면 막고, IP별 시도 횟수도 제한한다.
+**GitHub OAuth** (`src/auth/github.ts`, `src/api/auth.ts`)
 
-### 8.5 MVP 2: 다른 기기 로그인
+1. `GET /api/auth/github/start?intent=login|link`가 `state`와 PKCE `code_verifier`를 만들어 `__Host-moai-oauth` 쿠키(10분, `HttpOnly`, `SameSite=Lax`)에 넣고 GitHub 인가 화면으로 보낸다. scope는 비운다(공개 프로필만).
+2. GitHub가 `/api/auth/github/callback?code&state`로 돌려보낸다. 쿠키의 `state`와 같지 않으면 거절한다(로그인 CSRF 방어). 코드를 토큰으로 바꾸고 `GET https://api.github.com/user`로 숫자 id, 아이디, 이름만 읽는다. 토큰은 저장하지 않는다.
+3. 사용자는 GitHub 숫자 id(`user_identities.subject`)로 찾는다. 아이디는 바뀔 수 있어서 화면 표시용으로만 두고 로그인할 때마다 갱신한다.
+   - `intent=link`: 로그인한 사용자에게 GitHub를 잇는다. 다른 사람이 이미 이은 GitHub면 `/settings?github=taken`. 한 사람에 GitHub 하나다.
+   - `intent=login`, 아는 GitHub: 세션을 만들고 `/`로 보낸다.
+   - `intent=login`, 처음 보는 GitHub: `pending_signups`에 GitHub 정보를 30분 동안 두고, 브라우저에는 `__Host-moai-join` 토큰 쿠키만 준다. `/join`으로 보낸다.
+4. 오류는 화면 주소로 알린다: `/?auth=denied|expired|failed|unavailable`, `/settings?github=linked|taken|...`.
 
-- 로그인된 기기의 설정 화면에서 "다른 기기 로그인 코드"를 누르면 8자리 숫자가 나온다. 10분 유효, 1회용, 5번 시도할 수 있다.
-- 새 기기(또는 홈 화면 앱)에서 그 코드를 입력하면 그 기기의 세션이 생긴다.
-- 기기를 다 잃었으면 오너가 `bind_user_id`를 넣은 초대를 새로 만든다. 그 초대로 기존 계정에 다시 로그인한다.
+**초대 코드**
+
+1. 오너가 설정 → 초대에서 라벨(예: "민수")을 붙여 초대를 만든다. 10자 코드(Crockford Base32, 약 50비트), 1회용, 7일 유효, `HMAC(TOKEN_PEPPER, 'invite:' + 코드)`로만 저장한다. 코드는 만들 때 한 번만 보인다.
+2. 카카오톡으로 "안내와 함께 복사"한 글을 보낸다. 코드는 링크에 넣지 않는다. 로그에 남지 않고, 받은 사람이 앱 안에서 직접 입력하게 된다.
+3. 친구는 `https://moai.smoh.dev`를 열고 홈 화면에 추가한 뒤 "GitHub로 계속하기" → `/join`에서 코드와 이름을 넣는다.
+4. `POST /api/auth/join`: 코드는 대소문자, 하이픈, 0/O·1/I/L을 가리지 않는다. 한 번의 GitHub 확인으로 5번까지 틀릴 수 있다. 계정 만들기, GitHub 잇기, 초대 사용 처리는 한 batch(트랜잭션)에서 "초대가 아직 안 쓰였으면"을 조건으로 쓴다. 두 사람이 같은 코드를 동시에 넣어도 한 명만 가입한다.
+5. 오너는 안 쓴 초대를 지울 수 있다. 쓴 초대는 누가 가입했는지 남긴다.
+
+### 8.5 다른 기기 로그인 코드 (1.5단계)
+
+- 로그인된 기기의 설정 → "다른 기기 로그인 코드 만들기"가 8자 코드(약 40비트, `K7QM-4XPT`)를 보여 준다. 10분 유효, 1회용이다. 새로 만들면 이전 코드는 바로 무효다.
+- 새 기기의 로그인 화면 "로그인 코드로"에 넣으면 그 기기의 세션이 생긴다. `DELETE … RETURNING`으로 코드를 지우면서 쓰므로 두 번 쓸 수 없다.
+- 10분 안에 맞히려면 초당 수억 번을 시도해야 해서 따로 시도 횟수를 세지 않는다.
+- 기기를 다 잃었고 GitHub도 잇지 않았으면 오너가 DB에서 직접 복구한다. 친구가 늘면 `bind_user_id` 초대를 더한다.
 
 ### 8.6 커넥터 URL (MVP 1부터)
 
@@ -1120,12 +1144,13 @@ runJob(id):
 | 1 | 복습 (`/review`) | 카드 한 장씩. 정답 확인 → 해설 → 다음. 끝나면 결과와 "틀린 카드 다시 보기" |
 | 1 | 저장 기록 (`/sessions`, `/sessions/:id`) | 세션별 개념·판정·카드, 카드 끄기 |
 | 1 | 설정 (`/settings`) | 알림 시간, 알림 켜기·테스트, 커넥터 URL, 코치 지침 복사 |
-| 2 | 가입·로그인 (`/join`, `/login`) | 초대 코드, 기기 로그인 코드 |
+| 1.5 | 로그인 (`/`, 로그인 전) · 가입 (`/join`) | GitHub로 계속하기, 로그인 코드. GitHub 확인 뒤 초대 코드와 이름 |
+| 1.5 | 설정 (`/settings`) 추가분 | 계정(GitHub 연결, 다른 기기 로그인 코드, 로그아웃), 초대(오너만) |
 | 2 | 온보딩 (`/welcome`) | 4단계 체크리스트 |
 | 2 | 지식 지도 (`/map`), 개념 (`/concepts/:key`) | 상태 3색 지도, 판정 이력, 이어서 공부하기 |
 | 2 | 리그 (`/league`) | 스트릭, XP, 이번 주 순위 |
 | 2 | 가져오기 (`/import`) | 붙여넣기, 진행 상태 |
-| 2 | 관리자 (`/admin`) | 초대, 사용량 |
+| 2 | 관리자 (`/admin`) | 사용량 |
 
 ### 12.2 복습 화면 규칙
 
@@ -1136,6 +1161,8 @@ runJob(id):
 - 코드는 고정폭 글꼴로, 줄바꿈 없이 가로 스크롤로 보여 준다.
 - 기본 세션은 8장, 약 3분이다. 밀렸을 때는 "가볍게 5장"을 고를 수 있다.
 - 다크 모드를 지원하고, 동작 줄이기 설정을 따른다.
+- 컴퓨터에서는 키보드로 푼다: 1~9 보기 고르기(OX는 O·X도), Enter·Space 다음, E "너무 쉬웠어요", Esc 그만하기. 안내는 마우스가 있는 기기에서만 보인다.
+- Android에 설치한 앱의 3버튼 내비게이션 바는 매니페스트 `background_color`로 칠해진다(2026-10 실측). 매니페스트에는 다크 모드용 색이 없어서 다크 모드 아래 탭 색(`#1A1F2A`)에 맞춘다. 제스처 내비게이션은 투명이라 영향이 없다.
 
 ### 12.3 오프라인과 캐시
 
@@ -1194,6 +1221,7 @@ runJob(id):
 
 - 토큰(세션, MCP, 초대, 로그인 코드)은 모두 `HMAC-SHA256(TOKEN_PEPPER, 값)`으로만 저장하고 로그에 남기지 않는다.
 - 모든 쿼리는 `user_id`로 범위를 제한한다. MCP 도구도 토큰의 사용자만 다룬다.
+- GitHub에서는 숫자 id, 아이디, 이름만 받는다. scope를 비우고, access token과 이메일은 저장하지 않는다.
 - 상태를 바꾸는 API는 Origin을 검사한다. MCP는 Host를 검사하고, Origin이 있으면 검사한다.
 - 카드 내용은 React 텍스트로만 그린다. HTML로 넣지 않는다.
 - CSP: `default-src 'self'`를 기본으로 한다.

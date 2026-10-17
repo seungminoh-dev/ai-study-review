@@ -1,8 +1,9 @@
-import { ReviewItem, ReviewsBody, estimateMinutes, type Me, type OpenFollowup, type QueueResponse, type SessionSummary, type TodayResponse } from '@moai/shared';
+import { ReviewItem, ReviewsBody, estimateMinutes, type OpenFollowup, type QueueResponse, type SessionSummary, type TodayResponse } from '@moai/shared';
 import { Hono } from 'hono';
 import type { AppEnv } from '../context';
 import { countReviewedToday, loadTodayQueue } from '../domain/queue';
 import { recordReviews } from '../domain/reviews';
+import { loadMe } from '../domain/users';
 import { readJson } from '../lib/http';
 import { listSessions } from './sessions';
 
@@ -10,12 +11,7 @@ import { listSessions } from './sessions';
 
 export const review = new Hono<AppEnv>();
 
-review.get('/me', async (c) => {
-  const me = await c.env.DB.prepare('SELECT id, display_name, role, daily_new_limit, daily_review_limit FROM users WHERE id = ?1')
-    .bind(c.var.userId)
-    .first<Me>();
-  return c.json(me);
-});
+review.get('/me', async (c) => c.json(await loadMe(c.env, c.var.userId)));
 
 review.get('/today', async (c) => {
   const now = Date.now();

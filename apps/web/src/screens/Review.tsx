@@ -105,8 +105,6 @@ function Session({ initial, offline }: { initial: QueueCard[]; offline: boolean 
     setIndex(0);
   };
 
-  if (!card) return <Summary results={results} practice={practice} onRetry={retry} />;
-
   const pick = (choice: Choice) => {
     answeredAt.current = Date.now();
     setPicked(choice);
@@ -114,7 +112,7 @@ function Session({ initial, offline }: { initial: QueueCard[]; offline: boolean 
   };
 
   const next = async (easy = false) => {
-    if (!picked || moving.current) return;
+    if (!card || !picked || moving.current) return;
     moving.current = true;
     // 앱을 켜 둔 채 자리를 비운 시간까지 세지 않도록 자른다
     const elapsed = Math.min(Math.max(0, Math.round(answeredAt.current - shownAt.current)), MAX_ELAPSED_MS);
@@ -132,6 +130,38 @@ function Session({ initial, offline }: { initial: QueueCard[]; offline: boolean 
     setResults((list) => [...list, { card, correct: picked.correct }]);
     advance();
   };
+
+  // 컴퓨터에서는 키보드로 푼다: 1~9 고르기(OX는 O·X도), Enter·Space 다음, E 너무 쉬웠어요, Esc 그만하기
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (!card || event.ctrlKey || event.metaKey || event.altKey || event.repeat) return;
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('input, textarea, select')) return;
+      const key = event.key.toLowerCase();
+      if (key === 'escape') {
+        navigate('/');
+      } else if (!picked) {
+        const index = /^[1-9]$/.test(key) ? Number(key) - 1 : card.type === 'ox' ? ['o', 'x'].indexOf(key) : -1;
+        const choice = choices[index];
+        if (choice) {
+          event.preventDefault();
+          pick(choice);
+        }
+      } else if (key === 'enter' || key === ' ') {
+        // 버튼에 포커스가 있으면 버튼이 알아서 눌린다
+        if (target?.closest('button, a')) return;
+        event.preventDefault();
+        void next(false);
+      } else if (key === 'e' && picked.correct && !practice) {
+        event.preventDefault();
+        void next(true);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
+
+  if (!card) return <Summary results={results} practice={practice} onRetry={retry} />;
 
   const suspend = async () => {
     if (!confirm('이 카드를 끌까요? 다시 나오지 않아요. 저장 기록 화면에서 다시 켤 수 있어요.')) return;
@@ -184,6 +214,9 @@ function Session({ initial, offline }: { initial: QueueCard[]; offline: boolean 
           </button>
         </div>
       ) : null}
+      <p className="kbd-hint muted small">
+        키보드: {card.type === 'ox' ? 'O·X' : `1~${choices.length}`} 고르기 · Enter 다음{picked?.correct && !practice ? ' · E 너무 쉬웠어요' : ''} · Esc 그만하기
+      </p>
     </div>
   );
 }

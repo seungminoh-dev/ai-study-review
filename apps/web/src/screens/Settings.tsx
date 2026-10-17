@@ -1,21 +1,25 @@
-import type { McpTokenStatus, Reminder } from '@moai/shared';
+import type { AuthOptions, InviteSummary, LoginCode, McpTokenStatus, Me, Reminder } from '@moai/shared';
 import { MAX_REMINDERS } from '@moai/shared/client';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { errorMessage, request } from '../api';
 import { COACH_INSTRUCTIONS } from '../coach';
 import { copyText } from '../copy';
+import { clearDeviceData, flushReviews, pendingCount } from '../offline/store';
 import { disablePush, enablePush, isStandalone, pushState, type PushState } from '../push';
-import { formatDateTime, useApi } from '../useApi';
+import { useLocation } from '../router';
+import { formatDate, formatDateTime, useApi } from '../useApi';
 
-// 설정 (설계서 §12.1): 알림 시간, 알림 켜기·테스트, 커넥터 URL, 코치 지침 복사(선택)
+// 설정 (설계서 §12.1): 알림 시간, 알림 켜기·테스트, 커넥터 URL, 계정과 다른 기기 로그인, 초대(오너), 코치 지침 복사(선택)
 
-export function Settings() {
+export function Settings({ me, onLogout }: { me: Me; onLogout: () => void }) {
   return (
     <div className="screen">
       <h1>설정</h1>
       <PushSection />
       <ReminderSection />
       <ConnectorSection />
+      <AccountSection me={me} onLogout={onLogout} />
+      {me.role === 'owner' ? <InviteSection /> : null}
       <CoachSection />
     </div>
   );
@@ -208,6 +212,180 @@ function CoachSection() {
         </button>
       </div>
       {copied === null ? null : <Status text={copied ? '복사했어요.' : '복사하지 못했어요. 위 글을 길게 눌러 복사해 주세요.'} tone={copied ? 'good' : 'bad'} />}
+    </section>
+  );
+}
+
+const GITHUB_TEXT: Record<string, { text: string; tone: 'good' | 'bad' }> = {
+  linked: { text: 'GitHub를 연결했어요. 이제 다른 기기에서 GitHub로 로그인할 수 있어요.', tone: 'good' },
+  taken: { text: '이 GitHub 계정은 이미 다른 모아이 계정에 연결되어 있어요.', tone: 'bad' },
+  denied: { text: 'GitHub 연결을 취소했어요.', tone: 'bad' },
+  expired: { text: '연결 시간이 지났어요. 다시 해 주세요.', tone: 'bad' },
+  failed: { text: 'GitHub에서 계정 정보를 받지 못했어요. 잠시 뒤에 다시 해 주세요.', tone: 'bad' },
+};
+
+function AccountSection({ me, onLogout }: { me: Me; onLogout: () => void }) {
+  const { data: options } = useApi<AuthOptions>('/auth/options');
+  const { query } = useLocation();
+  const [result] = useState(() => GITHUB_TEXT[query.get('github') ?? '']);
+  const [code, setCode] = useState<LoginCode | null>(null);
+  const [message, setMessage] = useState<{ text: string; tone: 'good' | 'bad' } | null>(null);
+
+  useEffect(() => {
+    // 새로 고침해도 같은 안내가 다시 나오지 않게 주소에서 뺀다
+    if (query.has('github')) history.replaceState(null, '', '/settings');
+  }, [query]);
+
+  const issue = async () => {
+    setMessage(null);
+    try {
+      setCode(await request<LoginCode>('/login-codes', { method: 'POST' }));
+    } catch (error) {
+      setMessage({ text: errorMessage(error), tone: 'bad' });
+    }
+  };
+
+  const logout = async () => {
+    await flushReviews();
+    const left = await pendingCount();
+    const warning = left > 0 ? `아직 보내지 못한 답 ${left}개가 사라져요. ` : '';
+    if (!confirm(`${warning}이 기기에서 로그아웃할까요? 이 기기의 알림도 꺼져요. 다른 기기의 로그인은 그대로예요.`)) return;
+    try {
+      // 다른 사람이 이 기기로 로그인해도 내 알림이 오지 않게 한다
+      await disablePush().catch(() => undefined);
+      await request('/auth/logout', { method: 'POST' });
+      await clearDeviceData();
+      onLogout();
+    } catch (error) {
+      setMessage({ text: errorMessage(error), tone: 'bad' });
+    }
+  };
+
+  return (
+    <section>
+      <h2>계정 · 다른 기기</h2>
+      {result ? <Status text={result.text} tone={result.tone} /> : null}
+      <p className="small">
+        {me.display_name} · {me.github_login ? `GitHub @${me.github_login}` : 'GitHub 연결 안 됨'}
+      </p>
+      {me.github_login ? (
+        <p className="muted small">컴퓨터나 새 휴대폰에서 {location.host}를 열고 "GitHub로 계속하기"를 누르면 이 계정으로 로그인돼요.</p>
+      ) : options?.github ? (
+        <>
+          <p className="muted small">GitHub를 연결해 두면 컴퓨터나 새 휴대폰에서 GitHub로 바로 로그인해요.</p>
+          <div className="actions">
+            <a className="button primary" href="/api/auth/github/start?intent=link">
+              GitHub 연결
+            </a>
+          </div>
+        </>
+      ) : null}
+      {code ? (
+        <div className="secret">
+          <p className="small">다른 기기의 로그인 화면에서 "로그인 코드로"에 넣으세요. {formatDateTime(code.expires_at)}까지 한 번만 쓸 수 있어요.</p>
+          <code className="secret-url login-code">{code.code}</code>
+        </div>
+      ) : (
+        <div className="actions">
+          <button type="button" className="button" onClick={() => void issue()}>
+            다른 기기 로그인 코드 만들기
+          </button>
+        </div>
+      )}
+      {message ? <Status text={message.text} tone={message.tone} /> : null}
+      <button type="button" className="text-button" onClick={() => void logout()}>
+        이 기기에서 로그아웃
+      </button>
+    </section>
+  );
+}
+
+function inviteState(invite: InviteSummary): string {
+  if (invite.used_at) return `${invite.used_by_name ?? '누군가'}님이 가입했어요`;
+  if (invite.expires_at <= Date.now()) return '만료됐어요';
+  return `${formatDate(invite.expires_at)}까지`;
+}
+
+function InviteSection() {
+  const { data, reload } = useApi<{ invites: InviteSummary[] }>('/invites');
+  const [label, setLabel] = useState('');
+  const [created, setCreated] = useState<{ label: string; code: string } | null>(null);
+  const [message, setMessage] = useState<{ text: string; tone: 'good' | 'bad' } | null>(null);
+
+  const create = async (event: FormEvent) => {
+    event.preventDefault();
+    setMessage(null);
+    try {
+      const result = await request<{ invite: InviteSummary; code: string }>('/invites', { method: 'POST', json: { label } });
+      setCreated({ label: result.invite.label, code: result.code });
+      setLabel('');
+      reload();
+    } catch (error) {
+      setMessage({ text: errorMessage(error), tone: 'bad' });
+    }
+  };
+
+  const remove = async (invite: InviteSummary) => {
+    if (!confirm(`"${invite.label}" 초대를 지울까요? 그 코드로는 가입할 수 없게 돼요.`)) return;
+    try {
+      await request(`/invites/${invite.id}`, { method: 'DELETE' });
+      reload();
+    } catch (error) {
+      setMessage({ text: errorMessage(error), tone: 'bad' });
+    }
+  };
+
+  // 코드는 링크에 넣지 않는다. 받은 사람이 앱 안에서 직접 입력한다 (설계서 §8.4)
+  const shareText = created
+    ? `모아이 초대 코드: ${created.code}\n${location.origin} 에서 "GitHub로 계속하기"를 누른 뒤 이 코드를 넣어 주세요. 7일 동안 한 번 쓸 수 있어요.`
+    : '';
+
+  return (
+    <section>
+      <h2>초대</h2>
+      <p className="muted small">초대 코드는 한 사람이 한 번 써요. 7일 동안 유효하고, 만들 때 한 번만 보여요.</p>
+      {created ? (
+        <div className="secret">
+          <p className="small">{created.label}님에게 보낼 코드예요.</p>
+          <code className="secret-url login-code">{created.code}</code>
+          <button
+            type="button"
+            className="button primary"
+            onClick={() => void copyText(shareText).then((ok) => setMessage(ok ? { text: '안내 문구와 함께 복사했어요.', tone: 'good' } : { text: '복사하지 못했어요. 코드를 길게 눌러 복사해 주세요.', tone: 'bad' }))}
+          >
+            안내와 함께 복사
+          </button>
+        </div>
+      ) : null}
+      <form onSubmit={(event) => void create(event)}>
+        <label className="field">
+          <span>누구에게 보낼까요?</span>
+          <input value={label} onChange={(event) => setLabel(event.target.value)} maxLength={30} placeholder="예: 민수" required />
+        </label>
+        <div className="actions">
+          <button type="submit" className="button">
+            초대 코드 만들기
+          </button>
+        </div>
+      </form>
+      {message ? <Status text={message.text} tone={message.tone} /> : null}
+      {data && data.invites.length > 0 ? (
+        <ul className="list invites">
+          {data.invites.map((invite) => (
+            <li key={invite.id}>
+              <div>
+                <strong>{invite.label}</strong>
+                <p className="muted small">{inviteState(invite)}</p>
+              </div>
+              {invite.used_at ? null : (
+                <button type="button" className="text-button" onClick={() => void remove(invite)}>
+                  지우기
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </section>
   );
 }

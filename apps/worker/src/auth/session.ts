@@ -1,5 +1,5 @@
 import type { Context, MiddlewareHandler } from 'hono';
-import { getCookie, setCookie } from 'hono/cookie';
+import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import type { AppEnv } from '../context';
 import type { Env } from '../env';
 import { hashToken, randomToken } from '../lib/crypto';
@@ -45,12 +45,28 @@ async function findSession(env: Env, token: string): Promise<(SessionRow & { tok
   return row ? { ...row, token_hash: tokenHash } : null;
 }
 
+/** 쿠키의 세션이 살아 있으면 돌려준다. 로그인하지 않아도 되는 경로에서 "로그인했으면"을 볼 때 쓴다. */
+export async function currentSession(c: Context<AppEnv>, now: number): Promise<(SessionRow & { token_hash: string; token: string }) | null> {
+  const token = getCookie(c, SESSION_COOKIE);
+  const session = token && c.env.TOKEN_PEPPER ? await findSession(c.env, token) : null;
+  return session && session.expires_at > now ? { ...session, token: token! } : null;
+}
+
+/** 이 기기의 세션만 끝낸다. 다른 기기의 로그인은 그대로다. */
+export async function endSession(c: Context<AppEnv>): Promise<void> {
+  const token = getCookie(c, SESSION_COOKIE);
+  if (token && c.env.TOKEN_PEPPER) {
+    await c.env.DB.prepare('DELETE FROM auth_sessions WHERE token_hash = ?1').bind(await hashToken(c.env.TOKEN_PEPPER, token)).run();
+  }
+  deleteCookie(c, SESSION_COOKIE, { path: '/', secure: true });
+}
+
 /** /api/*에서 로그인을 요구한다. 세션이 있으면 c.var.userId를 채운다. */
 export const requireUser: MiddlewareHandler<AppEnv> = async (c, next) => {
-  const token = getCookie(c, SESSION_COOKIE);
   const now = Date.now();
-  const session = token && c.env.TOKEN_PEPPER ? await findSession(c.env, token) : null;
-  if (!session || session.expires_at <= now) return errorJson(401, 'login_required', '로그인이 필요해요.');
+  const session = await currentSession(c, now);
+  if (!session) return errorJson(401, 'login_required', '로그인이 필요해요.');
+  const token = session.token;
   c.set('userId', session.user_id);
   await next();
   if (now - session.last_seen_at > TOUCH_EVERY_MS) {
@@ -60,6 +76,6 @@ export const requireUser: MiddlewareHandler<AppEnv> = async (c, next) => {
         .run(),
     );
     // 응답이 정해진 뒤라 setCookie가 c.res의 헤더에 바로 붙는다
-    writeCookie(c, token!);
+    writeCookie(c, token);
   }
 };

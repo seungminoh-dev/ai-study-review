@@ -1,14 +1,16 @@
-import type { Me } from '@moai/shared';
-import { useEffect, useState } from 'react';
+import type { AuthOptions, Me } from '@moai/shared';
+import { useEffect, useState, type ReactNode } from 'react';
 import { OfflineError, RequestError, errorMessage, request } from './api';
 import { Link, navigate, useLocation } from './router';
+import { Join } from './screens/Join';
+import { Login } from './screens/Login';
 import { Review } from './screens/Review';
 import { SessionDetail, Sessions } from './screens/Sessions';
 import { Settings } from './screens/Settings';
 import { Setup } from './screens/Setup';
 import { Today } from './screens/Today';
 
-type Auth = { state: 'loading' } | { state: 'in'; me: Me } | { state: 'setup' } | { state: 'closed' } | { state: 'error'; message: string };
+type Auth = { state: 'loading' } | { state: 'in'; me: Me } | { state: 'setup' } | { state: 'out'; github: boolean } | { state: 'error'; message: string };
 
 const ME_KEY = 'moai:me';
 
@@ -36,9 +38,24 @@ const TABS = [
   { href: '/settings', label: '설정' },
 ];
 
+/** 로그인 전 화면. 아래 탭이 없다 */
+const Bare = ({ children }: { children: ReactNode }) => <main className="app no-tabs">{children}</main>;
+
+async function loggedOut(): Promise<Auth> {
+  rememberMe(null);
+  const options = await request<AuthOptions>('/auth/options').catch((): AuthOptions => ({ setup_available: false, github: false }));
+  return options.setup_available ? { state: 'setup' } : { state: 'out', github: options.github };
+}
+
 export function App() {
   const [auth, setAuth] = useState<Auth>({ state: 'loading' });
   const { path, query } = useLocation();
+
+  const signedIn = (me: Me, to = '/') => {
+    rememberMe(me);
+    setAuth({ state: 'in', me });
+    navigate(to, { replace: true });
+  };
 
   useEffect(() => {
     (async () => {
@@ -48,9 +65,7 @@ export function App() {
         setAuth({ state: 'in', me });
       } catch (error) {
         if (error instanceof RequestError && error.status === 401) {
-          rememberMe(null);
-          const { available } = await request<{ available: boolean }>('/setup').catch(() => ({ available: false }));
-          setAuth({ state: available ? 'setup' : 'closed' });
+          setAuth(await loggedOut());
         } else if (error instanceof OfflineError && rememberedMe()) {
           // 오프라인이어도 저장해 둔 큐로 복습할 수 있다
           setAuth({ state: 'in', me: rememberedMe()! });
@@ -62,25 +77,22 @@ export function App() {
   }, []);
 
   if (auth.state === 'loading') return <div className="center muted">모아이</div>;
-  if (auth.state === 'error') return <div className="screen"><p className="notice bad">{auth.message}</p></div>;
-  if (auth.state === 'setup') {
+  if (auth.state === 'error') {
     return (
-      <Setup
-        onDone={(me) => {
-          rememberMe(me);
-          setAuth({ state: 'in', me });
-          navigate('/settings', { replace: true });
-        }}
-      />
+      <Bare>
+        <p className="notice bad">{auth.message}</p>
+      </Bare>
     );
   }
-  if (auth.state === 'closed') {
+  if (auth.state === 'setup') {
     return (
-      <div className="screen">
-        <h1>모아이</h1>
-        <p className="muted">초대받은 사람만 쓸 수 있어요. 이 기기는 아직 로그인되어 있지 않아요.</p>
-      </div>
+      <Bare>
+        <Setup onDone={(me) => signedIn(me, '/settings')} />
+      </Bare>
     );
+  }
+  if (auth.state === 'out') {
+    return <Bare>{path === '/join' ? <Join onDone={(me) => signedIn(me, '/settings')} /> : <Login github={auth.github} onDone={(me) => signedIn(me)} />}</Bare>;
   }
 
   const sessionMatch = /^\/sessions\/([\w-]+)$/.exec(path);
@@ -88,7 +100,17 @@ export function App() {
   if (path === '/review') screen = <Review key={location.search} size={query.get('size') === '5' ? 5 : 8} />;
   else if (path === '/sessions') screen = <Sessions />;
   else if (sessionMatch) screen = <SessionDetail id={sessionMatch[1]!} />;
-  else if (path === '/settings') screen = <Settings />;
+  else if (path === '/settings') {
+    screen = (
+      <Settings
+        me={auth.me}
+        onLogout={async () => {
+          setAuth(await loggedOut());
+          navigate('/', { replace: true });
+        }}
+      />
+    );
+  }
   else screen = <Today name={auth.me.display_name} />;
 
   return (

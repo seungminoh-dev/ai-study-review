@@ -1,6 +1,6 @@
 import { REVIEWS_PER_REQUEST } from '@moai/shared/client';
 import type { QueueCard, ReviewItem } from '@moai/shared';
-import { createStore, get, set, update } from 'idb-keyval';
+import { clear, createStore, get, set, update } from 'idb-keyval';
 import { RequestError, request } from '../api';
 
 // 오프라인 답안 큐 (설계서 §9.5). 답은 먼저 IndexedDB에 넣고, 보내지면 지운다. 화면은 네트워크를 기다리지 않는다.
@@ -12,6 +12,16 @@ const QUEUE = 'queue';
 export async function enqueueReview(review: ReviewItem): Promise<void> {
   await update<ReviewItem[]>(OUTBOX, (items) => [...(items ?? []), review], store);
   void flushReviews();
+}
+
+/** 아직 서버에 보내지 못한 답 수 */
+export async function pendingCount(): Promise<number> {
+  return ((await get<ReviewItem[]>(OUTBOX, store)) ?? []).length;
+}
+
+/** 로그아웃할 때 이 기기에 남은 답과 큐를 지운다. 다음에 로그인한 사람에게 섞이지 않게 한다 */
+export async function clearDeviceData(): Promise<void> {
+  await clear(store);
 }
 
 /** 아직 서버에 보내지 못한 답의 카드 id */

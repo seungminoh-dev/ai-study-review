@@ -4,7 +4,7 @@ import { request } from './api';
 
 export type PushState = 'unsupported' | 'needs-install' | 'denied' | 'off' | 'on';
 
-const isIos = () => /iPhone|iPad|iPod/.test(navigator.userAgent);
+export const isIos = () => /iPhone|iPad|iPod/.test(navigator.userAgent);
 export const isStandalone = () =>
   window.matchMedia('(display-mode: standalone)').matches || (navigator as Navigator & { standalone?: boolean }).standalone === true;
 

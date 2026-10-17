@@ -13,6 +13,20 @@ export const SetupBody = z.object({
 });
 export type SetupBody = z.infer<typeof SetupBody>;
 
+/** 초대 코드로 가입. GitHub 확인을 마친 브라우저에서만 쓸 수 있다 (설계서 §8.4) */
+export const JoinBody = z.object({
+  code: z.string().trim().min(1).max(40),
+  display_name: z.string().trim().min(1).max(30),
+});
+export type JoinBody = z.infer<typeof JoinBody>;
+
+/** 다른 기기에서 받은 로그인 코드 (설계서 §8.5) */
+export const LoginCodeBody = z.object({ code: z.string().trim().min(1).max(40) });
+export type LoginCodeBody = z.infer<typeof LoginCodeBody>;
+
+export const InviteBody = z.object({ label: z.string().trim().min(1).max(30) });
+export type InviteBody = z.infer<typeof InviteBody>;
+
 export const ReviewGrade = z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4)]);
 export type ReviewGrade = z.infer<typeof ReviewGrade>;
 
@@ -77,6 +91,37 @@ export interface Me {
   role: 'owner' | 'member';
   daily_new_limit: number;
   daily_review_limit: number;
+  /** 연결한 GitHub 계정. 없으면 null */
+  github_login: string | null;
+}
+
+/** 로그인 전 화면이 고를 수 있는 방법 */
+export interface AuthOptions {
+  /** 오너가 아직 없어 /setup을 쓸 수 있다 */
+  setup_available: boolean;
+  /** 서버에 GitHub OAuth 앱이 설정되어 있다 */
+  github: boolean;
+}
+
+/** GitHub 확인은 끝났고 초대 코드를 기다리는 가입 */
+export interface PendingJoin {
+  github_login: string;
+  suggested_name: string;
+}
+
+export interface LoginCode {
+  /** 보여 주기용으로 4자씩 끊은 코드 (예: 'K7QM-4XPT') */
+  code: string;
+  expires_at: number;
+}
+
+export interface InviteSummary {
+  id: string;
+  label: string;
+  created_at: number;
+  expires_at: number;
+  used_at: number | null;
+  used_by_name: string | null;
 }
 
 /** 복습 화면에서 한 장. 기기에서 채점하므로 정답이 함께 온다 */

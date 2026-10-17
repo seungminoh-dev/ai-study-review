@@ -37,7 +37,7 @@ npx wrangler secret list                # TOKEN_PEPPER, BOOTSTRAP_CODE, VAPID_PR
 
 ### 1-3. 오너 계정 만들기 (🙋 직접, 휴대폰에서)
 
-**휴대폰에서 한다.** MVP 1에는 다른 기기 로그인이 없어서(MVP 2에서 생긴다), 처음 만든 기기에서만 로그인된다.
+**휴대폰에서 한다.** 다른 기기(컴퓨터)는 1.5장에서 GitHub나 로그인 코드로 로그인한다.
 
 1. 휴대폰 Chrome에서 `https://moai.smoh.dev`를 연다.
 2. 메뉴 → **홈 화면에 추가**(또는 "앱 설치")로 설치한다.
@@ -75,6 +75,53 @@ Android는 브라우저에서 만든 로그인이 설치한 앱에도 이어진�
 4. 다음 날 정한 시각에 알림이 오고, 알림을 누르면 복습 화면이 열린다.
 
 틀린 카드가 보이면 복습 화면의 **이 카드가 틀렸어요 · 끄기**로 바로 끈다. 기록 탭에서 다시 켤 수 있다.
+
+---
+
+## 1.5. 여러 기기와 GitHub 로그인 켜기 (한 번만)
+
+`0002_accounts.sql` 마이그레이션은 배포할 때 🤖 자동으로 들어간다. GitHub OAuth 앱만 직접 만든다.
+
+### 1.5-1. GitHub OAuth 앱 만들기 (🙋 직접, github.com)
+
+1. GitHub → Settings → Developer settings → **OAuth Apps** → **New OAuth App**
+2. 값:
+   - Application name: `모아이` (로그인 화면에 보인다)
+   - Homepage URL: `https://moai.smoh.dev`
+   - Authorization callback URL: `https://moai.smoh.dev/api/auth/github/callback`
+   - Enable Device Flow: 끈다
+3. **Register application** → 화면의 **Client ID**를 복사한다.
+4. **Generate a new client secret** → 값을 복사한다. 이 화면을 벗어나면 다시 볼 수 없다.
+
+### 1.5-2. secret 넣기 (🙋 직접, 로컬 터미널)
+
+```bash
+cd apps/worker                                # Windows PowerShell: cd apps\worker
+npx wrangler secret put GITHUB_CLIENT_ID      # Client ID
+npx wrangler secret put GITHUB_CLIENT_SECRET  # client secret
+```
+
+넣는 즉시 반영된다. 둘 다 넣기 전에는 로그인 화면에 GitHub 버튼이 나오지 않는다.
+
+### 1.5-3. 폰에서 GitHub 잇기 → 컴퓨터에서 로그인 (🙋 직접)
+
+1. 폰의 모아이 앱 → 설정 → 계정 · 다른 기기 → **GitHub 연결** → GitHub에서 승인. "GitHub를 연결했어요"가 나오면 된다.
+2. 컴퓨터 브라우저에서 `https://moai.smoh.dev` → **GitHub로 계속하기**. 같은 계정으로 열린다.
+3. GitHub가 안 될 때: 폰 설정 → **다른 기기 로그인 코드 만들기** → 컴퓨터 로그인 화면의 "로그인 코드로"에 넣는다 (10분, 한 번).
+
+### 1.5-4. 친구 초대 (🙋 직접, 필요할 때)
+
+1. 폰 설정 → 초대 → 이름을 넣고 **초대 코드 만들기** → **안내와 함께 복사** → 카카오톡으로 보낸다. 코드는 이때만 보인다.
+2. 친구는 `https://moai.smoh.dev`를 열어 홈 화면에 추가하고, **GitHub로 계속하기** → 초대 코드와 이름을 넣는다.
+3. 친구도 자기 설정에서 커넥터 URL을 만들어 자기 claude.ai에 추가한다. 커넥터 URL은 사람마다 따로다.
+
+### 1.5-5. 내비게이션 바 색 (🙋 직접, Android)
+
+3버튼 내비게이션을 쓰면 아래 바 색이 앱 매니페스트의 `background_color`를 따른다. 다크 모드 탭 색(`#1A1F2A`)으로 바꿨는데, 이미 설치한 앱은 Chrome이 매니페스트를 다시 읽어야 바뀐다.
+
+- 바로 바꾸려면: **1.5-3에서 GitHub를 먼저 이어 둔다.** 그다음 홈 화면의 모아이 앱을 길게 눌러 제거 → Chrome에서 `https://moai.smoh.dev` → 앱 설치. 보통 로그인은 Chrome에 남아 있고, 로그아웃됐으면 GitHub로 다시 로그인한다.
+- 알림 권한은 앱을 지우면 같이 사라진다. 설정 → **이 기기에서 알림 켜기**를 다시 누른다.
+- 제스처 내비게이션(설정 → 디스플레이 → 내비게이션 바 → 스와이프 제스처)은 바가 투명해서 이 문제가 없다.
 
 ---
 
