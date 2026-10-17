@@ -21,10 +21,12 @@ review.get('/today', async (c) => {
     countReviewedToday(c.env, userId, now),
     listSessions(c.env, userId, 3),
     c.env.DB.batch([
+      // 같은 질문을 여러 세션에서 저장했으면 한 번만 보여 준다
       c.env.DB.prepare(
-        `SELECT f.id, f.question, f.created_at, k.name AS concept_name
+        `SELECT max(f.id) AS id, f.question, max(f.created_at) AS created_at, k.name AS concept_name
            FROM followups f JOIN concepts k ON k.id = f.concept_id
-          WHERE f.user_id = ?1 AND f.resolved_at IS NULL ORDER BY f.created_at DESC LIMIT 5`,
+          WHERE f.user_id = ?1 AND f.resolved_at IS NULL
+          GROUP BY f.concept_id, f.question ORDER BY created_at DESC LIMIT 5`,
       ).bind(userId),
       c.env.DB.prepare('SELECT count(*) AS n FROM reminder_slots WHERE user_id = ?1 AND enabled = 1').bind(userId),
     ]),

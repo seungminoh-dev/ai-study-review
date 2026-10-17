@@ -24,7 +24,8 @@ export function layoutGraph(keys: readonly string[], edges: readonly (readonly [
   const points = sorted.map((key) => pos.get(key)!);
   const index = new Map(sorted.map((key, i) => [key, i]));
   let temperature = size / 8;
-  const margin = 24;
+  // 이름표가 점 아래 가운데에 붙으니 좌우는 넉넉히 비운다
+  const margin = 48;
   for (let step = 0; step < iterations; step++) {
     const dx = new Float64Array(n);
     const dy = new Float64Array(n);

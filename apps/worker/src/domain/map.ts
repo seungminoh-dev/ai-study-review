@@ -67,7 +67,9 @@ export async function loadConcept(env: Env, userId: string, key: string, now: nu
       `SELECT id, type, rung, status, prompt, code, answer, options, explain, checklist, due, stability, reps
          FROM cards WHERE concept_id = ?1 AND user_id = ?2 ORDER BY rung, created_at`,
     ).bind(concept.id, userId),
-    env.DB.prepare('SELECT id, question FROM followups WHERE concept_id = ?1 AND user_id = ?2 AND resolved_at IS NULL ORDER BY created_at DESC').bind(
+    env.DB.prepare(
+      'SELECT max(id) AS id, question FROM followups WHERE concept_id = ?1 AND user_id = ?2 AND resolved_at IS NULL GROUP BY question ORDER BY max(created_at) DESC',
+    ).bind(
       concept.id,
       userId,
     ),

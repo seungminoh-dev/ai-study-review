@@ -1,6 +1,6 @@
 # 모아이 설계서 v1.1
 
-- 상태: MVP 0 끝남, MVP 1 코드 완료 (운영은 [운영 가이드](runbook.md)), MVP 2~3은 설계
+- 상태: MVP 0 끝남, MVP 1·2 코드 완료 (운영은 [운영 가이드](runbook.md)), MVP 3은 설계
 - 날짜: 2026-10-17
 - 런타임: TypeScript, Cloudflare Worker 하나 (Workers Paid, MVP 0에서 무료 플랜 CPU 한도를 넘어 바꿨다). [ADR 0001](adr/0001-runtime.md)에서 결정
 - 관련 문서: [기획서](service-plan.md), [운영 가이드](runbook.md), [MVP 0 실행 가이드](mvp0-runbook.md), [이름 후보](names.md)
@@ -224,6 +224,19 @@ claude.ai에서 공부하다가 "정리해줘"라고 하면, 대화 중인 Claud
 - 실측 API 지출 월 $100 미만
 - 친구 한 명이 도움 없이 5분 안에 첫 복습까지 마친다
 
+**상태 (2026-10-18)**: 코드와 테스트 완료. 켜는 순서는 [운영 가이드 2장](runbook.md). 만들면서 설계와 달라진 점:
+
+- 설명하기 카드: 먼저 내 말로 쓰고(쓰지 않고 머릿속으로만 해도 된다) → 내 최종 버전·체크리스트와 비교 → 등급 4개. 등급 버튼에 다음 간격을 보여 준다. 사다리는 3단계까지 연다.
+- 카드 신고는 이유 4가지(정답이 틀림, 애매함, 중복, 그 밖)를 고르면 바로 끈다. 카드 고치기는 저장 기록·개념 화면에서 글자와 정답만 고친다(종류는 그대로).
+- 되돌리기: 방금 한 답을 다음 카드(또는 결과 화면)에서 되돌린다. 아직 안 보낸 답은 기기에서만 지우고, 보낸 답은 그 카드의 마지막 기록이고 하루 안일 때만 `prev_card`로 되돌린다.
+- 스트릭 프리즈는 "빠진 날 바로 앞날이 목표를 채운 날"일 때만, 주마다 한 번 자동으로 쓴다.
+- 서버 LLM은 SDK 대신 fetch로 부른다(번들 크기). effort나 fallback을 받지 않는 모델이면 400이 오므로, 그때는 형식만 남기고 한 번 더 보낸다.
+- 가져오기는 도메인 검사에 걸리면 고칠 점을 주고 한 번 더 만든다(최대 2회 호출).
+- 비용 단가는 모델 이름의 등급(haiku·sonnet·opus)으로 고르고, 세대 중 가장 비싼 값으로 센다. 모르는 모델은 더 비싸게 센다. 한도에 일찍 닿을 수는 있어도 넘지는 않는다. 끝나지 않은 채점·가져오기는 사람마다 3개까지다.
+- 기기 복구 초대(`bind_user_id`)로 들어오면 그 계정에 새 GitHub를 잇고, 그 계정의 다른 로그인을 모두 끝낸다.
+- 계정 지우기는 이름을 다시 써서 확인한다. 오너는 지울 수 없다. 비용 기록은 이번 달 합계가 맞도록 `deleted`로 남긴다.
+- 지식 지도는 라이브러리 없이 힘 기반 배치(SVG)로 그린다. 개념이 300개를 넘으면 최근에 바뀐 300개만 그린다.
+
 ### 2.4 MVP 3: 확장 (이후)
 
 | 기능 | 내용 |
@@ -374,8 +387,8 @@ docs/
 | `BOOTSTRAP_CODE` | secret | 1 | 오너 계정을 한 번 만들 때만 쓴다 |
 | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | secret | 1.5 | GitHub OAuth 앱 (§8.4). 둘 다 없으면 로그인 화면에서 GitHub 버튼을 감춘다. ID는 비밀이 아니지만 코드 수정 없이 넣으려고 secret으로 둔다 |
 | `ANTHROPIC_API_KEY` | secret | 2 | 내 Console API 키 |
-| `GRADER_MODEL` | var | 2 | 기본 `claude-opus-5-5` (§11.1) |
-| `LLM_USER_CAP_USD`, `LLM_MONTHLY_CAP_USD` | var | 2 | 기본 6, 90 |
+| `GRADER_MODEL` | secret | 2 | 채점·가져오기에 쓸 모델 ID (§11.1). 코드에 기본값이 없다. `ANTHROPIC_API_KEY`와 둘 다 있어야 서버 AI가 켜진다 |
+| `LLM_USER_CAP_USD`, `LLM_MONTHLY_CAP_USD` | var (선택) | 2 | 코드 기본 6, 90 |
 
 비밀값은 `wrangler secret put`으로 넣고, 로컬 개발용 `.dev.vars`는 git에 올리지 않는다.
 
@@ -1037,7 +1050,7 @@ PWA 쪽:
 ### 11.1 모델과 호출 공통
 
 - 키는 내 Console API 키(`ANTHROPIC_API_KEY`)다. 브라우저로 보내지 않고, 내 Max 구독 인증으로 대신하지 않는다.
-- 모델은 설정값 `GRADER_MODEL`이고 기본값은 `claude-opus-5-5`다.
+- 모델은 설정값 `GRADER_MODEL`이다 (secret, 코드에 기본값 없음). 기획서 §10.1의 후보 중에서 고른다.
   - Opus 5.5는 thinking을 끌 수 없어서 `effort`를 `low`로 명시한다 (기본값은 `medium`).
   - 관리자 사용량 화면에서 실제 1회 비용(thinking 포함)을 본 뒤, 오너가 Sonnet 5.5나 Haiku 5.5로 바꿀 수 있다. 바꾸는 것은 설정 하나다.
 - 거절 대비: 서버 측 fallback(`fallbacks: 'default'`, 베타 헤더 `server-side-fallback-2026-07-01`)을 켠다. 안전 분류기가 거절하면 Anthropic이 권장하는 다른 모델로 같은 요청을 다시 처리한다.
@@ -1050,7 +1063,7 @@ import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod';
 // parse()는 JSON이 잘리거나 스키마에 안 맞으면 예외를 던져 stop_reason을 볼 수 없다.
 // 그래서 create()에 같은 output_config.format을 넘기고, stop_reason을 먼저 본 뒤 직접 검증한다.
 const res = await client.beta.messages.create({
-  model: env.GRADER_MODEL,                         // 기본 'claude-opus-5-5'
+  model: env.GRADER_MODEL,
   max_tokens: 4096,                                // 가져오기는 16000
   betas: ['server-side-fallback-2026-07-01'],
   fallbacks: 'default',
