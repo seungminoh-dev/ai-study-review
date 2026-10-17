@@ -1,8 +1,8 @@
 # ADR 0001: 백엔드 런타임과 배포 위치
 
-- 상태: 제안 (사용자 확인 대기)
+- 상태: 결정 (B안, 2026-10-17)
 - 날짜: 2026-10-17
-- 관련 문서: [service-plan.md](../service-plan.md)
+- 관련 문서: [service-plan.md](../service-plan.md), [design.md](../design.md)
 
 ## 배경
 
@@ -13,7 +13,7 @@
 - 인프라 비용은 사실상 $0. Claude API 비용은 월 $100 이하이고 내 Console API 키로 서버에서만 호출한다.
 - 사용자는 초대받은 10명이고, 전원 Claude Pro($20) 또는 Max($100) 요금제다.
 - 배포 후보: Cloudflare(무료 플랜, Wrangler 사용, 도메인 보유), Vercel, AWS.
-- 주 직무가 Java/Spring 백엔드라서 Spring 포트폴리오 가치가 크다.
+- 처음에는 주 직무(Java/Spring 백엔드)와 맞춰 Spring 포트폴리오 가치를 크게 봤다. 나중에 이 서비스는 포트폴리오 용도가 아니라고 정했다 (아래 결정).
 
 ## 확인한 사실 (2026-10 기준)
 
@@ -51,7 +51,7 @@
 
 ## 선택지
 
-### A. Spring Boot on AWS Lambda + Cloudflare Worker 앞단 (권장)
+### A. Spring Boot on AWS Lambda + Cloudflare Worker 앞단 (버림)
 
 ```
 [claude.ai / Claude Code] ─MCP─┐
@@ -74,8 +74,9 @@
 - 인프라 비용: 약 $0 (배포 파일을 올리는 S3 비용 몇 센트)
 - 장점: Spring 포트폴리오를 그대로 가져간다. 1분 틱 하나로 정시 푸시와 웜 유지를 같이 한다. 도구 호출 타임아웃(240초)보다 콜드 스타트가 훨씬 짧다.
 - 단점: 제공자가 셋(AWS, Cloudflare, Supabase)이다. SnapStart, Lambda Web Adapter, 커넥션 풀 설정처럼 처음 다뤄 보는 것이 많다. 첫 단계까지 2.5주 정도 걸린다.
+- 버린 이유: 이 서비스는 포트폴리오 용도가 아니어서 Spring을 쓸 이유가 사라졌다. 남는 것은 제공자 셋과 콜드 스타트 대응 같은 비용뿐이다.
 
-### B. Cloudflare Worker 하나로 전부 (TypeScript)
+### B. Cloudflare Worker 하나로 전부 (TypeScript, 채택)
 
 ```
 Cloudflare Worker (무료)
@@ -95,12 +96,19 @@ Cloudflare Worker (무료)
 - Cloudflare Containers에 Spring: 유료($5/월~)이고, 컨테이너 시작(1~3초)에 JVM 시작까지 더해진다.
 - Neon Postgres: 1분 틱이 컴퓨트를 계속 깨워서 무료 100 CU-시간을 넘긴다 (월 약 180 CU-시간).
 
-## 결정 (제안)
+## 결정
 
-**A로 간다.** 내 Spring 포트폴리오를 지키면서 서버리스와 $0 인프라를 둘 다 만족한다.
-"Spring 자체를 쓰지 않겠다"는 뜻이었다면 B로 간다. Phase 0에서 A가 안 되는 것으로 나와도 B로 간다.
+**B로 간다.** TypeScript로 Cloudflare Worker 하나에 MCP 서버, REST API, PWA, Cron을 모두 넣는다.
 
-## A로 갈 때 지켜야 할 것
+- 이 서비스는 포트폴리오 용도가 아니다. 그래서 Spring의 장점(직무 일치)이 없고, 단순함·속도·비용이 가장 중요하다.
+- B는 제공자가 Cloudflare 하나이고, 이미 가진 도메인과 무료 플랜을 그대로 쓴다. 콜드 스타트도 없다.
+- 남는 위험은 호출당 CPU 10ms다. 설계서 MVP 0에서 실측하고, 넘으면 Workers Paid(월 $5)로 바꾼다. 코드는 바꾸지 않는다.
+
+구현 설계는 [design.md](../design.md)에 있다. 확인 항목은 설계서 §2.1(MVP 0)로 옮겼다.
+
+## 참고: A안을 다시 볼 때 지켜야 할 것
+
+지금은 쓰지 않는다. 나중에 Java로 다시 만들 일이 생기면 참고하려고 남겨 둔다.
 
 - AWS 계정을 첫 배포 전에 Paid 플랜으로 바꾸고, Budgets 알람을 $1로 건다.
 - Lambda를 VPC에 넣지 않는다.
@@ -113,11 +121,3 @@ Cloudflare Worker (무료)
 - 채점 비용은 thinking 토큰까지 넣어 잰다. Opus 5.5는 thinking을 끌 수 없어서 월 $100 한도를 넘을 수 있다.
 - 오래 걸리는 LLM 작업(붙여넣기 가져오기)은 작업 테이블에 넣고 틱이 처리한다. iPhone에서 PWA가 백그라운드로 가면 요청이 끊기기 때문이다.
 - Cloudflare Free 플랜의 Bot Fight Mode는 경로별 예외가 안 되므로 존 전체에서 끈다. 아니면 IP Access 허용 규칙을 `160.79.104.0/24`~`160.79.111.0/24` 8개로 넣는다 (존 전체 적용). `/mcp` 경로는 WAF 커스텀 규칙에서 Anthropic IP 대역을 Skip 예외로 둔다. Worker 호출 로그에 토큰이 든 URL이 남지 않게 한다.
-
-## Phase 0에서 확인할 것 (통과 기준)
-
-1. 폰 앱의 프로젝트 대화에서, 친구의 Pro 계정으로도, Worker → Lambda MCP 도구 호출이 성공한다. 타임아웃 0건.
-2. Lambda Web Adapter 아래에서 SnapStart가 동작하고, 복원 p99가 3초 미만이다. 안 되면 `aws-serverless-java-container-springboot4`로 바꿔 본다.
-3. 비밀 URL 토큰에서 꺼낸 사용자 ID가 `@McpTool` 메서드까지 전달된다.
-4. 홈 화면에 추가한 iOS PWA에서 초대 코드 가입과 푸시 수신이 된다.
-5. 새 Projects 베타로 바뀐 프로젝트에서도 커넥터가 쓰이는지 확인한다. 쓸 수 없다는 보고가 있는데 확인하지 못했다.
