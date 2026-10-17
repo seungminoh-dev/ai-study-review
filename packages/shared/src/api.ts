@@ -3,11 +3,9 @@ import type { JudgmentLabel } from './save-learning';
 
 // REST API(PWA용) 요청 스키마와 응답 타입 (설계서 §7). Worker와 PWA가 같이 쓴다.
 
-const HHMM = /^([01]\d|2[0-3]):([0-5]\d)$/;
+import { MAX_REMINDERS, REVIEWS_PER_REQUEST, isHhmm } from './limits';
 
-export function isHhmm(value: string): boolean {
-  return HHMM.test(value);
-}
+export { MAX_REMINDERS, REVIEWS_PER_REQUEST, isHhmm };
 
 export const SetupBody = z.object({
   code: z.string().trim().min(1).max(200),
@@ -30,12 +28,9 @@ export const ReviewItem = z.object({
 });
 export type ReviewItem = z.infer<typeof ReviewItem>;
 
-/** 답안은 한 번에 20건까지 보낸다 (설계서 §9.5) */
-export const REVIEWS_PER_REQUEST = 20;
 export const ReviewsBody = z.object({ reviews: z.array(ReviewItem).min(1).max(REVIEWS_PER_REQUEST) });
 export type ReviewsBody = z.infer<typeof ReviewsBody>;
 
-export const MAX_REMINDERS = 3;
 export const RemindersBody = z.object({
   times: z
     .array(z.string().refine(isHhmm, 'HH:MM 형식이어야 해요'))

@@ -32,17 +32,20 @@ jobs:
           [ -z "$CLOUDFLARE_API_TOKEN" ] && missing="$missing CLOUDFLARE_API_TOKEN"
           [ -z "$CLOUDFLARE_ACCOUNT_ID" ] && missing="$missing CLOUDFLARE_ACCOUNT_ID"
           if [ -n "$missing" ]; then
-            echo "::warning::GitHub 저장소 secret이 없어서 배포를 건너뜁니다:$missing (docs/mvp0-runbook.md 4단계)"
+            echo "::warning::GitHub 저장소 secret이 없어서 배포를 건너뜁니다:$missing (docs/runbook.md)"
             echo "skip=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           if grep -q 'moai.example.com' apps/worker/wrangler.jsonc || grep -q '00000000-0000-0000-0000-000000000000' apps/worker/wrangler.jsonc; then
-            echo "::error::apps/worker/wrangler.jsonc에 자리표시자가 남아 있어요. 도메인과 database_id를 채워 주세요 (docs/mvp0-runbook.md 1단계)."
+            echo "::error::apps/worker/wrangler.jsonc에 자리표시자가 남아 있어요. 도메인과 database_id를 채워 주세요 (docs/runbook.md)."
             exit 1
           fi
 
       - if: steps.check.outputs.skip != 'true'
         run: npm ci
+      - name: Build PWA
+        if: steps.check.outputs.skip != 'true'
+        run: npm run build
       - if: steps.check.outputs.skip != 'true'
         run: npm test
       - name: Apply D1 migrations

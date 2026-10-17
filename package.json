@@ -4,6 +4,7 @@
   "type": "module",
   "workspaces": [
     "apps/worker",
+    "apps/web",
     "packages/shared"
   ],
   "engines": {
@@ -18,6 +19,8 @@
     "db:migrate:remote": "npm run db:migrate:remote -w @moai/worker",
     "gen:vapid": "node scripts/gen-vapid.mjs",
     "gen:token": "node scripts/gen-token.mjs",
-    "replay": "node scripts/replay.mjs"
+    "replay": "node scripts/replay.mjs",
+    "build": "npm run build -w @moai/web",
+    "dev:web": "npm run dev -w @moai/web"
   }
 }

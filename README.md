@@ -6,22 +6,27 @@ claude.ai에서 공부하다 "정리해줘"라고 하면, 대화 중인 Claude�
 
 ## 지금 단계
 
-**MVP 0 (연결 검증)**: 코드 완료. Cloudflare·claude.ai 설정과 점검 순서는 [MVP 0 실행 가이드](docs/mvp0-runbook.md).
+**MVP 1 (나 혼자 루프)**: 코드 완료. 전환 순서와 평소 운영은 [운영 가이드](docs/runbook.md).
+
+- MCP 도구: `find_concepts`, `save_learning`, `get_learner_context`
+- PWA: 오늘, 복습(OX·객관식·빈칸), 저장 기록과 카드 끄기, 설정(알림, 커넥터 URL, 코치 지침)
+- 매분 Cron 알림, 오프라인 답안 큐
 
 ## 문서
 
 - [기획서](docs/service-plan.md)
 - [설계서](docs/design.md) (MVP별 계획, 데이터 모델, API)
-- [MVP 0 실행 가이드](docs/mvp0-runbook.md)
+- [운영 가이드](docs/runbook.md)
+- [MVP 0 실행 가이드](docs/mvp0-runbook.md) (끝난 단계의 기록)
 - [ADR 0001 런타임 결정](docs/adr/0001-runtime.md)
 - [이름 후보](docs/names.md)
 
 ## 구조
 
 ```
-apps/worker      Cloudflare Worker (MCP 서버, API, 매분 Cron)
-apps/web/public  PWA 정적 파일 (MVP 0은 점검 페이지 /spike)
-packages/shared  save_learning 스키마와 검사 규칙
+apps/worker      Cloudflare Worker (MCP 서버, REST API, 매분 Cron)
+apps/web         PWA (Vite + React). 빌드 결과 apps/web/dist를 Worker가 정적 파일로 제공한다
+packages/shared  zod 스키마와 규칙 (save_learning 입력, API 요청, 채점)
 scripts          키 생성, 부하 재생, 테스트 견본 생성
 ```
 
@@ -30,10 +35,10 @@ scripts          키 생성, 부하 재생, 테스트 견본 생성
 ```bash
 npm ci
 npm run typecheck
+npm run build        # PWA
 npm test
 
-cd apps/worker
-cp .dev.vars.example .dev.vars   # 값 채우기: npm run gen:token, npm run gen:vapid
+cp apps/worker/.dev.vars.example apps/worker/.dev.vars   # 값 채우기: npm run gen:token, npm run gen:vapid
 npm run db:migrate:local
-npm run dev                      # http://localhost:8787/spike
+npm run dev                                              # http://localhost:8787
 ```

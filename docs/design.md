@@ -1,9 +1,9 @@
 # 모아이 설계서 v1.1
 
-- 상태: MVP 0 코드 완료 (실행은 [MVP 0 실행 가이드](mvp0-runbook.md)), MVP 1~3은 설계
+- 상태: MVP 0 끝남, MVP 1 코드 완료 (운영은 [운영 가이드](runbook.md)), MVP 2~3은 설계
 - 날짜: 2026-10-17
-- 런타임: TypeScript, Cloudflare Worker 하나 (Free 플랜). [ADR 0001](adr/0001-runtime.md)에서 결정
-- 관련 문서: [기획서](service-plan.md), [이름 후보](names.md), [MVP 0 실행 가이드](mvp0-runbook.md)
+- 런타임: TypeScript, Cloudflare Worker 하나 (Workers Paid, MVP 0에서 무료 플랜 CPU 한도를 넘어 바꿨다). [ADR 0001](adr/0001-runtime.md)에서 결정
+- 관련 문서: [기획서](service-plan.md), [운영 가이드](runbook.md), [MVP 0 실행 가이드](mvp0-runbook.md), [이름 후보](names.md)
 - 패키지 버전은 2026-10-17 npm 기준이고, API 이름은 각 패키지의 타입 정의로 확인했다.
 
 서비스 이름은 **모아이**로 정했다. 코드 식별자는 `moai`다 (Worker 이름, D1 이름, 패키지 이름 `@moai/*`).
@@ -31,7 +31,7 @@ claude.ai에서 공부하다가 "정리해줘"라고 하면, 대화 중인 Claud
           └────────────┬───────────┘                        │
                        ▼                                    ▼
  ┌─────────────────────────────────────────────────────────────────────┐
- │ Cloudflare Worker `moai`   (app.<도메인>, Free 플랜)                   │
+ │ Cloudflare Worker `moai`   (app.<도메인>, Workers Paid)                │
  │  ├─ POST /mcp/u/:token   MCP 서버 (@modelcontextprotocol/server)      │
  │  ├─ /api/*               REST API (Hono)                              │
  │  ├─ 그 밖의 경로          PWA 정적 파일 (Workers Static Assets)         │
@@ -165,11 +165,22 @@ claude.ai에서 공부하다가 "정리해줘"라고 하면, 대화 중인 Claud
 
 **하지 않는 것**: 초대와 친구 계정, 설명하기 카드 출제(저장은 하고 잠가 둔다), 지식 지도, 스트릭·XP·리그, AI 채점, 붙여넣기 가져오기, 카드 수정.
 
+**상태 (2026-10-18)**: 코드와 테스트 완료. 실제 전환 순서는 [운영 가이드 1장](runbook.md). 만들면서 설계와 달라진 점:
+
+- MVP 0의 `ping` 도구는 뺐다. 도구는 `find_concepts`, `save_learning`, `get_learner_context` 3개다.
+- `learning_sessions`에 `counts`(JSON)를 더했다. 저장 기록 목록이 세션마다 카드·개념을 다시 세지 않게 한다.
+- 세션별·카드별 조회를 위해 인덱스를 더했다: `cards(session_id)`, `judgments(session_id)`, `followups(session_id)`, `review_logs(card_id, reviewed_at)`, `learning_sessions(user_id, created_at)`, `auth_sessions(expires_at)`, `mcp_tokens(user_id, revoked_at)`, `reminder_slots(user_id)`.
+- 로그인 전 `GET /api/setup`, 설정 화면용 `GET /api/push/config`, `GET /api/mcp-token`을 더했다.
+- `get_learner_context`의 `topic` 찾기: 주제 문장 안에 이름·별칭·key가 통째로 들어 있는 개념을 먼저 고르고, 없을 때만 낱말로 찾는다. "불변 객체와 방어적 복사"가 "깊은 복사"까지 끌어오지 않게 한다.
+- 저장 응답의 첫 복습 안내는 가장 가까운 알림 시각으로 말한다. 알림 시간이 없으면 설정하라고 안내한다.
+- 세션 쿠키는 하루에 한 번만 연장한다 (DB 쓰기를 줄인다).
+- `scripts/replay.mjs`는 기본으로 읽기만 한다. 실제 계정에 저장하는 측정은 `--save`를 붙일 때만 한다.
+
 **끝났다는 기준**
 
 - 14일 중 10일 이상 복습했다.
 - 저장한 다음 날 첫 알림이 정한 시각 1분 안에 온다.
-- 2주 동안 도구 호출 실패가 0건이고, CPU p99가 7ms 미만을 유지한다.
+- 2주 동안 도구 호출 실패가 0건이다. (CPU는 Workers Paid로 바꿔서 기준에서 뺐다. Error 1102가 없는지만 본다.)
 - 틀린 카드를 발견하면 그 자리에서 끌 수 있다.
 
 ### 2.3 MVP 2: 친구 베타 (3주)
@@ -210,7 +221,7 @@ claude.ai에서 공부하다가 "정리해줘"라고 하면, 대화 중인 Claud
 
 ---
 
-## 3. 플랫폼 제약 (Cloudflare Free 플랜)
+## 3. 플랫폼 제약 (Cloudflare Workers)
 
 | 제약 | 값 | 설계에 미치는 영향 |
 |---|---|---|
@@ -290,7 +301,7 @@ docs/
 | Workers 테스트 통합 | `@cloudflare/vitest-plugin` | 1.4.4 (`@cloudflare/vitest-pool-workers`가 이름을 바꾼 것. 옛 이름은 지원 종료) |
 | MCP 계약 테스트 | `@modelcontextprotocol/client` | 2.3.1 |
 | 타입 | `typescript`, `@cloudflare/workers-types` | 5.9.3, 5.20261016.1 |
-| PWA (MVP 1) | `vite-plugin-pwa` | 2.0.0. `vite`, `react` 버전은 MVP 1 착수 때 정한다 |
+| PWA (MVP 1) | `vite`, `@vitejs/plugin-react`, `react`·`react-dom`, `vite-plugin-pwa`, `workbox-*` | 8.3.4, 6.1.2, 19.3.1, 2.0.0, 7.4.1 |
 | 오프라인 저장 | `idb-keyval` | 6.3.0 |
 | 지식 지도 (MVP 2) | `d3-force` | 3.0.0 |
 | OAuth (MVP 3) | `@cloudflare/workers-oauth-provider` | 1.2.3 |
@@ -365,6 +376,8 @@ docs/
 - **하루의 경계는 04:00 KST**다. 새벽에 한 복습은 전날로 센다. SQL에서는 `date(ts/1000 + 5*3600, 'unixepoch')`다 (+9시간 −4시간).
 
 ### 5.2 MVP 1 스키마 (`migrations/0001_init.sql`)
+
+실제 마이그레이션은 아래에 `learning_sessions.counts`와 조회용 인덱스 몇 개를 더했다 (§2.2 상태).
 
 ```sql
 CREATE TABLE users (
@@ -765,7 +778,7 @@ export const SaveLearningInput = z.object({
 ### 7.1 공통 규칙
 
 - 인증: `__Host-sid` 쿠키 (§8.2). 로그인 전 엔드포인트는 따로 표시한다.
-- 상태를 바꾸는 요청(POST·PUT·PATCH·DELETE)은 `Origin`이 `APP_ORIGIN`과 같아야 한다 (CSRF 방어).
+- 상태를 바꾸는 요청(POST·PUT·PATCH·DELETE)은 `Origin`이 `APP_ORIGIN`과 같아야 한다 (CSRF 방어). `Origin`이 없어도 거절한다. 브라우저는 이런 요청에 항상 `Origin`을 붙인다.
 - 요청 본문은 `packages/shared`의 zod 스키마로 검증한다.
 - 오류는 `{ "error": { "code": "...", "message": "사용자에게 보여 줄 한국어 문장" } }` 형식이다.
 - 모든 쿼리는 세션의 `user_id`로 범위를 제한한다.
@@ -774,7 +787,7 @@ export const SaveLearningInput = z.object({
 
 | MVP | 메서드·경로 | 하는 일 |
 |---|---|---|
-| 1 | `POST /api/setup` (로그인 전) | `BOOTSTRAP_CODE`와 이름으로 오너 계정을 만든다. 오너가 이미 있으면 410 |
+| 1 | `GET /api/setup`, `POST /api/setup` (로그인 전) | 오너를 만들 수 있는지 확인, `BOOTSTRAP_CODE`와 이름으로 오너 계정을 만든다. 오너가 이미 있으면 410 |
 | 1 | `GET /api/me` | 내 정보, 설정 |
 | 1 | `GET /api/today` | 오늘 남은 카드 수, 예상 시간, 최근 저장 세션, 열린 질문 |
 | 1 | `GET /api/queue?size=8` | 오늘 복습할 카드 (§9.2). 기기에서 채점할 수 있게 정답도 함께 준다 |
@@ -783,8 +796,8 @@ export const SaveLearningInput = z.object({
 | 1 | `POST /api/cards/:id/suspend`, `/unsuspend` | 카드 끄기와 다시 켜기 |
 | 1 | `GET /api/reminders`, `PUT /api/reminders` | 알림 시간 (최대 3개) |
 | 1 | `POST /api/push/subscriptions`, `DELETE /api/push/subscriptions` | 푸시 구독 저장과 해제 (endpoint 기준) |
-| 1 | `POST /api/push/test` | 지금 테스트 알림 보내기 |
-| 1 | `POST /api/mcp-token`, `DELETE /api/mcp-token` | 커넥터 URL 발급·재발급, 취소 |
+| 1 | `GET /api/push/config`, `POST /api/push/test` | 구독에 쓸 VAPID 공개 키, 지금 테스트 알림 보내기 |
+| 1 | `GET /api/mcp-token`, `POST /api/mcp-token`, `DELETE /api/mcp-token` | 커넥터 URL이 있는지, 발급·재발급, 취소 |
 | 2 | `POST /api/join` (로그인 전) | 초대 코드와 이름으로 가입 |
 | 2 | `POST /api/login-codes`, `POST /api/login` (로그인 전) | 기기 로그인 코드 만들기와 쓰기 |
 | 2 | `POST /api/logout` | 현재 세션 끝내기 |
