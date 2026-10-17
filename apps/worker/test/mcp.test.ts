@@ -26,7 +26,10 @@ describe('MCP endpoint, raw 2025-era requests', () => {
       clientInfo: { name: 'contract-test', version: '1.0.0' },
     });
     expect(response.status).toBe(200);
-    expect((await readRpc(response)).result.serverInfo.name).toBe('moai');
+    const result = (await readRpc(response)).result;
+    expect(result.serverInfo.name).toBe('moai');
+    // 코치 지침이 없는 일반 대화에서도 언제 저장하는지 알 수 있도록 서버 공통 지침을 준다
+    expect(result.instructions).toContain('find_concepts로 기존 개념을 찾은 뒤 save_learning으로 저장한다');
   });
 
   it('lists the three tools with the schema zod produces, and cards have no rung field', async () => {

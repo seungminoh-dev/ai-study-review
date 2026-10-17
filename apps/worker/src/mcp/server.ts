@@ -13,7 +13,7 @@ import { learnerContext } from '../domain/learner-context';
 import { saveLearning } from '../domain/save-learning';
 import type { Env } from '../env';
 import { formatKstDate } from '../lib/kst';
-import { FIND_CONCEPTS_DESCRIPTION, GET_LEARNER_CONTEXT_DESCRIPTION, SAVE_LEARNING_DESCRIPTION } from './descriptions.ko';
+import { FIND_CONCEPTS_DESCRIPTION, GET_LEARNER_CONTEXT_DESCRIPTION, SAVE_LEARNING_DESCRIPTION, SERVER_INSTRUCTIONS } from './descriptions.ko';
 
 /** 요청마다 라우트가 authInfo.extra로 넘기는 값. 핸들러는 모듈 범위에서 한 번만 만든다. */
 export interface McpDeps {
@@ -75,7 +75,7 @@ function describeConcept(concept: FoundConcept): string {
 }
 
 function buildServer(deps: McpDeps): McpServer {
-  const server = new McpServer({ name: 'moai', version: '1.0.0' });
+  const server = new McpServer({ name: 'moai', version: '1.1.0' }, { instructions: SERVER_INSTRUCTIONS });
 
   server.registerTool(
     'find_concepts',

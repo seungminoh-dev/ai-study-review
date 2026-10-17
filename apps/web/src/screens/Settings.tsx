@@ -7,7 +7,7 @@ import { copyText } from '../copy';
 import { disablePush, enablePush, isStandalone, pushState, type PushState } from '../push';
 import { formatDateTime, useApi } from '../useApi';
 
-// 설정 (설계서 §12.1): 알림 시간, 알림 켜기·테스트, 커넥터 URL, 코치 지침 복사
+// 설정 (설계서 §12.1): 알림 시간, 알림 켜기·테스트, 커넥터 URL, 코치 지침 복사(선택)
 
 export function Settings() {
   return (
@@ -196,8 +196,11 @@ function CoachSection() {
   const [copied, setCopied] = useState<boolean | null>(null);
   return (
     <section>
-      <h2>코치 지침</h2>
-      <p className="muted small">claude.ai 면접 코치 프로젝트 지침에서 기존 "# 세션 정리" 부분을 지우고 아래를 붙여 넣으세요.</p>
+      <h2>코치 지침 (선택)</h2>
+      <p className="muted small">
+        지침이 없어도 커넥터를 켜 둔 채팅이면 어디서든 "모아이에 저장해줘"라고 하면 저장돼요. 면접 코치 프로젝트에서 과거에 틀린 지점부터 묻게 하고
+        싶을 때만 프로젝트 지침에 붙여 넣으세요. 기존 "# 세션 정리" 부분은 지워요.
+      </p>
       <textarea className="instructions" readOnly value={COACH_INSTRUCTIONS} rows={12} aria-label="코치 지침" />
       <div className="actions">
         <button type="button" className="button" onClick={() => void copyText(COACH_INSTRUCTIONS).then(setCopied)}>
