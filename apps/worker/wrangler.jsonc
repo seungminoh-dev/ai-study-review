@@ -25,6 +25,9 @@
   // MVP 0에서만 호출 로그를 켜서 호출별 CPU 시간을 본다. 로그의 URL에 SPIKE_TOKEN이 남으므로
   // MVP 1에서 끄고(invocation_logs: false) SPIKE_TOKEN은 지운다 (설계서 §4.3).
   "observability": { "enabled": true, "logs": { "invocation_logs": true } },
+  // Workers Paid의 기본 CPU 한도는 요청당 30초다. 코드가 잘못 돌아 CPU를 오래 쓰는 일을 막으려고 1초로 낮춘다.
+  // 지금까지 잰 최대값은 84ms다 (설계서 §2.1 실측 기록).
+  "limits": { "cpu_ms": 1000 },
   "vars": {
     // 위 routes와 같은 주소
     "APP_ORIGIN": "https://moai.smoh.dev",
