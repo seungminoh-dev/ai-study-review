@@ -80,7 +80,14 @@ function isPayloadConflict(error: unknown): boolean {
   return error instanceof Error && /UNIQUE constraint failed: learning_sessions\.user_id, learning_sessions\.payload_hash/.test(error.message);
 }
 
-export async function saveLearning(env: Env, userId: string, input: SaveLearningInput, now: number): Promise<SaveResult> {
+/** source는 붙여넣기 가져오기에서 'import'로 바꿔 넣는다. 도구 입력에는 'import'가 없다 */
+export async function saveLearning(
+  env: Env,
+  userId: string,
+  input: SaveLearningInput,
+  now: number,
+  source: SaveLearningInput['source'] | 'import' = input.source,
+): Promise<SaveResult> {
   const hash = await payloadHash(input);
   const findDuplicate = env.DB.prepare('SELECT id, summary FROM learning_sessions WHERE user_id = ?1 AND payload_hash = ?2').bind(userId, hash);
   const [duplicate, existingRows, reminder] = await env.DB.batch([
@@ -175,7 +182,7 @@ export async function saveLearning(env: Env, userId: string, input: SaveLearning
     env.DB.prepare(
       `INSERT INTO learning_sessions (id, user_id, source, topic, final_answer, key_terms, payload_hash, summary, counts, created_at)
        VALUES (?2, ?1, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)`,
-    ).bind(userId, sessionId, input.source, input.topic, input.final_answer ?? null, JSON.stringify(input.key_terms), hash, summary, JSON.stringify(counts), now),
+    ).bind(userId, sessionId, source, input.topic, input.final_answer ?? null, JSON.stringify(input.key_terms), hash, summary, JSON.stringify(counts), now),
     // INSERT ... SELECT에 ON CONFLICT를 붙일 때는 SELECT에 WHERE가 있어야 한다 (SQLite 문법)
     env.DB.prepare(
       `INSERT INTO concepts (id, user_id, key, name, aliases, search_text, domain, final_answer, created_at, updated_at)

@@ -3,6 +3,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { OfflineError, RequestError, errorMessage, request } from './api';
 import { Link, navigate, useLocation } from './router';
 import { Concept } from './screens/Concept';
+import { Import } from './screens/Import';
 import { Join } from './screens/Join';
 import { League } from './screens/League';
 import { Login } from './screens/Login';
@@ -108,6 +109,7 @@ export function App() {
   else if (path === '/map') screen = <MapScreen />;
   else if (conceptMatch) screen = <Concept key={conceptMatch[1]} conceptKey={conceptMatch[1]!} />;
   else if (path === '/league') screen = <League />;
+  else if (path === '/import') screen = <Import />;
   else if (path === '/settings') {
     screen = (
       <Settings
@@ -127,7 +129,7 @@ export function App() {
       {path === '/review' ? null : (
         <nav className="tabs" aria-label="화면">
           {TABS.map((tab) => {
-            const current = tab.href === '/' ? path === '/' || path === '/league' : tab.href === '/map' ? path === '/map' || path.startsWith('/concepts/') : path.startsWith(tab.href);
+            const current = tab.href === '/' ? path === '/' || path === '/league' : tab.href === '/map' ? path === '/map' || path.startsWith('/concepts/') : path.startsWith(tab.href) || (tab.href === '/sessions' && path === '/import');
             return (
               <Link key={tab.href} href={tab.href} className={current ? 'tab current' : 'tab'} aria-current={current ? 'page' : undefined}>
                 {tab.label}

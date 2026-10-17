@@ -1,4 +1,4 @@
-import type { AuthOptions, InviteSummary, LoginCode, McpTokenStatus, Me, Reminder } from '@moai/shared';
+import type { AuthOptions, InviteSummary, LoginCode, McpTokenStatus, Me, Reminder, UsageReport } from '@moai/shared';
 import { MAX_REMINDERS } from '@moai/shared/client';
 import { useEffect, useState, type FormEvent } from 'react';
 import { errorMessage, request } from '../api';
@@ -20,7 +20,12 @@ export function Settings({ me, onLogout }: { me: Me; onLogout: () => void }) {
       <GoalSection initial={me.daily_goal} />
       <ConnectorSection />
       <AccountSection me={me} onLogout={onLogout} />
-      {me.role === 'owner' ? <InviteSection /> : null}
+      {me.role === 'owner' ? (
+        <>
+          <InviteSection />
+          <UsageSection />
+        </>
+      ) : null}
       <CoachSection />
     </div>
   );
@@ -418,6 +423,49 @@ function GoalSection({ initial }: { initial: number }) {
         ))}
       </div>
       {message ? <Status text={message.text} tone={message.tone} /> : null}
+    </section>
+  );
+}
+
+const usd = (value: number) => `$${value.toFixed(2)}`;
+
+/** 관리자 사용량 (설계서 §11.5): 이번 달 서버 AI 비용. 단가는 보수적으로 센 값이고, 실제 청구는 Anthropic Console에서 본다 */
+function UsageSection() {
+  const { data, error } = useApi<UsageReport>('/admin/usage');
+  if (error) return null;
+  if (!data) return null;
+  return (
+    <section>
+      <h2>AI 사용량 (이번 달)</h2>
+      <p className="small">
+        {usd(data.total_usd)} / 한도 {usd(data.monthly_cap_usd)} · 한 사람 한도 {usd(data.user_cap_usd)}
+      </p>
+      <p className="muted small">코드에 둔 단가로 넉넉히 센 값이에요. 실제 청구는 Anthropic Console에서 확인하세요.</p>
+      {data.by_user.length > 0 ? (
+        <ul className="list">
+          {data.by_user.map((row) => (
+            <li key={row.name}>
+              {row.name} · {usd(row.usd)} · {row.calls}번
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="muted small">아직 쓴 사람이 없어요.</p>
+      )}
+      {data.by_model.map((row) => (
+        <p key={row.model} className="muted small">
+          {row.model}: {row.calls}번, 입력 {row.input_tokens.toLocaleString()} · 출력 {row.output_tokens.toLocaleString()} 토큰, 1번에 평균 {usd(row.usd / Math.max(1, row.calls))}
+        </p>
+      ))}
+      {data.jobs.some((job) => job.status === 'failed') ? (
+        <p className="muted small">
+          실패:{' '}
+          {data.jobs
+            .filter((job) => job.status === 'failed')
+            .map((job) => `${job.kind} ${job.error ?? ''} ${job.n}건`)
+            .join(', ')}
+        </p>
+      ) : null}
     </section>
   );
 }

@@ -26,9 +26,9 @@ account.post('/login-codes', async (c) => {
   return c.json({ code: formatCode(code), expires_at: expiresAt } satisfies LoginCode, 201);
 });
 
-const requireOwner: MiddlewareHandler<AppEnv> = async (c, next) => {
+export const requireOwner: MiddlewareHandler<AppEnv> = async (c, next) => {
   const role = await c.env.DB.prepare('SELECT role FROM users WHERE id = ?1').bind(c.var.userId).first<string>('role');
-  if (role !== 'owner') return errorJson(403, 'owner_only', '오너만 초대할 수 있어요.');
+  if (role !== 'owner') return errorJson(403, 'owner_only', '오너만 할 수 있어요.');
   await next();
 };
 account.use('/invites', requireOwner);

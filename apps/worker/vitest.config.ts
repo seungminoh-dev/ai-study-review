@@ -24,6 +24,8 @@ export default defineConfig(async () => {
             BOOTSTRAP_CODE: 'test-bootstrap-code',
             GITHUB_CLIENT_ID: 'test-github-client',
             GITHUB_CLIENT_SECRET: 'test-github-secret',
+            ANTHROPIC_API_KEY: 'test-anthropic-key',
+            GRADER_MODEL: 'test-grader',
             VAPID_PUBLIC_KEY: vapid.publicKey,
             VAPID_PRIVATE_KEY: vapid.privateKey,
             VAPID_SUBJECT: 'mailto:test@example.com',

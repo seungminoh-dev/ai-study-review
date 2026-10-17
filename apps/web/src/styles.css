@@ -1012,3 +1012,25 @@ a.chip {
   color: var(--pen-text);
   font-weight: 700;
 }
+
+/* AI 채점 */
+.ai-button {
+  margin: 8px 0;
+  width: 100%;
+}
+
+.ai-result {
+  margin: 8px 0;
+}
+
+.ai-result q {
+  quotes: '“' '”';
+}
+
+.coach-question {
+  margin: 8px 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--pen-soft);
+  color: var(--text);
+}

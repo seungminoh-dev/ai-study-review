@@ -2,6 +2,7 @@ import type { QueueCard, QueueResponse, ReportReason, ReviewGrade } from '@moai/
 import { MAX_ELAPSED_MS, gradeAnswer } from '@moai/shared/client';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { OfflineError, errorMessage, request } from '../api';
+import { AiGrade } from '../cards/AiGrade';
 import { ExplainCard } from '../cards/ExplainCard';
 import { QuestionCard, choicesOf, type Choice } from '../cards/QuestionCard';
 import { cacheQueue, cachedQueue, enqueueReview, flushReviews, forgetAnswered, pendingCardIds, removeFromOutbox } from '../offline/store';
@@ -274,7 +275,12 @@ function Session({ initial, offline }: { initial: QueueCard[]; offline: boolean 
       ) : null}
       {card.type === 'explain' ? (
         <>
-          <ExplainCard key={`${card.id}-${index}`} card={card} onGrade={(grade, text) => void gradeExplain(grade, text)} />
+          <ExplainCard
+            key={`${card.id}-${index}`}
+            card={card}
+            onGrade={(grade, text) => void gradeExplain(grade, text)}
+            aiPanel={practice || offline ? undefined : (text, suggest) => <AiGrade cardId={card.id} text={text} onSuggest={suggest} />}
+          />
           {notice ? <p className="notice bad">{notice}</p> : null}
           {reportArea}
         </>

@@ -13,4 +13,11 @@ export interface Env {
   /** secret. GitHub OAuth 앱 (설계서 §8.4). 둘 다 없으면 GitHub 로그인을 감춘다 */
   GITHUB_CLIENT_ID?: string;
   GITHUB_CLIENT_SECRET?: string;
+  /** secret. 서버 LLM용 내 Console API 키 (설계서 §11.1). 없으면 AI 채점과 가져오기를 감춘다 */
+  ANTHROPIC_API_KEY?: string;
+  /** secret. 채점·가져오기에 쓸 모델 ID */
+  GRADER_MODEL?: string;
+  /** 사용자별·전체 이번 달 한도 (달러). 기본 6, 90 */
+  LLM_USER_CAP_USD?: string;
+  LLM_MONTHLY_CAP_USD?: string;
 }
