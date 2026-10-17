@@ -133,7 +133,7 @@ claude.ai에서 공부하다가 "정리해줘"라고 하면, 대화 중인 Claud
 |---|---|
 | 1 | 통과. 웹 claude.ai에서 ping 응답 |
 | 2 | Android 앱 프로젝트 대화에서 통과 (개념 6개, 카드 15장 저장). 친구 Pro 계정과 새 Projects 베타 여부는 아직 |
-| 3 | 수정 후 CPU는 아직 못 쟀다 |
+| 3 | **실제 경로에서 넘는다.** 커넥터를 거친 IAD·2026-07-28 요청(예시 크기)은 `tools/call save_learning` 중간값 16ms·최대 32ms(5건), `server/discover` 중간값 5ms·최대 25ms, `ping` 4~5ms. replay(2025-06-18, 가장 큰 페이로드, 몰아서 보냄)는 `tools/list` 중간값 2ms·최대 14ms, `save_learning` 중간값 4ms·최대 12ms. 1102는 없었다. 실제 호출은 띄엄띄엄 와서 거의 매번 막 뜬 isolate가 받고, replay는 몰아서 보내 데워진 isolate가 받는다. `save_learning`의 벽시계 시간은 약 0.6초(IAD → APAC D1) |
 | 4 | claude.ai(웹·폰)는 **2026-07-28** 방식이다. 도구 호출 한 번이 `server/discover` → `tools/call` 두 요청이고, tools/list는 매번 보내지 않는다. 요청은 **IAD**(미국 동부) 데이터센터로 들어온다. replay(로컬, 2025-06-18 방식)는 NRT로 들어온다 |
 | 5 | Android 푸시 도착. 지연 57초는 거의 다 Cron 대기다. "1분 뒤"는 초 단위 시각이라 다음 매분 Cron까지 최대 60초를 기다린다. 실제 복습 알림은 HH:MM에 맞춰 예약하므로 몇 초 안에 간다. 사용자가 iPhone을 쓰지 않아 iPhone은 친구 기기로 MVP 2 전에 확인한다 |
 | 6 | 통과. 존 설정을 마친 뒤 1, 2가 됐다 |
