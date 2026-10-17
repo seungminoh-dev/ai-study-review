@@ -1,7 +1,7 @@
 import { REVIEWS_PER_REQUEST } from '@moai/shared/client';
 import type { QueueCard, ReviewItem } from '@moai/shared';
 import { createStore, get, set, update } from 'idb-keyval';
-import { request } from '../api';
+import { RequestError, request } from '../api';
 
 // 오프라인 답안 큐 (설계서 §9.5). 답은 먼저 IndexedDB에 넣고, 보내지면 지운다. 화면은 네트워크를 기다리지 않는다.
 
@@ -14,9 +14,13 @@ export async function enqueueReview(review: ReviewItem): Promise<void> {
   void flushReviews();
 }
 
-export async function pendingReviews(): Promise<number> {
-  return ((await get<ReviewItem[]>(OUTBOX, store)) ?? []).length;
+/** 아직 서버에 보내지 못한 답의 카드 id */
+export async function pendingCardIds(): Promise<Set<string>> {
+  return new Set(((await get<ReviewItem[]>(OUTBOX, store)) ?? []).map((item) => item.card_id));
 }
+
+/** 다시 보내도 받아 주지 않을 응답. 이런 묶음은 버려야 뒤의 답이 막히지 않는다 */
+const isPermanent = (error: unknown) => error instanceof RequestError && (error.status === 400 || error.status === 413);
 
 let flushing: Promise<void> | null = null;
 
@@ -28,7 +32,12 @@ export function flushReviews(): Promise<void> {
         const items = (await get<ReviewItem[]>(OUTBOX, store)) ?? [];
         if (items.length === 0) return;
         const batch = items.slice(0, REVIEWS_PER_REQUEST);
-        await request('/reviews', { method: 'POST', json: { reviews: batch } });
+        try {
+          await request('/reviews', { method: 'POST', json: { reviews: batch } });
+        } catch (error) {
+          if (!isPermanent(error)) throw error;
+          console.warn('답안 묶음을 서버가 받지 않아서 버렸어요', error);
+        }
         const sent = new Set(batch.map((item) => item.id));
         await update<ReviewItem[]>(OUTBOX, (current) => (current ?? []).filter((item) => !sent.has(item.id)), store);
       }
@@ -55,7 +64,7 @@ export async function cacheQueue(cards: QueueCard[]): Promise<void> {
 export async function cachedQueue(): Promise<QueueCard[]> {
   const cached = await get<CachedQueue>(QUEUE, store);
   if (!cached || Date.now() - cached.saved_at > 12 * 60 * 60 * 1000) return [];
-  const answered = new Set(((await get<ReviewItem[]>(OUTBOX, store)) ?? []).map((item) => item.card_id));
+  const answered = await pendingCardIds();
   return cached.cards.filter((card) => !answered.has(card.id));
 }
 

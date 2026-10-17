@@ -22,9 +22,9 @@ export type SaveResult =
   | { ok: false; problems: string[] }
   | { ok: true; duplicate: boolean; session_id: string; summary: string; counts: SaveCounts | null };
 
-/** 같은 내용이면 같은 해시가 나오도록 키를 정렬하고 공백을 정리한다 */
+/** 같은 내용이면 같은 해시가 나오도록 키를 정렬하고 앞뒤 공백을 지운다. 안쪽 공백은 코드 들여쓰기일 수 있어서 그대로 둔다 */
 function canonical(value: unknown): unknown {
-  if (typeof value === 'string') return value.trim().replace(/\s+/g, ' ');
+  if (typeof value === 'string') return value.trim();
   if (Array.isArray(value)) return value.map(canonical);
   if (value && typeof value === 'object') {
     return Object.fromEntries(
@@ -114,7 +114,9 @@ export async function saveLearning(env: Env, userId: string, input: SaveLearning
   const conceptRows = new Map<string, Record<string, unknown>>();
   const upsertConcept = (key: string, name: string, aliases: string[], domain: string | null, finalAnswer: string | null) => {
     const old = existing.get(key);
-    const mergedAliases = [...new Set([...(old ? parseAliases(old.aliases) : []), ...aliases])].slice(0, 10);
+    // 이름이 바뀌면 옛 이름을 별칭으로 남겨서, 옛 이름으로도 찾을 수 있게 한다
+    const renamed = old && old.name !== name ? [old.name] : [];
+    const mergedAliases = [...new Set([...renamed, ...(old ? parseAliases(old.aliases) : []), ...aliases])].filter((alias) => alias !== name).slice(0, 10);
     const sessionFinal = explainKeys.has(key) && !old?.final_answer ? (input.final_answer ?? null) : null;
     conceptRows.set(key, {
       id: old?.id ?? crypto.randomUUID(),

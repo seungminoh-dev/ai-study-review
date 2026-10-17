@@ -110,6 +110,24 @@ describe('MCP endpoint, raw 2025-era requests', () => {
     expect(JSON.parse(aliases as string)).toEqual(['deep copy']);
   });
 
+  it('keeps the old name searchable when a concept is renamed', async () => {
+    await callTool(url, 'save_learning', example);
+    await callTool(url, 'save_learning', {
+      topic: '이름 바꾸기',
+      concepts: [{ key: 'deep-copy', name: 'Deep copy' }],
+      cards: [{ type: 'ox', concept: 'deep-copy', prompt: '깊은 복사는 내부 객체도 새로 만든다.', answer: 'O', explain: '참조만 복사하면 얕은 복사다.' }],
+    });
+    const result = await callTool(url, 'find_concepts', { query: '깊은 복사' });
+    expect(result.structuredContent.concepts).toMatchObject([{ key: 'deep-copy', name: 'Deep copy', aliases: ['깊은 복사'] }]);
+  });
+
+  it('treats a change inside code as new content', async () => {
+    await callTool(url, 'save_learning', example);
+    const fixed = json(example);
+    fixed.cards[0].code = fixed.cards[0].code.replace('\n', '\n    ');
+    expect((await callTool(url, 'save_learning', fixed)).structuredContent.duplicate).toBe(false);
+  });
+
   it('saves the largest fixture', async () => {
     const result = await callTool(url, 'save_learning', max);
     expect(result.isError).toBeFalsy();

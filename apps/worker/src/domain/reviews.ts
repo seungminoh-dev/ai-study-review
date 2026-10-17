@@ -14,7 +14,14 @@ interface CardRow extends FsrsFields, LadderCard {
  * 이미 기록한 id는 건너뛰고, 같은 카드의 답은 시각 순으로 이어서 채점한다.
  * 카드 갱신, 기록, 사다리 잠금 해제를 한 번의 batch(트랜잭션)로 쓴다.
  */
-export async function recordReviews(env: Env, userId: string, reviews: readonly ReviewItem[], now: number): Promise<ReviewsResponse> {
+export async function recordReviews(
+  env: Env,
+  userId: string,
+  items: readonly ReviewItem[],
+  now: number,
+): Promise<Omit<ReviewsResponse, 'rejected'>> {
+  // 같은 요청 안에 같은 id가 두 번 있어도 한 번만 채점한다
+  const reviews = [...new Map(items.map((review) => [review.id, review])).values()];
   const ids = JSON.stringify(reviews.map((review) => review.id));
   const cardIds = JSON.stringify([...new Set(reviews.map((review) => review.card_id))]);
   const [existing, cards] = await env.DB.batch([
@@ -88,31 +95,46 @@ export async function recordReviews(env: Env, userId: string, reviews: readonly 
     }
     await env.DB.batch(statements);
   }
-  return { recorded: logs.length, skipped: reviews.length - logs.length, unlocked: unlock.length };
+  return { recorded: logs.length, skipped: items.length - logs.length, unlocked: unlock.length };
 }
 
-/** 카드를 끄고, 그 개념의 사다리를 다시 검사한다. 맨 아래 카드를 끄면 다음 단계가 열린다. */
+/**
+ * 카드를 끄거나 다시 켠다.
+ * 끄면 그 개념의 사다리를 다시 검사한다. 맨 아래 카드를 끄면 다음 단계가 열린다.
+ * 다시 켜면 사다리를 따른다: 지금 열린 단계 이하면 active, 더 높으면 locked로 돌아간다. 설명하기는 언제나 locked다.
+ */
 export async function setCardSuspended(env: Env, userId: string, cardId: string, suspended: boolean, now: number): Promise<boolean> {
-  const update = suspended
-    ? "UPDATE cards SET status = 'suspended' WHERE id = ?1 AND user_id = ?2"
-    : "UPDATE cards SET status = CASE WHEN type = 'explain' THEN 'locked' ELSE 'active' END WHERE id = ?1 AND user_id = ?2 AND status = 'suspended'";
-  const [changed, cards] = await env.DB.batch([
-    env.DB.prepare(update).bind(cardId, userId),
-    env.DB.prepare(
-      'SELECT id, concept_id, rung, status, stability FROM cards WHERE user_id = ?2 AND concept_id = (SELECT concept_id FROM cards WHERE id = ?1 AND user_id = ?2)',
-    ).bind(cardId, userId),
-  ]);
-  if (changed!.meta.changes === 0) {
-    const exists = await env.DB.prepare('SELECT 1 FROM cards WHERE id = ?1 AND user_id = ?2').bind(cardId, userId).first();
-    return exists !== null;
+  const { results } = await env.DB.prepare(
+    'SELECT id, concept_id, rung, status, stability, type FROM cards WHERE user_id = ?2 AND concept_id = (SELECT concept_id FROM cards WHERE id = ?1 AND user_id = ?2)',
+  )
+    .bind(cardId, userId)
+    .all<LadderCard & { type: string }>();
+  const target = results.find((card) => card.id === cardId);
+  if (!target) return false;
+
+  const others = results.filter((card) => card.id !== cardId);
+  let status: string;
+  if (suspended) {
+    status = 'suspended';
+  } else if (target.status !== 'suspended') {
+    return true;
+  } else if (target.type === 'explain') {
+    status = 'locked';
+  } else {
+    const open = others.filter((card) => card.status === 'active').reduce((max, card) => Math.max(max, card.rung), 0);
+    status = target.rung <= open ? 'active' : 'locked';
   }
-  const unlock = cardsToUnlock(cards!.results as unknown as LadderCard[]);
+  const cards = [...others, { ...target, status }];
+  // 잠긴 채로 돌아왔거나 맨 아래 카드를 껐으면, 사다리 규칙으로 열 단계를 다시 고른다
+  const unlock = cardsToUnlock(cards);
+  const statements = [env.DB.prepare('UPDATE cards SET status = ?3 WHERE id = ?1 AND user_id = ?2').bind(cardId, userId, status)];
   if (unlock.length > 0) {
-    await env.DB.prepare(
-      "UPDATE cards SET status = 'active', due = ?3 WHERE user_id = ?1 AND status = 'locked' AND id IN (SELECT value FROM json_each(?2))",
-    )
-      .bind(userId, JSON.stringify(unlock), now)
-      .run();
+    statements.push(
+      env.DB.prepare(
+        "UPDATE cards SET status = 'active', due = ?3 WHERE user_id = ?1 AND status = 'locked' AND id IN (SELECT value FROM json_each(?2))",
+      ).bind(userId, JSON.stringify(unlock), now),
+    );
   }
+  await env.DB.batch(statements);
   return true;
 }

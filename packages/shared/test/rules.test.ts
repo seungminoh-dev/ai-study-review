@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { RemindersBody, ReviewsBody, estimateMinutes, gradeAnswer, normalizeSearch, searchTerms, searchText } from '../src';
+import { PushSubscriptionBody, RemindersBody, ReviewItem, ReviewsBody, estimateMinutes, gradeAnswer, normalizeSearch, searchTerms, searchText } from '../src';
 
 describe('gradeAnswer (설계서 §9.3)', () => {
   it('maps on-device results to FSRS grades', () => {
@@ -33,11 +33,23 @@ describe('concept search normalization (설계서 §6.6)', () => {
 });
 
 describe('API bodies', () => {
-  it('accepts up to 20 answers with UUIDs', () => {
-    const review = { id: '3b241101-e2bb-4255-8caf-4136c566a962', card_id: '1f0e5b1a-7c3d-4e2f-9a8b-6c5d4e3f2a1b', grade: 3, reviewed_at: 1_760_000_000_000 };
+  const review = { id: '3b241101-e2bb-4255-8caf-4136c566a962', card_id: '1f0e5b1a-7c3d-4e2f-9a8b-6c5d4e3f2a1b', grade: 3, reviewed_at: 1_760_000_000_000 };
+
+  it('accepts up to 20 answers per request', () => {
     expect(ReviewsBody.safeParse({ reviews: [review] }).success).toBe(true);
     expect(ReviewsBody.safeParse({ reviews: Array(21).fill(review) }).success).toBe(false);
-    expect(ReviewsBody.safeParse({ reviews: [{ ...review, grade: 5 }] }).success).toBe(false);
+  });
+
+  it('checks each answer, clamping a long think time instead of rejecting it', () => {
+    expect(ReviewItem.safeParse({ ...review, grade: 5 }).success).toBe(false);
+    expect(ReviewItem.parse({ ...review, elapsed_ms: 5 * 60 * 60 * 1000 }).elapsed_ms).toBe(60 * 60 * 1000);
+    expect(ReviewItem.parse({ ...review, elapsed_ms: 1234.6 }).elapsed_ms).toBe(1235);
+  });
+
+  it('only accepts push keys of the right size', () => {
+    const endpoint = 'https://push.example/x';
+    expect(PushSubscriptionBody.safeParse({ endpoint, keys: { p256dh: 'A'.repeat(87), auth: 'B'.repeat(22) } }).success).toBe(true);
+    expect(PushSubscriptionBody.safeParse({ endpoint, keys: { p256dh: 'AAAA', auth: 'B'.repeat(22) } }).success).toBe(false);
   });
 
   it('accepts up to three distinct HH:MM reminder times', () => {

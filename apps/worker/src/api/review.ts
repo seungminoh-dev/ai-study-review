@@ -1,4 +1,4 @@
-import { ReviewsBody, estimateMinutes, type Me, type OpenFollowup, type QueueResponse, type SessionSummary, type TodayResponse } from '@moai/shared';
+import { ReviewItem, ReviewsBody, estimateMinutes, type Me, type OpenFollowup, type QueueResponse, type SessionSummary, type TodayResponse } from '@moai/shared';
 import { Hono } from 'hono';
 import type { AppEnv } from '../context';
 import { countReviewedToday, loadTodayQueue } from '../domain/queue';
@@ -55,5 +55,13 @@ review.get('/queue', async (c) => {
 review.post('/reviews', async (c) => {
   const body = await readJson(c, ReviewsBody);
   if (body instanceof Response) return body;
-  return c.json(await recordReviews(c.env, c.var.userId, body.reviews, Date.now()));
+  const valid: ReviewItem[] = [];
+  for (const item of body.reviews) {
+    const parsed = ReviewItem.safeParse(item);
+    if (parsed.success) valid.push(parsed.data);
+  }
+  const rejected = body.reviews.length - valid.length;
+  if (rejected > 0) console.log(JSON.stringify({ event: 'reviews_rejected', user_id: c.var.userId, rejected }));
+  const result = valid.length > 0 ? await recordReviews(c.env, c.var.userId, valid, Date.now()) : { recorded: 0, skipped: 0, unlocked: 0 };
+  return c.json({ ...result, rejected });
 });

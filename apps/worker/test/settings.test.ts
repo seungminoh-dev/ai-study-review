@@ -59,6 +59,19 @@ describe('push subscriptions', () => {
     expect((await api(user, '/push/test', { method: 'POST' })).status).toBe(409);
   });
 
+  it('counts a subscription it cannot encrypt for as a failure instead of crashing', async () => {
+    await env.DB.prepare("INSERT INTO push_subscriptions (id, user_id, endpoint, p256dh, auth, created_at) VALUES (?1, ?2, 'https://push.example/bad', 'AAAA', 'BBBB', 0)")
+      .bind(crypto.randomUUID(), user.id)
+      .run();
+    expect(await (await api(user, '/push/test', { method: 'POST' })).json()).toEqual({ sent: 0, failed: 1 });
+    expect(await env.DB.prepare('SELECT fail_count FROM push_subscriptions WHERE user_id = ?1').bind(user.id).first('fail_count')).toBe(1);
+  });
+
+  it('rejects push keys of the wrong size', async () => {
+    const subscription = await fakeSubscription();
+    expect((await api(user, '/push/subscriptions', { method: 'POST', json: { ...subscription, keys: { ...subscription.keys, p256dh: 'AAAA' } } })).status).toBe(400);
+  });
+
   it('only accepts https push endpoints', async () => {
     const subscription = await fakeSubscription('http://push.example/x');
     expect((await api(user, '/push/subscriptions', { method: 'POST', json: subscription })).status).toBe(400);

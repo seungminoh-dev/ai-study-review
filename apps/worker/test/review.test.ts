@@ -54,9 +54,9 @@ describe('today and queue', () => {
     const { cards } = (await (await api(user, '/queue')).json()) as QueueResponse;
     const reviews = cards.map((card) => answer(card.id, 3));
     const first = await api(user, '/reviews', { method: 'POST', json: { reviews } });
-    expect(await first.json()).toEqual({ recorded: 3, skipped: 0, unlocked: 0 });
+    expect(await first.json()).toEqual({ recorded: 3, skipped: 0, rejected: 0, unlocked: 0 });
     const again = await api(user, '/reviews', { method: 'POST', json: { reviews } });
-    expect(await again.json()).toEqual({ recorded: 0, skipped: 3, unlocked: 0 });
+    expect(await again.json()).toEqual({ recorded: 0, skipped: 3, rejected: 0, unlocked: 0 });
 
     const today = (await (await api(user, '/today')).json()) as TodayResponse;
     expect(today).toMatchObject({ remaining: 0, reviewed_today: 3 });
@@ -78,6 +78,50 @@ describe('today and queue', () => {
     expect(await loadTodayQueue(env, user.id, Date.now())).toHaveLength(1);
   });
 
+  it('keeps overdue reviews in the queue even with hundreds of old new cards', async () => {
+    const sessionId = await saveExample();
+    const now = Date.now();
+    const mcq = await cardOf('deep-copy', 'mcq');
+    await env.DB.prepare('UPDATE cards SET state = 2, stability = 3, difficulty = 5, reps = 3, last_review = ?2, due = ?3 WHERE id = ?1')
+      .bind(mcq.id, now - 4 * 86_400_000, now - 3_600_000)
+      .run();
+    const old = now - 20 * 86_400_000;
+    const statements = [];
+    for (let i = 0; i < 300; i++) {
+      const conceptId = crypto.randomUUID();
+      statements.push(
+        env.DB.prepare('INSERT INTO concepts (id, user_id, key, name, search_text, created_at, updated_at) VALUES (?1, ?2, ?3, ?3, ?3, ?4, ?4)').bind(conceptId, user.id, `k${i}`, old),
+        env.DB.prepare(
+          `INSERT INTO cards (id, user_id, concept_id, session_id, rung, type, prompt, answer, explain, status, due, stability, difficulty,
+                              elapsed_days, scheduled_days, learning_steps, reps, lapses, state, last_review, created_at)
+           VALUES (?1, ?2, ?3, ?4, 1, 'ox', 'p', 'O', 'e', 'active', ?5, 0, 0, 0, 0, 0, 0, 0, 0, NULL, ?5)`,
+        ).bind(crypto.randomUUID(), user.id, conceptId, sessionId, old + i),
+      );
+    }
+    for (let i = 0; i < statements.length; i += 50) await env.DB.batch(statements.slice(i, i + 50));
+    expect((await loadTodayQueue(env, user.id, now)).map((card) => card.id)).toContain(mcq.id);
+    await env.DB.prepare('UPDATE users SET daily_new_limit = 0 WHERE id = ?1').bind(user.id).run();
+    expect((await loadTodayQueue(env, user.id, now)).map((card) => card.id)).toEqual([mcq.id]);
+  });
+
+  it('records the good answers in a batch and drops only the malformed ones', async () => {
+    await saveExample();
+    const mcq = await cardOf('deep-copy', 'mcq');
+    const reviews = [{ ...answer(mcq.id, 3), elapsed_ms: 5 * 3_600_000 }, { ...answer(mcq.id, 3), grade: 9 }, 'not an answer'];
+    const response = await api(user, '/reviews', { method: 'POST', json: { reviews } });
+    expect(await response.json()).toEqual({ recorded: 1, skipped: 0, rejected: 2, unlocked: 0 });
+    const log = await env.DB.prepare('SELECT elapsed_ms FROM review_logs WHERE card_id = ?1').bind(mcq.id).first('elapsed_ms');
+    expect(log).toBe(3_600_000);
+  });
+
+  it('grades a card once when the same answer id appears twice in one request', async () => {
+    await saveExample();
+    const mcq = await cardOf('deep-copy', 'mcq');
+    const once = answer(mcq.id, 3);
+    expect(await recordReviews(env, user.id, [once, once], Date.now())).toMatchObject({ recorded: 1, skipped: 1 });
+    expect((await cardOf('deep-copy', 'mcq')).reps).toBe(1);
+  });
+
   it('rejects more than 20 answers at once', async () => {
     const reviews = Array.from({ length: 21 }, () => answer(crypto.randomUUID(), 3));
     expect((await api(user, '/reviews', { method: 'POST', json: { reviews } })).status).toBe(400);
@@ -88,7 +132,7 @@ describe('today and queue', () => {
     const card = await cardOf('deep-copy', 'mcq');
     const other = await newUser();
     const response = await api(other, '/reviews', { method: 'POST', json: { reviews: [answer(card.id, 3)] } });
-    expect(await response.json()).toEqual({ recorded: 0, skipped: 1, unlocked: 0 });
+    expect(await response.json()).toEqual({ recorded: 0, skipped: 1, rejected: 0, unlocked: 0 });
   });
 });
 
@@ -132,6 +176,16 @@ describe('card ladder', () => {
     expect((await loadTodayQueue(env, user.id, Date.now())).map((card) => card.id)).not.toContain(mcq.id);
 
     expect((await api(user, `/cards/${mcq.id}/unsuspend`, { method: 'POST' })).status).toBe(204);
+    expect((await cardOf('deep-copy', 'mcq')).status).toBe('active');
+  });
+
+  it('puts a locked card back to locked when it is turned on again', async () => {
+    await saveExample();
+    await addLockedCloze();
+    const cloze = await cardOf('deep-copy', 'cloze');
+    await api(user, `/cards/${cloze.id}/suspend`, { method: 'POST' });
+    await api(user, `/cards/${cloze.id}/unsuspend`, { method: 'POST' });
+    expect((await cardOf('deep-copy', 'cloze')).status).toBe('locked');
     expect((await cardOf('deep-copy', 'mcq')).status).toBe('active');
   });
 

@@ -66,11 +66,16 @@ export async function deliverDueReminders(env: Env, now: number): Promise<number
       console.log(JSON.stringify({ event: 'reminder_stale', user_id: slot.user_id, late_ms: now - slot.next_fire_at }));
       continue;
     }
-    const message = await dailyMessage(env, slot.user_id, now);
-    if (!message) continue;
-    const result = await pushToUser(env, slot.user_id, { ...message, tag: 'daily' }, now);
-    console.log(JSON.stringify({ event: 'reminder_sent', user_id: slot.user_id, ...result }));
-    delivered += result.sent;
+    try {
+      const message = await dailyMessage(env, slot.user_id, now);
+      if (!message) continue;
+      const result = await pushToUser(env, slot.user_id, { ...message, tag: 'daily' }, now);
+      console.log(JSON.stringify({ event: 'reminder_sent', user_id: slot.user_id, ...result }));
+      delivered += result.sent;
+    } catch (error) {
+      // 한 사람의 실패가 같은 실행의 다른 알림과 청소를 막지 않게 한다
+      console.error(JSON.stringify({ event: 'reminder_failed', user_id: slot.user_id, message: (error as Error).message }));
+    }
   }
   return delivered;
 }

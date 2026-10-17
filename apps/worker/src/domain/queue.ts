@@ -27,25 +27,30 @@ export interface QueueLimits {
 
 /**
  * 학습·재학습 카드 → 복습 카드(하루 상한까지) → 새 카드(하루 상한까지) 순서로 고른다.
- * 같은 개념은 하루 1장이다.
+ * 같은 개념은 하루 1장이다. 개념을 먼저 거르고 나서 상한을 센다. 상한을 먼저 자르면, 같은 개념의 카드가 몰려 있을 때
+ * 상한보다 적게 나온다.
  */
 export function selectQueue<T extends QueueCandidate>(candidates: readonly T[], limits: QueueLimits): T[] {
   const byDue = (a: T, b: T) => a.due - b.due;
   const learning = candidates.filter((card) => card.state === 1 || card.state === 3).sort(byDue);
-  const review = candidates
-    .filter((card) => card.state === 2)
-    .sort(byDue)
-    .slice(0, Math.max(0, limits.reviewLimit - limits.reviewsDone));
-  const fresh = candidates
-    .filter((card) => card.state === 0)
-    .sort((a, b) => a.created_at - b.created_at)
-    .slice(0, Math.max(0, limits.newLimit - limits.newSeen));
+  const review = candidates.filter((card) => card.state === 2).sort(byDue);
+  const fresh = candidates.filter((card) => card.state === 0).sort((a, b) => a.created_at - b.created_at);
 
+  let reviewsLeft = Math.max(0, limits.reviewLimit - limits.reviewsDone);
+  let newLeft = Math.max(0, limits.newLimit - limits.newSeen);
   const picked: T[] = [];
   const concepts = new Set<string>();
   for (const card of [...learning, ...review, ...fresh]) {
     if (concepts.has(card.concept_id)) continue;
     if (limits.reviewedConcepts.has(card.concept_id) && !limits.reviewedCards.has(card.id)) continue;
+    if (card.state === 2) {
+      if (reviewsLeft === 0) continue;
+      reviewsLeft -= 1;
+    }
+    if (card.state === 0) {
+      if (newLeft === 0) continue;
+      newLeft -= 1;
+    }
     concepts.add(card.concept_id);
     picked.push(card);
   }
@@ -64,20 +69,21 @@ interface CandidateRow extends QueueCandidate {
   explain: string | null;
 }
 
-/** 후보는 넉넉히 읽되 끝없이 읽지는 않는다 */
-const CANDIDATE_LIMIT = 300;
+/** 후보는 넉넉히 읽되 끝없이 읽지는 않는다. 종류마다 따로 읽어서, 밀린 새 카드가 복습 카드를 밀어내지 않게 한다 */
+const CANDIDATE_LIMIT = 200;
+
+const CANDIDATES = `SELECT c.id, c.concept_id, c.state, c.due, c.created_at, c.type, c.rung, c.prompt, c.code, c.answer, c.options, c.explain,
+                          k.key AS concept_key, k.name AS concept_name
+                     FROM cards c JOIN concepts k ON k.id = c.concept_id
+                    WHERE c.user_id = ?1 AND c.status = 'active' AND c.due <= ?2 AND c.type != 'explain'`;
 
 /** 오늘 복습할 카드 전체를 순서대로 돌려준다. 앞에서 원하는 장수만 쓴다. */
 export async function loadTodayQueue(env: Env, userId: string, now: number): Promise<QueueCard[]> {
   const dayStart = studyDayStart(now);
-  const [candidates, today, user] = await env.DB.batch([
-    env.DB.prepare(
-      `SELECT c.id, c.concept_id, c.state, c.due, c.created_at, c.type, c.rung, c.prompt, c.code, c.answer, c.options, c.explain,
-              k.key AS concept_key, k.name AS concept_name
-         FROM cards c JOIN concepts k ON k.id = c.concept_id
-        WHERE c.user_id = ?1 AND c.status = 'active' AND c.due <= ?2 AND c.type != 'explain'
-        ORDER BY c.due LIMIT ${CANDIDATE_LIMIT}`,
-    ).bind(userId, now),
+  const [learning, review, fresh, today, user] = await env.DB.batch([
+    env.DB.prepare(`${CANDIDATES} AND c.state IN (1, 3) ORDER BY c.due LIMIT ${CANDIDATE_LIMIT}`).bind(userId, now),
+    env.DB.prepare(`${CANDIDATES} AND c.state = 2 ORDER BY c.due LIMIT ${CANDIDATE_LIMIT}`).bind(userId, now),
+    env.DB.prepare(`${CANDIDATES} AND c.state = 0 ORDER BY c.created_at LIMIT ${CANDIDATE_LIMIT}`).bind(userId, now),
     env.DB.prepare(
       `SELECT r.card_id, c.concept_id, json_extract(r.prev_card, '$.state') AS prev_state
          FROM review_logs r JOIN cards c ON c.id = r.card_id
@@ -85,12 +91,13 @@ export async function loadTodayQueue(env: Env, userId: string, now: number): Pro
     ).bind(userId, dayStart),
     env.DB.prepare('SELECT daily_new_limit, daily_review_limit FROM users WHERE id = ?1').bind(userId),
   ]);
+  const candidates = [...learning!.results, ...review!.results, ...fresh!.results] as unknown as CandidateRow[];
 
   const logs = today!.results as { card_id: string; concept_id: string; prev_state: number }[];
   const limitsRow = user!.results[0] as { daily_new_limit: number; daily_review_limit: number } | undefined;
   const newCards = new Set(logs.filter((log) => log.prev_state === 0).map((log) => log.card_id));
   const reviewCards = new Set(logs.filter((log) => log.prev_state === 2).map((log) => log.card_id));
-  const picked = selectQueue(candidates!.results as unknown as CandidateRow[], {
+  const picked = selectQueue(candidates, {
     newLimit: limitsRow?.daily_new_limit ?? 10,
     reviewLimit: limitsRow?.daily_review_limit ?? 30,
     newSeen: newCards.size,

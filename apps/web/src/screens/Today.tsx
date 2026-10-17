@@ -1,4 +1,6 @@
 import type { TodayResponse } from '@moai/shared';
+import { useEffect, useState } from 'react';
+import { cachedQueue } from '../offline/store';
 import { Link } from '../router';
 import { formatDate, useApi } from '../useApi';
 
@@ -6,7 +8,27 @@ import { formatDate, useApi } from '../useApi';
 
 export function Today({ name }: { name: string }) {
   const { data, error } = useApi<TodayResponse>('/today');
-  if (error) return <div className="screen"><p className="notice bad">{error}</p></div>;
+  const [cached, setCached] = useState(0);
+  useEffect(() => {
+    if (error) void cachedQueue().then((cards) => setCached(cards.length));
+  }, [error]);
+  if (error) {
+    return (
+      <div className="screen">
+        <p className="notice bad">{error}</p>
+        {cached > 0 ? (
+          <>
+            <p className="muted">저장해 둔 카드 {cached}장으로 복습할 수 있어요. 답은 연결되면 보내요.</p>
+            <div className="bottom-actions">
+              <Link className="button primary" href="/review">
+                저장해 둔 카드로 시작
+              </Link>
+            </div>
+          </>
+        ) : null}
+      </div>
+    );
+  }
   if (!data) return <div className="center muted">불러오는 중…</div>;
 
   const empty = data.remaining === 0;

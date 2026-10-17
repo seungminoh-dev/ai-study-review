@@ -23,15 +23,17 @@ const MAX_FAILURES = 5;
 /** 폰이 꺼져 있어도 4시간 안에 켜지면 받는다. 빼면 라이브러리 기본값 60초로 보낸다 */
 const TTL_SECONDS = 4 * 60 * 60;
 
+/** 푸시 서비스의 응답 코드. 암호화나 네트워크에서 실패하면 0이다 (실패 한 번으로 센다) */
 async function send(env: Env, subscription: SubscriptionRow, data: PushData): Promise<number> {
-  const payload = await buildPushPayload(
-    { data: { ...data }, options: { ttl: TTL_SECONDS, urgency: 'normal' } },
-    { endpoint: subscription.endpoint, expirationTime: null, keys: { p256dh: subscription.p256dh, auth: subscription.auth } },
-    { subject: env.VAPID_SUBJECT, publicKey: env.VAPID_PUBLIC_KEY, privateKey: env.VAPID_PRIVATE_KEY },
-  );
   try {
+    const payload = await buildPushPayload(
+      { data: { ...data }, options: { ttl: TTL_SECONDS, urgency: 'normal' } },
+      { endpoint: subscription.endpoint, expirationTime: null, keys: { p256dh: subscription.p256dh, auth: subscription.auth } },
+      { subject: env.VAPID_SUBJECT, publicKey: env.VAPID_PUBLIC_KEY, privateKey: env.VAPID_PRIVATE_KEY },
+    );
     return (await fetch(subscription.endpoint, payload)).status;
-  } catch {
+  } catch (error) {
+    console.error(JSON.stringify({ event: 'push_failed', subscription_id: subscription.id, message: (error as Error).message }));
     return 0;
   }
 }

@@ -1,9 +1,9 @@
 import type { QueueCard, QueueResponse } from '@moai/shared';
-import { gradeAnswer } from '@moai/shared/client';
+import { MAX_ELAPSED_MS, gradeAnswer } from '@moai/shared/client';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { OfflineError, errorMessage, request } from '../api';
 import { QuestionCard, choicesOf, type Choice } from '../cards/QuestionCard';
-import { cacheQueue, cachedQueue, enqueueReview, forgetAnswered } from '../offline/store';
+import { cacheQueue, cachedQueue, enqueueReview, flushReviews, forgetAnswered, pendingCardIds } from '../offline/store';
 import { Link, navigate } from '../router';
 
 // 복습 세션 (설계서 §12.1, §12.2). 카드 한 장씩: 답 고르기 → 맞음·틀림과 해설 → 다음.
@@ -12,6 +12,9 @@ interface Result {
   card: QueueCard;
   correct: boolean;
 }
+
+/** 큐는 한 번에 20장까지 받는다 */
+const MAX_QUEUE = 20;
 
 type Load = { state: 'loading' } | { state: 'error'; message: string } | { state: 'ready'; cards: QueueCard[]; offline: boolean };
 
@@ -22,9 +25,13 @@ export function Review({ size }: { size: number }) {
     let cancelled = false;
     (async () => {
       try {
-        const queue = await request<QueueResponse>(`/queue?size=${size}`);
-        await cacheQueue(queue.cards);
-        if (!cancelled) setLoad({ state: 'ready', cards: queue.cards, offline: false });
+        // 밀린 답을 먼저 보낸다. 못 보낸 답의 카드는 서버가 아직 모르니 큐에서 뺀다
+        await flushReviews();
+        const pending = await pendingCardIds();
+        const queue = await request<QueueResponse>(`/queue?size=${Math.min(size + pending.size, MAX_QUEUE)}`);
+        const cards = queue.cards.filter((card) => !pending.has(card.id)).slice(0, size);
+        await cacheQueue(cards);
+        if (!cancelled) setLoad({ state: 'ready', cards, offline: false });
       } catch (error) {
         if (error instanceof OfflineError) {
           const cards = (await cachedQueue()).slice(0, size);
@@ -68,7 +75,11 @@ function Session({ initial, offline }: { initial: QueueCard[]; offline: boolean 
   const [picked, setPicked] = useState<Choice | null>(null);
   const [results, setResults] = useState<Result[]>([]);
   const [busy, setBusy] = useState(false);
+  /** "틀린 카드 다시 보기"는 연습이라 기록하지 않는다. 방금 정답을 봤으니 기록하면 재학습 단계를 건너뛰게 된다 */
+  const [practice, setPractice] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  /** 두 번 탭해도 한 번만 기록한다 */
+  const moving = useRef(false);
   const shownAt = useRef(Date.now());
   const answeredAt = useRef(0);
 
@@ -83,16 +94,18 @@ function Session({ initial, offline }: { initial: QueueCard[]; offline: boolean 
     setPicked(null);
     setNotice(null);
     setIndex((value) => value + 1);
+    moving.current = false;
   };
 
   const retry = (wrong: QueueCard[]) => {
     setPicked(null);
     setResults([]);
+    setPractice(true);
     setCards(wrong);
     setIndex(0);
   };
 
-  if (!card) return <Summary results={results} onRetry={retry} />;
+  if (!card) return <Summary results={results} practice={practice} onRetry={retry} />;
 
   const pick = (choice: Choice) => {
     answeredAt.current = Date.now();
@@ -101,17 +114,21 @@ function Session({ initial, offline }: { initial: QueueCard[]; offline: boolean 
   };
 
   const next = async (easy = false) => {
-    if (!picked) return;
-    const elapsed = answeredAt.current - shownAt.current;
-    await enqueueReview({
-      id: crypto.randomUUID(),
-      card_id: card.id,
-      grade: gradeAnswer({ correct: picked.correct, elapsedMs: elapsed, easy }),
-      response: picked.value,
-      elapsed_ms: Math.max(0, Math.round(elapsed)),
-      reviewed_at: answeredAt.current,
-    });
-    await forgetAnswered([card.id]);
+    if (!picked || moving.current) return;
+    moving.current = true;
+    // 앱을 켜 둔 채 자리를 비운 시간까지 세지 않도록 자른다
+    const elapsed = Math.min(Math.max(0, Math.round(answeredAt.current - shownAt.current)), MAX_ELAPSED_MS);
+    if (!practice) {
+      await enqueueReview({
+        id: crypto.randomUUID(),
+        card_id: card.id,
+        grade: gradeAnswer({ correct: picked.correct, elapsedMs: elapsed, easy }),
+        response: picked.value,
+        elapsed_ms: elapsed,
+        reviewed_at: answeredAt.current,
+      });
+      await forgetAnswered([card.id]);
+    }
     setResults((list) => [...list, { card, correct: picked.correct }]);
     advance();
   };
@@ -144,6 +161,7 @@ function Session({ initial, offline }: { initial: QueueCard[]; offline: boolean 
         </span>
       </header>
       {offline ? <p className="notice">오프라인이에요. 답은 저장해 두었다가 연결되면 보내요.</p> : null}
+      {practice ? <p className="notice">다시 보기는 연습이라 기록하지 않아요. 틀린 카드는 곧 다시 나와요.</p> : null}
       <QuestionCard key={`${card.id}-${index}`} card={card} choices={choices} picked={picked} onPick={pick} />
       {picked ? (
         <div className="answer-panel" aria-live="polite">
@@ -152,7 +170,7 @@ function Session({ initial, offline }: { initial: QueueCard[]; offline: boolean 
           {card.explain ? <p className="explain">{card.explain}</p> : null}
           {notice ? <p className="notice bad">{notice}</p> : null}
           <div className="actions">
-            {picked.correct ? (
+            {picked.correct && !practice ? (
               <button type="button" className="button" onClick={() => void next(true)}>
                 너무 쉬웠어요
               </button>
@@ -170,7 +188,7 @@ function Session({ initial, offline }: { initial: QueueCard[]; offline: boolean 
   );
 }
 
-function Summary({ results, onRetry }: { results: Result[]; onRetry: (cards: QueueCard[]) => void }) {
+function Summary({ results, practice, onRetry }: { results: Result[]; practice: boolean; onRetry: (cards: QueueCard[]) => void }) {
   const wrong = results.filter((result) => !result.correct).map((result) => result.card);
   const right = results.length - wrong.length;
   return (
@@ -192,7 +210,7 @@ function Summary({ results, onRetry }: { results: Result[]; onRetry: (cards: Que
           </button>
         </>
       ) : (
-        <p className="muted">다 맞혔어요. 다음 복습은 알림으로 알려 드릴게요.</p>
+        <p className="muted">{practice ? '다시 보기에서 다 맞혔어요.' : '다 맞혔어요. 다음 복습은 알림으로 알려 드릴게요.'}</p>
       )}
       <Link className="button" href="/">
         오늘 화면으로

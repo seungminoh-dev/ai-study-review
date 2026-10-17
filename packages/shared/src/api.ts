@@ -3,9 +3,9 @@ import type { JudgmentLabel } from './save-learning';
 
 // REST API(PWA용) 요청 스키마와 응답 타입 (설계서 §7). Worker와 PWA가 같이 쓴다.
 
-import { MAX_REMINDERS, REVIEWS_PER_REQUEST, isHhmm } from './limits';
+import { MAX_ELAPSED_MS, MAX_REMINDERS, REVIEWS_PER_REQUEST, isHhmm } from './limits';
 
-export { MAX_REMINDERS, REVIEWS_PER_REQUEST, isHhmm };
+export { MAX_ELAPSED_MS, MAX_REMINDERS, REVIEWS_PER_REQUEST, isHhmm };
 
 export const SetupBody = z.object({
   code: z.string().trim().min(1).max(200),
@@ -23,12 +23,21 @@ export const ReviewItem = z.object({
   grade: ReviewGrade,
   /** 고른 보기 글자 그대로 (ox는 'O'·'X') */
   response: z.string().max(2000).optional(),
-  elapsed_ms: z.int().min(0).max(60 * 60 * 1000).optional(),
+  /** 너무 크면 버리지 않고 MAX_ELAPSED_MS로 자른다 */
+  elapsed_ms: z
+    .number()
+    .min(0)
+    .transform((value) => Math.min(Math.round(value), MAX_ELAPSED_MS))
+    .optional(),
   reviewed_at: z.int().positive(),
 });
 export type ReviewItem = z.infer<typeof ReviewItem>;
 
-export const ReviewsBody = z.object({ reviews: z.array(ReviewItem).min(1).max(REVIEWS_PER_REQUEST) });
+/**
+ * 답안 묶음. 항목은 하나씩 검사해서 잘못된 것만 빼고 기록한다.
+ * 한 항목 때문에 묶음 전체를 거절하면, 기기의 outbox가 그 묶음을 영영 보내지 못한다.
+ */
+export const ReviewsBody = z.object({ reviews: z.array(z.unknown()).min(1).max(REVIEWS_PER_REQUEST) });
 export type ReviewsBody = z.infer<typeof ReviewsBody>;
 
 export const RemindersBody = z.object({
@@ -39,9 +48,15 @@ export const RemindersBody = z.object({
 });
 export type RemindersBody = z.infer<typeof RemindersBody>;
 
+const Base64Url = /^[A-Za-z0-9_-]+={0,2}$/;
+
 export const PushSubscriptionBody = z.object({
   endpoint: z.url({ protocol: /^https$/ }).max(2000),
-  keys: z.object({ p256dh: z.string().min(1).max(200), auth: z.string().min(1).max(100) }),
+  // p256dh는 P-256 공개 키 65바이트(base64url 87자), auth는 16바이트(22자)다
+  keys: z.object({
+    p256dh: z.string().regex(Base64Url).min(86).max(90),
+    auth: z.string().regex(Base64Url).min(21).max(25),
+  }),
 });
 export type PushSubscriptionBody = z.infer<typeof PushSubscriptionBody>;
 
@@ -145,7 +160,10 @@ export interface SessionDetail {
 
 export interface ReviewsResponse {
   recorded: number;
+  /** 이미 기록했거나 내 카드가 아니어서 건너뛴 수 */
   skipped: number;
+  /** 형식이 잘못돼서 버린 수 */
+  rejected: number;
   unlocked: number;
 }
 

@@ -38,6 +38,12 @@ describe('selectQueue (설계서 §9.2)', () => {
     expect(picked.map((item) => item.id)).toEqual(['c1', 'a1']);
   });
 
+  it('filters by concept before counting the daily limits', () => {
+    // 개념 5개에 카드가 3장씩 몰려 있어도, 새 카드 상한 10 안에서 5개념이 모두 나온다
+    const candidates = ['a', 'b', 'c', 'd', 'e'].flatMap((concept, i) => [0, 1, 2].map((n) => card(`${concept}${n}`, concept, 0, 0, i * 3 + n)));
+    expect(selectQueue(candidates, limits()).map((item) => item.id)).toEqual(['a0', 'b0', 'c0', 'd0', 'e0']);
+  });
+
   it('applies the daily limits after what was already done today', () => {
     const candidates = [card('r1', 'a', 2, 1), card('r2', 'b', 2, 2), card('n1', 'c', 0, 0), card('n2', 'd', 0, 0)];
     expect(selectQueue(candidates, limits({ reviewLimit: 2, reviewsDone: 1, newLimit: 1 })).map((item) => item.id)).toEqual(['r1', 'n1']);
