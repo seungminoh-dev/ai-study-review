@@ -105,13 +105,14 @@ Cloudflare Worker (무료)
 - AWS 계정을 첫 배포 전에 Paid 플랜으로 바꾸고, Budgets 알람을 $1로 건다.
 - Lambda를 VPC에 넣지 않는다.
 - Function URL과 스케줄은 `$LATEST`가 아니라 게시된 별칭(alias)을 가리키게 한다. SnapStart는 게시된 버전에만 적용된다.
-- Lambda Web Adapter의 SnapStart 훅 경로(`/_lwa/**`)는 인증 필터에서 빼야 한다. 막으면 스냅샷 생성이 실패한다.
+- Lambda Web Adapter의 SnapStart 훅은 기본값이 없다. `AWS_LWA_SNAPSTART_BEFORE_CHECKPOINT_PATH=/_lwa/before-checkpoint`, `AWS_LWA_SNAPSTART_AFTER_RESTORE_PATH=/_lwa/after-restore`처럼 직접 지정하고, 이 경로(`/_lwa/**`)는 인증 필터에서 뺀다. 훅이 2xx가 아닌 응답을 주면 스냅샷 생성이나 복원이 실패한다.
 - 스냅샷에 DB 연결이나 비밀값이 들어가지 않게 한다. 비밀값은 복원 후 처음 쓸 때 읽는다.
 - Supabase는 Supavisor transaction pooler(포트 6543)로 연결하고 `prepareThreshold=0`을 설정한다. Flyway 마이그레이션은 CI에서 돌린다.
 - 1분 틱의 비동기 호출 재시도는 0회로 둔다. 다음 틱이 재시도 역할을 한다.
 - LLM 응답 JSON은 structured outputs(`output_config.format`)로 받는다. 강제 `tool_choice`는 Sonnet 5.5와 Opus 5.5에서 400 에러가 난다.
+- 채점 비용은 thinking 토큰까지 넣어 잰다. Opus 5.5는 thinking을 끌 수 없어서 월 $100 한도를 넘을 수 있다.
 - 오래 걸리는 LLM 작업(붙여넣기 가져오기)은 작업 테이블에 넣고 틱이 처리한다. iPhone에서 PWA가 백그라운드로 가면 요청이 끊기기 때문이다.
-- Cloudflare에서 `/mcp` 경로는 Bot Fight Mode와 WAF 규칙에서 Anthropic IP 대역을 예외로 둔다. Worker 호출 로그에 토큰이 든 URL이 남지 않게 한다.
+- Cloudflare Free 플랜의 Bot Fight Mode는 경로별 예외가 안 되므로 존 전체에서 끈다. 아니면 IP Access 허용 규칙을 `160.79.104.0/24`~`160.79.111.0/24` 8개로 넣는다 (존 전체 적용). `/mcp` 경로는 WAF 커스텀 규칙에서 Anthropic IP 대역을 Skip 예외로 둔다. Worker 호출 로그에 토큰이 든 URL이 남지 않게 한다.
 
 ## Phase 0에서 확인할 것 (통과 기준)
 

@@ -65,8 +65,8 @@
 | 방식 | 공부하는 곳 | 추출 비용 | 친구 온보딩 | 판정 |
 |---|---|---|---|---|
 | **A. Remote MCP 커넥터** (claude.ai 프로젝트에 우리 서버를 커넥터로 추가) | 지금처럼 폰 claude.ai 앱 | 0 (사용자 구독) | 커넥터 URL 1개 추가 | **주력** |
-| B. Claude Code 플러그인 (skill + hook + 같은 MCP 서버) | 터미널, 또는 Claude Code 클라우드 세션 | 0 (사용자 구독) | 플러그인 설치 | 보조 |
-| C. 웹에 대화 붙여넣기 → 서버가 추출 | 어디든 | API 사용 (건당 수 센트 이하) | 없음 | 폴백 |
+| B. Claude Code 플러그인 (skill + hook, MCP는 claude.ai 커넥터를 그대로 씀) | 터미널 (클라우드 세션은 플러그인을 불러오지 않는다) | 0 (사용자 구독) | 플러그인 설치 | 보조 |
+| C. 웹에 대화 붙여넣기 → 서버가 추출 | 어디든 | API 사용 (건당 $0.003~0.12, 모델에 따라) | 없음 | 폴백 |
 | D. claude.ai 데이터 내보내기(zip) 일괄 가져오기 | 과거 대화 | API 사용 (Batch로 50% 할인) | 수동 | 초기 이관용 |
 
 ### 5.2 왜 "로컬 Claude Code에서 다 만들고 웹은 DB+UI만"이 아니라 A인가
@@ -76,7 +76,7 @@
 - 공부는 폰의 claude.ai 프로젝트에서 일어난다. Claude Code hook은 claude.ai 채팅 내용을 볼 수 없다. CLI만 쓰면 누워서 하던 공부를 책상으로 옮겨야 해서 P4와 충돌한다.
 - 사후 파싱보다 대화 중 추출이 정확하다. Claude는 자기가 내린 판정과 사용자가 막힌 지점을 이미 알고 있다.
 - 친구 온보딩이 쉽다. CLI 설치 대신 URL 하나만 추가하면 된다.
-- 참고: Claude Code는 데스크톱 전용이 아니다. Claude 앱과 웹에서 클라우드 세션으로도 돌고, 레포의 `.claude/` hook과 skill도 거기서 실행된다. 다만 코딩용 환경이라 코칭 대화에는 claude.ai 채팅이 더 자연스럽다. 그래서 B는 "터미널에서 기술 공부할 때"용 보조 경로로 둔다.
+- 참고: Claude Code는 데스크톱 전용이 아니다. Claude 앱과 웹에서 클라우드 세션으로도 돌고, 레포의 `.claude/`에 커밋한 hook과 skill도 거기서 실행된다 (플러그인은 불러오지 않는다). 다만 코딩용 환경이라 코칭 대화에는 claude.ai 채팅이 더 자연스럽다. 그래서 B는 "터미널에서 기술 공부할 때"용 보조 경로로 둔다.
 
 ### 5.3 시스템 구성 (서버리스, 제안)
 
@@ -97,7 +97,7 @@
                   ┌──────────────────────────────────────────┐
                   │ AWS Lambda (java25, SnapStart, VPC 없음)   │
                   │  Spring Boot 4.1 + Spring AI 2.0          │
-                  │  · stateless MCP 서버 (도구 4개)          │
+                  │  · stateless MCP 서버 (도구 3개 + 나중에 2개)│
                   │  · REST API · FSRS · Web Push 발송         │
                   │  · LLM 호출 (채점 / 폴백 추출)             │
                   └───────┬───────────────────────▲──────────┘
@@ -148,7 +148,6 @@ claude.ai가 MCP 서버에 요구하는 것:
 ```
 dwesaegim-plugin/
 ├── .claude-plugin/plugin.json
-├── .mcp.json                 # 같은 remote MCP 서버
 ├── skills/
 │   ├── coach/SKILL.md        # 지금 쓰는 코치 지침 이식 (/coach)
 │   └── capture/SKILL.md      # 현재 세션을 save_learning으로 저장 (/capture)
@@ -156,7 +155,7 @@ dwesaegim-plugin/
 ```
 
 - Stop hook은 입력의 `last_assistant_message`(문서 권장, `transcript_path`는 늦게 갱신될 수 있음)를 보고 코칭 흔적(`[틀림]` 등)은 있는데 저장한 적이 없으면 `{"decision": "block", "reason": "학습 내용을 /capture로 저장하라"}`를 돌려준다. `reason`은 사용자가 아니라 Claude에게 전달된다. 무한 반복을 막으려고 `stop_hook_active`가 true면 그냥 통과시킨다.
-- 친구가 Claude Code에 구독 계정으로 로그인하면 claude.ai에 추가한 커넥터가 자동으로 보인다. 플러그인 `.mcp.json`에 같은 URL을 넣으면 그쪽이 우선해서 커넥터를 가리므로, 플러그인에는 skill과 hook만 넣는 방안도 Phase 3에서 검토한다.
+- 플러그인에는 MCP 서버를 넣지 않는다. 친구가 Claude Code에 구독 계정으로 로그인하면 claude.ai에 추가한 커넥터가 자동으로 보인다. 플러그인 `.mcp.json`에 같은 URL을 넣으면 그쪽이 우선해서 커넥터를 가린다. 게다가 MCP 주소에 사용자별 비밀 토큰이 들어 있어서, 친구 모두가 받는 플러그인 하나에 고정 주소를 넣을 수도 없다.
 - 친구 설치: `/plugin marketplace add seungminoh-dev/ai-study-review` → `/plugin install dwesaegim`.
 
 ## 6. 카드
@@ -263,9 +262,9 @@ dwesaegim-plugin/
 | `cards` | id, concept_id, rung(1~3), type, prompt, answer, options(jsonb), explain, status(`active`/`suspended`), FSRS 필드(stability, difficulty, due, reps, lapses, state) |
 | `review_logs` | id, card_id, grade(1~4), response, elapsed_ms, reviewed_at |
 | `followups` | id, concept_id, question, resolved_at |
-| `sessions` | id, user_id, source(`claude.ai`/`claude-code`/`import`), topic, created_at |
+| `sessions` | id, user_id, source(`claude.ai`/`claude-code`/`import`), topic, final_answer, key_terms[], created_at |
 
-- 대화 원문은 저장하지 않는다. 구조화된 결과만 저장한다 (친구 데이터 신뢰 문제).
+- 대화 원문은 오래 저장하지 않는다. 붙여넣기 원문은 추출이 끝날 때까지만 `import_jobs.input`에 두고, 끝나면 바로 지운다. 그 밖에는 구조화된 결과만 저장한다 (친구 데이터 신뢰 문제).
 - "아직 안 배움(frontier)" 개념 = 카드는 없고 `followups`만 있는 개념. 지식 지도에서 점선으로 보인다.
 
 ## 8. 복습 스케줄링과 리마인드
@@ -299,16 +298,18 @@ dwesaegim-plugin/
 | 월 3,000회 (10명 × 하루 10회) | | **$1.2** | **$24** | **$48** |
 | 붙여넣기 추출 (폴백) | 입력 15K / 출력 3K 토큰 | $0.003 | $0.06 | $0.12 |
 | 월 200건 (10명 × 주 5건) | | **$0.6** | **$12** | **$24** |
-| **합계** | | **~$2** | **~$36** | **~$72** |
+| **합계 (thinking 제외)** | | **~$2** | **~$36** | **~$72** |
+| **합계 (thinking 포함 가정)** | 채점 +0.6K, 추출 +2K 출력 토큰 | **~$3** | **~$58** | **~$116 (초과)** |
 
 - 단가 기준: Haiku 5.5 $0.10/$0.50, Sonnet 5.5 $2/$10, Opus 5.5 $4/$20 (입력/출력, 100만 토큰당, 2026-10 기준).
 - 토큰 수는 가정이다. Phase 1에서 실제 사용량을 재서 다시 계산한다.
-- 어느 모델이든 한도 안에 들어간다. 다만 Opus 5.5는 여유가 적다. 그래서 같은 답변 20개로 채점 품질을 비교하기 전까지는 Haiku 5.5를 기본으로 쓴다 (결정 필요).
+- 세 모델 모두 기본으로 adaptive thinking이 켜져 있고, thinking 토큰은 출력 단가로 과금된다. Haiku 5.5와 Sonnet 5.5는 thinking을 끌 수 있지만, Opus 5.5는 끌 수 없고 effort만 낮출 수 있다. 그래서 thinking을 넣어 계산하면 Opus 5.5는 한도를 넘을 수 있다.
+- 같은 답변 20개로 thinking을 포함한 실제 비용과 채점 품질을 비교하기 전까지는 Haiku 5.5를 기본으로 쓴다 (결정 필요).
 - 채점 결과 JSON은 structured outputs(`output_config.format`)로 받는다. 도구 호출을 강제하는 방식(`tool_choice`)은 Sonnet 5.5와 Opus 5.5에서 400 에러가 난다.
 - 안전장치: 사용자별 월 한도(예: $5), 전체 한도($90에서 중단), Console 지출 한도, 채점 기준 프롬프트 캐싱. 과거 대화 일괄 가져오기는 Batch API(50% 할인)로 한다.
 - 채점 화면에 "AI 판정이며 틀릴 수 있어요" 안내를 넣는다 (Commercial Terms 요구 사항).
 
-### 10.2 인프라 (서버리스)
+### 10.2 인프라 (서버리스, A안 기준)
 
 | 구성 | 선택 | 예상 |
 |---|---|---|
@@ -342,9 +343,9 @@ dwesaegim-plugin/
 
 | 단계 | 기간 | 범위 | 끝났다는 기준 |
 |---|---|---|---|
-| **Phase 0: 검증** | 주말 1~2회 | 도구 1개짜리 Spring MCP 서버를 Lambda에 올리고 Worker를 거쳐 claude.ai 커스텀 커넥터로 붙인다. ① 폰 앱 프로젝트 대화와 친구의 Pro 계정에서 도구가 호출되는지 ② SnapStart 복원 p99가 3초 미만인지 ③ 토큰에서 꺼낸 사용자 ID가 도구 메서드까지 오는지 ④ 홈 화면 PWA에서 초대 가입과 푸시가 되는지 ⑤ Claude Code에서도 붙는지 확인한다. | 다 확인되면 진행. MCP가 막히면 C(붙여넣기)를 주력으로, Lambda가 막히면 ADR 0001의 B안으로 바꾼다. |
+| **Phase 0: 검증** | 주말 1~2회 | 도구 1개짜리 Spring MCP 서버를 Lambda에 올리고 Worker를 거쳐 claude.ai 커스텀 커넥터로 붙인다. ① 폰 앱 프로젝트 대화와 친구의 Pro 계정에서 도구가 호출되는지 ② SnapStart 복원 p99가 3초 미만인지 ③ 토큰에서 꺼낸 사용자 ID가 도구 메서드까지 오는지 ④ 홈 화면 PWA에서 초대 가입과 푸시가 되는지 ⑤ Claude Code에서도 붙는지 ⑥ 새 Projects 베타로 바뀐 프로젝트에서도 커넥터가 쓰이는지 확인한다. | 다 확인되면 진행. MCP가 막히면 C(붙여넣기)를 주력으로, Lambda가 막히면 ADR 0001의 B안으로 바꾼다. |
 | **Phase 1: 나 혼자** | 2주 | `find_concepts`/`save_learning`, 카드 3종(OX/객관식/빈칸), FSRS, 오늘의 복습 화면, 웹 푸시 | 14일 중 10일 이상 내가 복습함 |
-| **Phase 2: 친구 10명** | 2~3주 | 로그인, 사용자별 커넥터 URL, 지식 지도, 스트릭/XP/리그, 설명하기 카드 + AI 채점(쿼터), 붙여넣기 가져오기, 카드 신고/수정 | 아래 지표 |
+| **Phase 2: 친구 10명** | 2~3주 | 초대 코드 가입(친구용), 사용자별 커넥터 URL, 지식 지도, 스트릭/XP/리그, 설명하기 카드 + AI 채점(쿼터), 붙여넣기 가져오기, 카드 신고/수정 | 아래 지표 |
 | **Phase 3: 확장** | 이후 | Claude Code 플러그인, 채팅 복습 도구, 꼬리물기 체인 / 모의면접 모드, 질문 은행 공유, 데이터 내보내기 가져오기, 음성 설명 | |
 
 ## 13. 베타 성공 지표 (10명)
@@ -362,14 +363,14 @@ dwesaegim-plugin/
 |---|---|---|
 | 새 Projects 베타로 바뀐 프로젝트에서 커넥터를 못 씀 (보고가 있지만 확인 못 함) | 주력 경로가 막힘 | Phase 0에서 먼저 확인. 일반 대화에 코치 지침을 넣는 방법, 붙여넣기 폴백 |
 | Lambda 콜드 스타트 | 첫 호출이 느림 | SnapStart + 사전 준비(priming), 1분 틱으로 웜 유지. 도구 호출 한도 240초보다 훨씬 짧음 |
-| Cloudflare 봇 차단이 Anthropic 트래픽을 막음 | 커넥터 연결 실패 | `/mcp` 경로에서 Bot Fight Mode와 WAF 규칙의 예외로 `160.79.104.0/21` 지정 |
+| Cloudflare 봇 차단이 Anthropic 트래픽을 막음 | 커넥터 연결 실패 | Free 플랜의 Bot Fight Mode는 경로별 예외가 안 된다. 존 전체에서 끄거나, IP Access 허용 규칙을 `160.79.104.0/24`~`160.79.111.0/24` 8개로 넣는다 (/21은 입력 불가, 존 전체 적용). WAF 커스텀 규칙은 `/mcp` 경로에 Skip 예외를 둔다 |
 | 비밀 URL 토큰 유출 | 그 사람 학습 데이터가 노출됨 | 해시로만 저장, 로그에서 경로 가리기, 재발급 기능, Phase 3에 OAuth |
 | iOS 홈 화면 PWA의 로그인이나 푸시가 안 됨 | 친구 온보딩 실패 | 앱 안에서 초대 코드로 가입, Phase 0에서 실제 iPhone으로 확인 |
 | 틀린 카드가 반복 학습됨 | 오개념이 오히려 굳음 (가장 치명적) | 정답은 세션 확정 내용에서만, 신고하면 즉시 정지, 해설에 출처 세션 표시 |
 | 객관식 착각 (알아보기 ≠ 설명하기) | 면접에서 막힘 | 카드 사다리, 설명하기 단계 필수 |
 | 저장을 잊음 | 재료가 안 쌓임 | 지침에 "정리 = 저장" 고정, Claude Code는 Stop hook |
-| 친구들의 대화 데이터 | 신뢰 문제 | 원문 미저장, 구조화 결과만. 내보내기/전체 삭제 기능 |
-| 백엔드 콜드 스타트 | 도구 호출 실패 | 상시 구동 인스턴스 |
+| 친구들의 대화 데이터 | 신뢰 문제 | 원문은 추출이 끝나면 바로 삭제, 구조화 결과만 보관. 내보내기/전체 삭제 기능 |
+| OAuth를 붙인 뒤 콜드 스타트 | 10초 OAuth 마감에 걸려 연결 실패 | OAuth 엔드포인트는 Worker(`workers-oauth-provider`)에 둔다 |
 | 복습이 밀려서 쌓임 | 이탈 | 하루 상한, "가볍게 5장" 모드, 스트릭 프리즈 |
 
 ## 15. 결정이 필요한 것
@@ -383,4 +384,4 @@ dwesaegim-plugin/
 
 - 친구 요금제: Pro($20) / Max($100). 둘 다 커스텀 커넥터를 쓸 수 있다.
 - 서버 LLM 호출은 내 Console API 키로 한다. 가입은 초대받은 사람만 한다.
-- 배포: Cloudflare(무료 플랜, 도메인 보유)를 앞단으로, AWS는 서버리스 무료 범위 안에서만 쓴다. Vercel은 쓰지 않는다.
+- 배포: Cloudflare(무료 플랜, 도메인 보유)는 A안이든 B안이든 쓴다. AWS(Lambda, EventBridge)와 Supabase는 A안으로 정해질 때만, 서버리스 무료 범위 안에서 쓴다. Vercel은 쓰지 않는다.
