@@ -54,6 +54,8 @@ export async function handleMcp(c: Context<{ Bindings: Env }>): Promise<Response
   });
 
   const summary = summarize(parsed);
+  // Workers는 I/O를 기다릴 때만 시계가 움직이고 SSE 응답은 도구가 끝나기 전에 돌아오므로, duration_ms는 거의 늘 0이다.
+  // 화면에는 보여 주지 않는다. 응답 시간은 scripts/replay.mjs로 잰다.
   const cf = (c.req.raw as Request & { cf?: { colo?: string } }).cf;
   c.executionCtx.waitUntil(
     c.env.DB.prepare(

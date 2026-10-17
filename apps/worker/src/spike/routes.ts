@@ -95,7 +95,7 @@ spike.get('/pushes', async (c) => {
 
 spike.get('/requests', async (c) => {
   const { results } = await c.env.DB.prepare(
-    `SELECT at, http_method, rpc_method, tool_name, protocol_header, protocol_body, user_agent, colo, status, duration_ms
+    `SELECT at, http_method, rpc_method, tool_name, protocol_header, protocol_body, user_agent, colo, status
        FROM spike_mcp_requests ORDER BY at DESC LIMIT 30`,
   ).all();
   return c.json({ requests: results });

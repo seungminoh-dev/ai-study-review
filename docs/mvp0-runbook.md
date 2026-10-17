@@ -83,6 +83,8 @@ Cloudflare 대시보드에서 내 도메인(존)을 열고 확인한다 ([설계
 
 그다음부터는 main에 머지할 때마다 `Deploy` 워크플로가 마이그레이션 적용 → 배포를 한다. Actions 탭 → Deploy → Run workflow로 직접 돌릴 수도 있다.
 
+- 저장소에 아직 `main` 브랜치가 없으면 자동 배포는 시작되지 않는다. 그동안은 Run workflow에서 배포할 브랜치를 골라 직접 돌린다.
+
 - 비밀값이 없으면 배포 단계는 경고만 남기고 건너뛴다.
 - `wrangler.jsonc`에 자리표시자(`moai.example.com`, 0으로 된 database_id)가 남아 있으면 실패하고 이유를 알려 준다.
 - `SPIKE_TOKEN`, `VAPID_PRIVATE_KEY`는 GitHub에 넣지 않는다. 2단계에서 Cloudflare에 한 번 넣으면 배포해도 유지된다.
@@ -113,8 +115,15 @@ Cloudflare 대시보드에서 내 도메인(존)을 열고 확인한다 ([설계
 | 5 | iPhone 푸시 | `/spike`의 안내대로 홈 화면에 추가 → 알림 켜기 → "1분 뒤" 예약 → 앱 닫기 | 정한 시각 1분 안에 알림이 오고, 표의 지연이 60초 이하 |
 | 6 | 존 설정 | 3단계를 마친 뒤 1, 2를 다시 해 본다 | 연결 실패가 없다 |
 | 7 | 쿠키 | `/spike`의 쿠키 순서대로 | 결과(있음/없음)만 적는다 |
-| 8 | 응답 시간 | replay 결과의 p95, `/spike` MCP 기록의 ms·데이터센터 열 | 도구 호출 p95 1.5초 미만 |
+| 8 | 응답 시간 | replay 결과의 p95, `/spike` MCP 기록의 데이터센터 열 | 도구 호출 p95 1.5초 미만 |
 | 9 | Claude Code | 구독으로 로그인한 Claude Code에서 `/mcp`를 열어 모아이가 보이는지 보고, "모아이 ping 해줘"라고 한다 | 기록만 한다 |
+
+측정하느라 남은 기록은 지우고 시작하면 2번을 보기 쉽다.
+
+```bash
+# apps/worker에서
+npx wrangler d1 execute moai --remote --command "DELETE FROM spike_log; DELETE FROM spike_mcp_requests;"
+```
 
 결과는 아래 표를 채워서 알려 주면 된다. 그 결과로 MVP 1 범위를 확정한다.
 

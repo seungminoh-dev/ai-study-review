@@ -131,8 +131,8 @@ async function refreshMcp() {
   const [{ requests }, { saves }] = await Promise.all([api('/requests'), api('/saves')]);
   fill(
     'requests',
-    requests.map((r) => [kst(r.at), `${r.http_method} ${r.rpc_method ?? ''}`.trim(), r.tool_name, r.protocol_header ?? r.protocol_body, r.colo, r.status, r.duration_ms]),
-    7,
+    requests.map((r) => [kst(r.at), `${r.http_method} ${r.rpc_method ?? ''}`.trim(), r.tool_name, r.protocol_header ?? r.protocol_body, r.colo, r.status]),
+    6,
   );
   fill(
     'saves',

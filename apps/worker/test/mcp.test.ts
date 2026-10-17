@@ -1,4 +1,5 @@
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
+import { SaveLearningInput } from '@moai/shared';
 import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
 import example from '../../../packages/shared/fixtures/immutable-object.json';
@@ -54,6 +55,21 @@ describe('MCP endpoint, raw 2025-era requests', () => {
     const message = await readRpc(await rpc('tools/call', { name: 'save_learning', arguments: bad }));
     expect(message.result.isError).toBe(true);
     expect(message.result.content[0].text).toContain('정답이 정확히 1개');
+  });
+
+  it('still validates input with zod behind the cached JSON Schema', async () => {
+    const bad = json(example);
+    bad.topic = 'schema-invalid';
+    bad.cards[0].type = 'essay';
+    const message = await readRpc(await rpc('tools/call', { name: 'save_learning', arguments: bad }));
+    expect(message.result.isError).toBe(true);
+    expect(await env.DB.prepare('SELECT count(*) AS n FROM spike_log WHERE topic = ?1').bind(bad.topic).first('n')).toBe(0);
+  });
+
+  it('lists the same input schema zod produces', async () => {
+    const message = await readRpc(await rpc('tools/list', {}));
+    const save = message.result.tools.find((tool: { name: string }) => tool.name === 'save_learning');
+    expect(save.inputSchema).toEqual({ type: 'object', ...json(SaveLearningInput['~standard'].jsonSchema.input({ target: 'draft-2020-12' })) });
   });
 
   it('answers ping', async () => {

@@ -116,6 +116,17 @@ claude.ai에서 공부하다가 "정리해줘"라고 하면, 대화 중인 Claud
 | 8 | 응답 시간 | 도구 호출 p95가 1.5초 미만이다. Smart Placement를 켠 경우와 끈 경우를 비교한다 | 읽기를 `DB.batch()` 하나로 묶는다 |
 | 9 | Claude Code | 구독으로 로그인한 Claude Code에 claude.ai 커넥터가 보이고 호출된다 | MVP 3 범위라 기록만 한다 |
 
+**실측 기록 (2026-10-17, 첫 배포)**
+
+- 8번 통과: p95 tools/list 94ms, tools/call 276ms. 데이터센터는 HKG.
+- 3번 넘음: 가장 큰 페이로드로 tools/list 중간값 13ms·최대 21ms, tools/call 중간값 13ms·최대 84ms. Error 1102는 0건.
+- 원인: MCP SDK가 tools/list마다 `save_learning` 스키마를 JSON Schema로 다시 변환했다 (요청 CPU의 40%쯤). 그리고 요청 대부분이 막 뜬 isolate에서 처리되어, 함수를 처음 컴파일하는 비용이 요청마다 들어갔다.
+- 조치: JSON Schema는 모듈 범위에서 한 번만 만들고, SDK의 `preloadSchemas()`와 예시 1건 검증도 모듈 범위에서 미리 한다. Node에서 막 뜬 프로세스로 10~12번씩 잰 중간값은 다음과 같다 (측정 묶음마다 조금씩 달라서 범위로 적는다). 다시 배포해서 3번을 다시 잰다.
+  - tools/list: 13~17ms → 5~6ms
+  - tools/call, 가장 큰 페이로드: 16ms → 11ms
+  - tools/call, 실제 크기 예시(약 2KB): 14~16ms → 8~10ms
+  - 이미 데워진 isolate에서는 둘 다 1~2ms다. 막 뜬 isolate의 첫 요청(보통 initialize)은 여전히 20ms 넘게 쓴다.
+
 **끝났다는 기준**: 1~6 통과. 7~9는 기록만 하면 된다.
 
 ### 2.2 MVP 1: 나 혼자 루프 (2주)
