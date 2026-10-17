@@ -17,6 +17,7 @@ export function Settings({ me, onLogout }: { me: Me; onLogout: () => void }) {
       <h1>설정</h1>
       <PushSection />
       <ReminderSection />
+      <GoalSection initial={me.daily_goal} />
       <ConnectorSection />
       <AccountSection me={me} onLogout={onLogout} />
       {me.role === 'owner' ? <InviteSection /> : null}
@@ -386,6 +387,37 @@ function InviteSection() {
           ))}
         </ul>
       ) : null}
+    </section>
+  );
+}
+
+const GOALS = [3, 5, 10, 15, 20];
+
+/** 하루 목표: 이만큼 복습한 날이 이어지면 스트릭이 된다 (설계서 §9.6) */
+function GoalSection({ initial }: { initial: number }) {
+  const [goal, setGoal] = useState(initial);
+  const [message, setMessage] = useState<{ text: string; tone: 'good' | 'bad' } | null>(null);
+  const save = async (value: number) => {
+    setGoal(value);
+    try {
+      await request('/goal', { method: 'PUT', json: { daily_goal: value } });
+      setMessage({ text: `하루 ${value}장으로 바꿨어요.`, tone: 'good' });
+    } catch (error) {
+      setMessage({ text: errorMessage(error), tone: 'bad' });
+    }
+  };
+  return (
+    <section>
+      <h2>하루 목표</h2>
+      <p className="muted small">이만큼 복습한 날이 이어지면 스트릭이 돼요. 하루를 빠지면 그 주에 한 번은 프리즈가 자동으로 막아 줘요.</p>
+      <div className="segmented" role="group" aria-label="하루 목표">
+        {GOALS.map((value) => (
+          <button key={value} type="button" className={value === goal ? 'current' : ''} aria-pressed={value === goal} onClick={() => void save(value)}>
+            {value}장
+          </button>
+        ))}
+      </div>
+      {message ? <Status text={message.text} tone={message.tone} /> : null}
     </section>
   );
 }

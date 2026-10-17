@@ -1,13 +1,49 @@
-import type { TodayResponse } from '@moai/shared';
+import type { StatsResponse, TodayResponse } from '@moai/shared';
 import { useEffect, useState } from 'react';
 import { cachedQueue } from '../offline/store';
 import { Link } from '../router';
 import { formatDate, useApi } from '../useApi';
 
-// 오늘 화면 (설계서 §12.1): 남은 카드 수와 예상 시간, 시작 버튼, 최근 저장 세션, 열린 질문
+// 오늘 화면 (설계서 §12.1): 남은 카드 수와 예상 시간, 시작 버튼, 스트릭과 하루 목표, 최근 저장 세션, 열린 질문
+
+const WEEKDAYS = ['월', '화', '수', '목', '금', '토', '일'];
+
+/** 스트릭, 오늘 목표, 이번 주 (설계서 §9.6) */
+function StreakCard({ stats }: { stats: StatsResponse }) {
+  const progress = Math.min(1, stats.today.reviewed / stats.goal);
+  return (
+    <section className="streak">
+      <div className="streak-head">
+        <p>
+          <strong className="streak-count">{stats.streak}일</strong> 연속
+        </p>
+        <Link href="/league" className="small">
+          이번 주 {stats.week.xp} XP · 리그 →
+        </Link>
+      </div>
+      <div className="goal" role="progressbar" aria-valuemin={0} aria-valuemax={stats.goal} aria-valuenow={stats.today.reviewed} aria-label="오늘 목표">
+        <div style={{ width: `${progress * 100}%` }} />
+      </div>
+      <p className="muted small">
+        오늘 {Math.min(stats.today.reviewed, stats.goal)}/{stats.goal}장
+        {stats.today.reviewed >= stats.goal ? ' · 오늘 목표를 채웠어요' : ''}
+        {stats.freeze_available ? ' · 프리즈 1회 남음' : ' · 이번 주 프리즈를 썼어요'}
+      </p>
+      <ol className="week">
+        {stats.week.days.map((day, index) => (
+          <li key={day.day} className={day.met ? 'met' : day.frozen ? 'frozen' : day.future ? 'future' : ''} title={day.day}>
+            <span>{WEEKDAYS[index]}</span>
+            <span aria-hidden="true">{day.met ? '●' : day.frozen ? '❄' : '○'}</span>
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
 
 export function Today({ name }: { name: string }) {
   const { data, error } = useApi<TodayResponse>('/today');
+  const { data: stats } = useApi<StatsResponse>('/stats');
   const [cached, setCached] = useState(0);
   useEffect(() => {
     if (error) void cachedQueue().then((cards) => setCached(cards.length));
@@ -52,6 +88,8 @@ export function Today({ name }: { name: string }) {
           </>
         )}
       </section>
+
+      {stats ? <StreakCard stats={stats} /> : null}
 
       {!data.reminders_set ? (
         <Link className="notice link" href="/settings">

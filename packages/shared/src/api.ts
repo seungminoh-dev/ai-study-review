@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { JudgmentLabel } from './save-learning';
+import type { EdgeType, JudgmentLabel } from './save-learning';
 
 // REST API(PWA용) 요청 스키마와 응답 타입 (설계서 §7). Worker와 PWA가 같이 쓴다.
 
@@ -128,8 +128,65 @@ export interface Me {
   role: 'owner' | 'member';
   daily_new_limit: number;
   daily_review_limit: number;
+  /** 스트릭을 세는 하루 목표 (장) */
+  daily_goal: number;
   /** 연결한 GitHub 계정. 없으면 null */
   github_login: string | null;
+}
+
+export interface StatsDay {
+  /** 'YYYY-MM-DD' (04:00 KST 경계) */
+  day: string;
+  reviewed: number;
+  met: boolean;
+  frozen: boolean;
+  future: boolean;
+}
+
+/** 스트릭·XP·하루 목표 (설계서 §9.6) */
+export interface StatsResponse {
+  goal: number;
+  today: { reviewed: number; xp: number };
+  streak: number;
+  /** 이번 주 프리즈를 아직 안 썼다 */
+  freeze_available: boolean;
+  /** 이번 주 (월요일부터) */
+  week: { xp: number; days: StatsDay[] };
+}
+
+export interface LeagueEntry {
+  name: string;
+  xp: number;
+  me: boolean;
+}
+
+/** 개념 상태 (설계서 §9.7): 아직 안 배움(점선) · 익숙함(초록) · 흔들림(노랑) */
+export type ConceptStateKey = 'unlearned' | 'familiar' | 'shaky';
+
+export interface MapNode {
+  key: string;
+  name: string;
+  state: ConceptStateKey;
+  cards: number;
+}
+
+export interface MapResponse {
+  nodes: MapNode[];
+  edges: { from: string; to: string; type: EdgeType }[];
+}
+
+export interface ConceptDetail {
+  key: string;
+  name: string;
+  aliases: string[];
+  state: ConceptStateKey;
+  final_answer: string | null;
+  judgments: { id: string; label: JudgmentLabel; said: string | null; note: string; created_at: number; topic: string }[];
+  cards: (SessionCard & { due: number; stability: number; reps: number })[];
+  followups: { id: string; question: string }[];
+  neighbors: { key: string; name: string; state: ConceptStateKey; type: EdgeType; direction: 'out' | 'in' }[];
+  /** claude.ai에 붙여 넣을 "이어서 공부하기" 프롬프트 */
+  continue_prompt: string;
 }
 
 /** 로그인 전 화면이 고를 수 있는 방법 */

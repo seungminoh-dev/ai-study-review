@@ -2,8 +2,11 @@ import type { AuthOptions, Me } from '@moai/shared';
 import { useEffect, useState, type ReactNode } from 'react';
 import { OfflineError, RequestError, errorMessage, request } from './api';
 import { Link, navigate, useLocation } from './router';
+import { Concept } from './screens/Concept';
 import { Join } from './screens/Join';
+import { League } from './screens/League';
 import { Login } from './screens/Login';
+import { MapScreen } from './screens/MapScreen';
 import { Review } from './screens/Review';
 import { SessionDetail, Sessions } from './screens/Sessions';
 import { Settings } from './screens/Settings';
@@ -34,6 +37,7 @@ function rememberedMe(): Me | null {
 
 const TABS = [
   { href: '/', label: '오늘' },
+  { href: '/map', label: '지도' },
   { href: '/sessions', label: '기록' },
   { href: '/settings', label: '설정' },
 ];
@@ -96,10 +100,14 @@ export function App() {
   }
 
   const sessionMatch = /^\/sessions\/([\w-]+)$/.exec(path);
+  const conceptMatch = /^\/concepts\/([a-z0-9-]+)$/.exec(path);
   let screen;
   if (path === '/review') screen = <Review key={location.search} size={query.get('size') === '5' ? 5 : 8} />;
   else if (path === '/sessions') screen = <Sessions />;
   else if (sessionMatch) screen = <SessionDetail id={sessionMatch[1]!} />;
+  else if (path === '/map') screen = <MapScreen />;
+  else if (conceptMatch) screen = <Concept key={conceptMatch[1]} conceptKey={conceptMatch[1]!} />;
+  else if (path === '/league') screen = <League />;
   else if (path === '/settings') {
     screen = (
       <Settings
@@ -119,7 +127,7 @@ export function App() {
       {path === '/review' ? null : (
         <nav className="tabs" aria-label="화면">
           {TABS.map((tab) => {
-            const current = tab.href === '/' ? path === '/' : path.startsWith(tab.href);
+            const current = tab.href === '/' ? path === '/' || path === '/league' : tab.href === '/map' ? path === '/map' || path.startsWith('/concepts/') : path.startsWith(tab.href);
             return (
               <Link key={tab.href} href={tab.href} className={current ? 'tab current' : 'tab'} aria-current={current ? 'page' : undefined}>
                 {tab.label}

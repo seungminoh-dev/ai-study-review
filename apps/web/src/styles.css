@@ -794,3 +794,221 @@ blockquote {
   display: flex;
   gap: 16px;
 }
+
+/* 스트릭 · 하루 목표 */
+.streak {
+  margin: 4px 0 8px;
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.streak p {
+  margin: 4px 0;
+}
+
+.streak-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.streak-count {
+  font-size: 1.4rem;
+}
+
+.goal {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  overflow: hidden;
+  margin: 6px 0;
+}
+
+.goal > div {
+  height: 100%;
+  background: var(--good);
+  border-radius: 999px;
+}
+
+.week {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 0;
+  text-align: center;
+  font-size: 0.8125rem;
+  color: var(--muted);
+}
+
+.week li {
+  display: flex;
+  flex-direction: column;
+}
+
+.week .met {
+  color: var(--good);
+  font-weight: 700;
+}
+
+.week .frozen {
+  color: var(--pen);
+}
+
+.week .future {
+  opacity: 0.5;
+}
+
+/* 지식 지도 */
+.legend {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 0 0 8px;
+}
+
+.dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.dot.familiar {
+  background: var(--good);
+}
+
+.dot.shaky {
+  background: var(--warn);
+}
+
+.dot.unlearned {
+  border: 1.5px dashed var(--muted);
+}
+
+.map-scroll {
+  overflow: auto;
+  max-height: 70dvh;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  -webkit-overflow-scrolling: touch;
+}
+
+.map {
+  display: block;
+  margin: 0 auto;
+}
+
+.map .edge {
+  stroke: var(--border);
+  stroke-width: 1.5;
+}
+
+.map .edge.contrast {
+  stroke-dasharray: 4 3;
+}
+
+.map .node {
+  cursor: pointer;
+}
+
+.map .node circle {
+  stroke-width: 2;
+}
+
+.map .node.familiar circle {
+  fill: var(--good);
+  stroke: var(--good);
+}
+
+.map .node.shaky circle {
+  fill: var(--warn);
+  stroke: var(--warn);
+}
+
+.map .node.unlearned circle {
+  fill: var(--surface);
+  stroke: var(--muted);
+  stroke-dasharray: 3 2;
+}
+
+.map .node text {
+  fill: var(--text);
+  font-size: 11px;
+}
+
+.chip.state-familiar {
+  background: var(--good-soft);
+  color: var(--good);
+}
+
+.chip.state-shaky {
+  background: var(--surface-2);
+  color: var(--warn);
+}
+
+.chip.state-unlearned {
+  background: transparent;
+  border: 1px dashed var(--muted);
+  color: var(--muted);
+}
+
+a.chip {
+  text-decoration: none;
+  padding: 6px 12px;
+}
+
+/* 리그 */
+.league > li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.league .rank {
+  width: 1.5em;
+  font-weight: 800;
+  color: var(--muted);
+}
+
+.league .name {
+  flex: 1;
+}
+
+.league .xp {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.league .me {
+  border-color: var(--pen);
+  background: var(--pen-soft);
+}
+
+.segmented {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.segmented button {
+  min-height: 44px;
+  min-width: 56px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.segmented button.current {
+  background: var(--pen);
+  border-color: var(--pen);
+  color: var(--pen-text);
+  font-weight: 700;
+}

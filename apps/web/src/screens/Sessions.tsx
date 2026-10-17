@@ -191,7 +191,7 @@ function EditForm({ card, onSaved, onCancel }: { card: SessionCard; onSaved: (ca
   );
 }
 
-function CardRow({ card: initial }: { card: SessionCard }) {
+export function CardRow({ card: initial }: { card: SessionCard }) {
   const [card, setCard] = useState(initial);
   const [editing, setEditing] = useState(false);
   const [status, setStatus] = useState(card.status);
