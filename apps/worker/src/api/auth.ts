@@ -1,4 +1,4 @@
-import { JoinBody, LoginCodeBody, type AuthOptions, type PendingJoin } from '@moai/shared';
+import { JoinBody, LoginCodeBody, LogoutBody, type AuthOptions, type PendingJoin } from '@moai/shared';
 import { Hono, type Context } from 'hono';
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import { authorizeUrl, fetchGithubUser, githubConfigured, pkceChallenge, type GithubUser } from '../auth/github';
@@ -75,16 +75,20 @@ async function linkGithub(c: Context<AppEnv>, github: GithubUser, now: number): 
     .bind(github.id)
     .first<string>('user_id');
   if (owner && owner !== session.user_id) return c.redirect('/settings?github=taken');
-  // 다른 GitHub 계정을 이어 두었으면 바꾼다
-  await c.env.DB.batch([
-    c.env.DB.prepare("DELETE FROM user_identities WHERE user_id = ?1 AND provider = 'github'").bind(session.user_id),
-    c.env.DB.prepare("INSERT INTO user_identities (provider, subject, user_id, login, created_at) VALUES ('github', ?1, ?2, ?3, ?4)").bind(
-      github.id,
-      session.user_id,
-      github.login,
-      now,
-    ),
-  ]);
+  // 다른 GitHub 계정을 이어 두었으면 바꾼다. 그사이 다른 사람이 같은 GitHub를 이었으면 키 충돌로 batch 전체가 되돌아간다
+  try {
+    await c.env.DB.batch([
+      c.env.DB.prepare("DELETE FROM user_identities WHERE user_id = ?1 AND provider = 'github'").bind(session.user_id),
+      c.env.DB.prepare("INSERT INTO user_identities (provider, subject, user_id, login, created_at) VALUES ('github', ?1, ?2, ?3, ?4)").bind(
+        github.id,
+        session.user_id,
+        github.login,
+        now,
+      ),
+    ]);
+  } catch {
+    return c.redirect('/settings?github=taken');
+  }
   return c.redirect('/settings?github=linked');
 }
 
@@ -115,13 +119,12 @@ interface PendingRow {
   subject: string;
   login: string;
   name: string | null;
-  attempts: number;
 }
 
 async function pendingSignup(c: Context<AppEnv>, now: number): Promise<PendingRow | null> {
   const token = getCookie(c, JOIN_COOKIE);
   if (!token || !c.env.TOKEN_PEPPER) return null;
-  return c.env.DB.prepare('SELECT token_hash, subject, login, name, attempts FROM pending_signups WHERE token_hash = ?1 AND expires_at > ?2')
+  return c.env.DB.prepare('SELECT token_hash, subject, login, name FROM pending_signups WHERE token_hash = ?1 AND expires_at > ?2')
     .bind(await hashToken(c.env.TOKEN_PEPPER, token), now)
     .first<PendingRow>();
 }
@@ -142,7 +145,13 @@ auth.post('/join', async (c) => {
   const now = Date.now();
   const pending = await pendingSignup(c, now);
   if (!pending) return JOIN_EXPIRED();
-  if (pending.attempts >= MAX_JOIN_ATTEMPTS) return errorJson(429, 'too_many_attempts', '코드를 너무 많이 틀렸어요. GitHub 로그인부터 다시 해 주세요.');
+  // 시도를 먼저 센다. 읽고 나서 나중에 올리면, 동시에 보낸 요청들이 모두 같은 횟수를 읽고 상한을 넘는다
+  const attempts = await c.env.DB.prepare(
+    'UPDATE pending_signups SET attempts = attempts + 1 WHERE token_hash = ?1 AND attempts < ?2 RETURNING attempts',
+  )
+    .bind(pending.token_hash, MAX_JOIN_ATTEMPTS)
+    .first<number>('attempts');
+  if (attempts === null) return errorJson(429, 'too_many_attempts', '코드를 너무 많이 틀렸어요. GitHub 로그인부터 다시 해 주세요.');
 
   // 그사이 같은 GitHub 계정으로 가입을 마쳤으면 그 계정으로 로그인한다
   const existing = await c.env.DB.prepare("SELECT user_id FROM user_identities WHERE provider = 'github' AND subject = ?1")
@@ -159,11 +168,7 @@ auth.post('/join', async (c) => {
         .bind(await hashToken(c.env.TOKEN_PEPPER, `invite:${code}`), now)
         .first<string>('id')
     : null;
-  if (!invite) {
-    await c.env.DB.prepare('UPDATE pending_signups SET attempts = attempts + 1 WHERE token_hash = ?1').bind(pending.token_hash).run();
-    const left = MAX_JOIN_ATTEMPTS - pending.attempts - 1;
-    return errorJson(403, 'wrong_code', `초대 코드가 맞지 않거나 만료됐어요. (남은 시도 ${left}번)`);
-  }
+  if (!invite) return errorJson(403, 'wrong_code', `초대 코드가 맞지 않거나 만료됐어요. (남은 시도 ${MAX_JOIN_ATTEMPTS - attempts}번)`);
 
   // batch는 한 트랜잭션이라 중간에 끼어드는 요청이 없다. 초대가 아직 안 쓰였을 때만 계정이 생기고, 계정이 생겼을 때만 나머지를 쓴다.
   const userId = crypto.randomUUID();
@@ -209,7 +214,14 @@ auth.post('/login', async (c) => {
   return c.json(await loadMe(c.env, userId));
 });
 
+/** 이 기기의 세션을 끝낸다. 이 기기의 푸시 구독(endpoint)을 함께 보내면 그것도 지운다. 다음에 이 기기를 쓰는 사람에게 내 알림이 가지 않는다 */
 auth.post('/logout', async (c) => {
+  const body = c.req.header('content-type')?.includes('application/json') ? await readJson(c, LogoutBody) : {};
+  if (body instanceof Response) return body;
+  const session = await currentSession(c, Date.now());
+  if (session && body.endpoint) {
+    await c.env.DB.prepare('DELETE FROM push_subscriptions WHERE user_id = ?1 AND endpoint = ?2').bind(session.user_id, body.endpoint).run();
+  }
   await endSession(c);
   return c.body(null, 204);
 });

@@ -5,7 +5,7 @@ import { errorMessage, request } from '../api';
 import { COACH_INSTRUCTIONS } from '../coach';
 import { copyText } from '../copy';
 import { clearDeviceData, flushReviews, pendingCount } from '../offline/store';
-import { disablePush, enablePush, isStandalone, pushState, type PushState } from '../push';
+import { disablePush, dropLocalPush, enablePush, isStandalone, pushState, type PushState } from '../push';
 import { useLocation } from '../router';
 import { formatDate, formatDateTime, useApi } from '../useApi';
 
@@ -251,9 +251,9 @@ function AccountSection({ me, onLogout }: { me: Me; onLogout: () => void }) {
     const warning = left > 0 ? `아직 보내지 못한 답 ${left}개가 사라져요. ` : '';
     if (!confirm(`${warning}이 기기에서 로그아웃할까요? 이 기기의 알림도 꺼져요. 다른 기기의 로그인은 그대로예요.`)) return;
     try {
-      // 다른 사람이 이 기기로 로그인해도 내 알림이 오지 않게 한다
-      await disablePush().catch(() => undefined);
-      await request('/auth/logout', { method: 'POST' });
+      // 다른 사람이 이 기기로 로그인해도 내 알림이 오지 않게, 구독을 끊고 서버에서도 지운다
+      const endpoint = await dropLocalPush();
+      await request('/auth/logout', { method: 'POST', json: endpoint ? { endpoint } : {} });
       await clearDeviceData();
       onLogout();
     } catch (error) {

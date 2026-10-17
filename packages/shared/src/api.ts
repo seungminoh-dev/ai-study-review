@@ -24,6 +24,10 @@ export type JoinBody = z.infer<typeof JoinBody>;
 export const LoginCodeBody = z.object({ code: z.string().trim().min(1).max(40) });
 export type LoginCodeBody = z.infer<typeof LoginCodeBody>;
 
+/** 로그아웃할 때 이 기기의 푸시 구독도 지운다 */
+export const LogoutBody = z.object({ endpoint: z.string().min(1).max(2000).optional() });
+export type LogoutBody = z.infer<typeof LogoutBody>;
+
 export const InviteBody = z.object({ label: z.string().trim().min(1).max(30) });
 export type InviteBody = z.infer<typeof InviteBody>;
 

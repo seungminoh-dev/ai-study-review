@@ -4,7 +4,7 @@ import type { AppEnv } from '../context';
 import { countReviewedToday, loadTodayQueue } from '../domain/queue';
 import { recordReviews } from '../domain/reviews';
 import { loadMe } from '../domain/users';
-import { readJson } from '../lib/http';
+import { errorJson, readJson } from '../lib/http';
 import { listSessions } from './sessions';
 
 // 오늘 화면과 복습 (설계서 §7.2, §9)
@@ -58,6 +58,9 @@ review.post('/reviews', async (c) => {
   }
   const rejected = body.reviews.length - valid.length;
   if (rejected > 0) console.log(JSON.stringify({ event: 'reviews_rejected', user_id: c.var.userId, rejected }));
-  const result = valid.length > 0 ? await recordReviews(c.env, c.var.userId, valid, Date.now()) : { recorded: 0, skipped: 0, unlocked: 0 };
+  const { conflicted, ...result } =
+    valid.length > 0 ? await recordReviews(c.env, c.var.userId, valid, Date.now()) : { recorded: 0, skipped: 0, unlocked: 0, conflicted: false };
+  // 다른 기기와 계속 부딪혀 일부를 못 썼다. 기기는 이 묶음을 outbox에 두고 다시 보낸다 (이미 쓴 답은 건너뛴다)
+  if (conflicted) return errorJson(503, 'busy', '다른 기기의 답과 겹쳤어요. 잠시 뒤에 다시 보낼게요.');
   return c.json({ ...result, rejected });
 });

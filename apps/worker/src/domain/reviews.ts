@@ -24,7 +24,7 @@ export async function recordReviews(
   items: readonly ReviewItem[],
   now: number,
   attempt = 0,
-): Promise<Omit<ReviewsResponse, 'rejected'>> {
+): Promise<Omit<ReviewsResponse, 'rejected'> & { conflicted: boolean }> {
   // 같은 요청 안에 같은 id가 두 번 있어도 한 번만 채점한다
   const reviews = [...new Map(items.map((review) => [review.id, review])).values()];
   const ids = JSON.stringify(reviews.map((review) => review.id));
@@ -71,53 +71,48 @@ export async function recordReviews(
     });
   }
 
-  const unlock = cardsToUnlock([...rows.values()]);
   let recorded = 0;
-  let unlocked = unlock.length;
-  if (logs.length > 0 || unlock.length > 0) {
-    const statements = [];
-    if (logs.length > 0) {
-      // 기록과 카드 갱신은 둘 다 "읽은 뒤로 카드가 그대로일 때"만 쓴다. 같은 트랜잭션이라 둘의 판단이 같다
-      statements.push(
-        env.DB.prepare(
-          `INSERT OR IGNORE INTO review_logs (id, user_id, card_id, grade, response, elapsed_ms, reviewed_at, prev_card)
-           SELECT json_extract(j.value, '$.id'), ?1, c.id, json_extract(j.value, '$.grade'),
-                  json_extract(j.value, '$.response'), json_extract(j.value, '$.elapsed_ms'), json_extract(j.value, '$.reviewed_at'),
-                  json_extract(j.value, '$.prev_card')
-             FROM json_each(?2) AS j
-             JOIN cards c ON c.id = json_extract(j.value, '$.card_id') AND c.user_id = ?1 AND c.reps = json_extract(j.value, '$.read_reps')`,
-        ).bind(userId, JSON.stringify(logs)),
-        env.DB.prepare(
-          `UPDATE cards SET
-             due = json_extract(j.value, '$.due'), stability = json_extract(j.value, '$.stability'),
-             difficulty = json_extract(j.value, '$.difficulty'), elapsed_days = json_extract(j.value, '$.elapsed_days'),
-             scheduled_days = json_extract(j.value, '$.scheduled_days'), learning_steps = json_extract(j.value, '$.learning_steps'),
-             reps = json_extract(j.value, '$.reps'), lapses = json_extract(j.value, '$.lapses'),
-             state = json_extract(j.value, '$.state'), last_review = json_extract(j.value, '$.last_review')
+  if (logs.length > 0) {
+    // 기록과 카드 갱신은 둘 다 "읽은 뒤로 카드가 그대로일 때"만 쓴다. 같은 트랜잭션이라 둘의 판단이 같다
+    const [inserted, updated] = await env.DB.batch([
+      env.DB.prepare(
+        `INSERT OR IGNORE INTO review_logs (id, user_id, card_id, grade, response, elapsed_ms, reviewed_at, prev_card)
+         SELECT json_extract(j.value, '$.id'), ?1, c.id, json_extract(j.value, '$.grade'),
+                json_extract(j.value, '$.response'), json_extract(j.value, '$.elapsed_ms'), json_extract(j.value, '$.reviewed_at'),
+                json_extract(j.value, '$.prev_card')
            FROM json_each(?2) AS j
-           WHERE cards.user_id = ?1 AND cards.id = json_extract(j.value, '$.id') AND cards.reps = json_extract(j.value, '$.read_reps')`,
-        ).bind(userId, JSON.stringify([...touched.values()].map((row) => ({ id: row.id, read_reps: readReps.get(row.id), ...pickFsrsFields(row) })))),
-      );
-    }
-    if (unlock.length > 0) {
-      statements.push(
-        env.DB.prepare(
-          "UPDATE cards SET status = 'active', due = ?3 WHERE user_id = ?1 AND status = 'locked' AND id IN (SELECT value FROM json_each(?2))",
-        ).bind(userId, JSON.stringify(unlock), now),
-      );
-    }
-    const results = await env.DB.batch(statements);
-    if (logs.length > 0) {
-      recorded = results[0]!.meta.changes;
-      if (results[1]!.meta.changes < touched.size && attempt < MAX_RETRIES) {
-        // 못 쓴 카드의 답은 기록도 안 됐으니, 다시 읽으면 새 답으로 보인다
-        const again = await recordReviews(env, userId, items, now, attempt + 1);
-        recorded += again.recorded;
-        unlocked += again.unlocked;
-      }
+           JOIN cards c ON c.id = json_extract(j.value, '$.card_id') AND c.user_id = ?1 AND c.reps = json_extract(j.value, '$.read_reps')`,
+      ).bind(userId, JSON.stringify(logs)),
+      env.DB.prepare(
+        `UPDATE cards SET
+           due = json_extract(j.value, '$.due'), stability = json_extract(j.value, '$.stability'),
+           difficulty = json_extract(j.value, '$.difficulty'), elapsed_days = json_extract(j.value, '$.elapsed_days'),
+           scheduled_days = json_extract(j.value, '$.scheduled_days'), learning_steps = json_extract(j.value, '$.learning_steps'),
+           reps = json_extract(j.value, '$.reps'), lapses = json_extract(j.value, '$.lapses'),
+           state = json_extract(j.value, '$.state'), last_review = json_extract(j.value, '$.last_review')
+         FROM json_each(?2) AS j
+         WHERE cards.user_id = ?1 AND cards.id = json_extract(j.value, '$.id') AND cards.reps = json_extract(j.value, '$.read_reps')`,
+      ).bind(userId, JSON.stringify([...touched.values()].map((row) => ({ id: row.id, read_reps: readReps.get(row.id), ...pickFsrsFields(row) })))),
+    ]);
+    recorded = inserted!.meta.changes;
+    if (updated!.meta.changes < touched.size) {
+      // 못 쓴 카드의 답은 기록도 안 됐으니, 다시 읽으면 새 답으로 보인다. 사다리도 새 상태로 다시 본다
+      if (attempt >= MAX_RETRIES) return { recorded, skipped: items.length - recorded, unlocked: 0, conflicted: true };
+      const again = await recordReviews(env, userId, items, now, attempt + 1);
+      return { ...again, recorded: recorded + again.recorded, skipped: items.length - recorded - again.recorded };
     }
   }
-  return { recorded, skipped: items.length - recorded, unlocked };
+
+  // 사다리는 기록이 모두 들어간 뒤의 상태로만 연다. 기록이 밀린 답을 근거로 카드를 열지 않는다
+  const unlock = cardsToUnlock([...rows.values()]);
+  if (unlock.length > 0) {
+    await env.DB.prepare(
+      "UPDATE cards SET status = 'active', due = ?3 WHERE user_id = ?1 AND status = 'locked' AND id IN (SELECT value FROM json_each(?2))",
+    )
+      .bind(userId, JSON.stringify(unlock), now)
+      .run();
+  }
+  return { recorded, skipped: items.length - recorded, unlocked: unlock.length, conflicted: false };
 }
 
 /**

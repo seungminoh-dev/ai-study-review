@@ -49,3 +49,17 @@ export async function disablePush(): Promise<PushState> {
   }
   return 'off';
 }
+
+/** 로그아웃용: 이 기기의 구독을 브라우저에서 끊고, 서버에서 지울 수 있게 endpoint를 돌려준다. 실패해도 로그아웃은 막지 않는다 */
+export async function dropLocalPush(): Promise<string | null> {
+  try {
+    const registration = await navigator.serviceWorker?.getRegistration();
+    const subscription = await registration?.pushManager.getSubscription();
+    if (!subscription) return null;
+    const endpoint = subscription.endpoint;
+    await subscription.unsubscribe().catch(() => false);
+    return endpoint;
+  } catch {
+    return null;
+  }
+}
