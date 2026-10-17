@@ -1,10 +1,12 @@
-# 되새김 (가칭) 서비스 기획서 v0.1
+# 되새김 (가칭) 서비스 기획서 v0.2
 
 > AI와 공부한 대화를 **복습 카드와 지식 지도**로 바꿔서, 지하철이나 침대에서 2~3분씩 되새기게 하는 서비스.
 
-- 작성일: 2026-10-17
-- 대상: 나 + 친구 10명 클로즈드 베타
-- 제약: Claude API 월 $100 이하, 웹(모바일 우선)
+- 작성일: 2026-10-17 (v0.2: 서버리스 구성, 초대 가입, 요금제 반영)
+- 대상: 나 + 친구 10명 클로즈드 베타. 전원 Claude Pro($20) 또는 Max($100) 요금제
+- 가입: 초대받은 사람만
+- 제약: Claude API 월 $100 이하(내 Console API 키, 서버에서만 호출), 인프라 사실상 $0, 웹(모바일 우선)
+- 런타임 결정: [ADR 0001](adr/0001-runtime.md)
 
 ---
 
@@ -76,26 +78,39 @@
 - 친구 온보딩이 쉽다. CLI 설치 대신 URL 하나만 추가하면 된다.
 - 참고: Claude Code는 데스크톱 전용이 아니다. Claude 앱과 웹에서 클라우드 세션으로도 돌고, 레포의 `.claude/` hook과 skill도 거기서 실행된다. 다만 코딩용 환경이라 코칭 대화에는 claude.ai 채팅이 더 자연스럽다. 그래서 B는 "터미널에서 기술 공부할 때"용 보조 경로로 둔다.
 
-### 5.3 시스템 구성
+### 5.3 시스템 구성 (서버리스, 제안)
+
+자세한 비교와 근거는 [ADR 0001](adr/0001-runtime.md)에 있다.
 
 ```
 [claude.ai 프로젝트 (폰/웹)] ──MCP (Streamable HTTP)──┐
 [Claude Code 플러그인]       ──MCP────────────────────┤
-[웹: 붙여넣기 가져오기]      ──REST───────────────────┤
+[PWA (휴대폰)]               ──REST───────────────────┤
                                                       ▼
-                                   ┌─────────────────────────────┐
-                                   │ 되새김 API (Spring Boot)     │
-                                   │  · MCP 서버 (도구 4개)       │
-                                   │  · REST API (PWA용)          │
-                                   │  · FSRS 스케줄러             │
-                                   │  · 푸시 발송 (Web Push)      │
-                                   │  · LLM 호출 (채점/폴백 추출)  │
-                                   └──────────────┬──────────────┘
-                                                  ▼
-                                            [PostgreSQL]
-                                                  ▲
-[웹 PWA (모바일 우선)] ────REST───────────────────┘
+                  ┌──────────────────────────────────────────┐
+                  │ Cloudflare Worker (내 도메인, 무료 플랜)   │
+                  │  · PWA 정적 파일 제공                     │
+                  │  · /api, /mcp 를 Lambda로 전달            │
+                  │  · 토큰 경로 → 헤더, 엣지 비밀값 추가      │
+                  └─────────────────────┬────────────────────┘
+                                        ▼
+                  ┌──────────────────────────────────────────┐
+                  │ AWS Lambda (java25, SnapStart, VPC 없음)   │
+                  │  Spring Boot 4.1 + Spring AI 2.0          │
+                  │  · stateless MCP 서버 (도구 4개)          │
+                  │  · REST API · FSRS · Web Push 발송         │
+                  │  · LLM 호출 (채점 / 폴백 추출)             │
+                  └───────┬───────────────────────▲──────────┘
+                          ▼                       │ 1분마다 (푸시 + 웜 유지)
+                Supabase Postgres (서울)   EventBridge Scheduler
 ```
+
+claude.ai가 MCP 서버에 요구하는 것:
+
+- 공개 HTTPS 주소와 IPv4 A 레코드. 호출은 폰 앱에서 쓸 때도 항상 Anthropic 클라우드(`160.79.104.0/21`)에서 온다.
+- 다른 호스트로 리다이렉트하지 않는다 (인증 헤더가 사라진다).
+- 도구 호출은 240초 안에 응답한다. OAuth를 붙이면 탐색·등록·토큰 엔드포인트는 10초 안에 응답해야 한다.
+- 친구들은 커넥터를 웹에서 한 번 추가하고, `save_learning` 같은 도구를 "항상 허용"으로 바꿔 둔다. 그래야 폰에서 승인 버튼을 누르지 않아도 된다.
 
 ### 5.4 MCP 도구 설계
 
@@ -140,7 +155,8 @@ dwesaegim-plugin/
 └── hooks/hooks.json          # Stop hook: 저장 안 한 학습이 있으면 저장하라고 알림
 ```
 
-- Stop hook은 입력으로 받은 `transcript_path`를 훑어 코칭 흔적(`[틀림]` 등)은 있는데 `save_learning` 호출이 없으면 `{"decision": "block", "reason": "/capture로 저장할까요?"}`를 돌려준다. 무한 반복을 막으려고 `stop_hook_active`가 true면 그냥 통과시킨다.
+- Stop hook은 입력의 `last_assistant_message`(문서 권장, `transcript_path`는 늦게 갱신될 수 있음)를 보고 코칭 흔적(`[틀림]` 등)은 있는데 저장한 적이 없으면 `{"decision": "block", "reason": "학습 내용을 /capture로 저장하라"}`를 돌려준다. `reason`은 사용자가 아니라 Claude에게 전달된다. 무한 반복을 막으려고 `stop_hook_active`가 true면 그냥 통과시킨다.
+- 친구가 Claude Code에 구독 계정으로 로그인하면 claude.ai에 추가한 커넥터가 자동으로 보인다. 플러그인 `.mcp.json`에 같은 URL을 넣으면 그쪽이 우선해서 커넥터를 가리므로, 플러그인에는 skill과 hook만 넣는 방안도 Phase 3에서 검토한다.
 - 친구 설치: `/plugin marketplace add seungminoh-dev/ai-study-review` → `/plugin install dwesaegim`.
 
 ## 6. 카드
@@ -235,7 +251,12 @@ dwesaegim-plugin/
 
 | 테이블 | 주요 컬럼 |
 |---|---|
-| `users` | id, email, display_name, push_time[], timezone, mcp_token_hash |
+| `users` | id, display_name, role(`owner`/`member`), timezone, mcp_token_hash |
+| `invites` | id, code_hash, label(예: "민수"), expires_at, accepted_at |
+| `auth_sessions` | id, user_id, token_hash, expires_at |
+| `push_subscriptions` | id, user_id, endpoint, p256dh, auth |
+| `reminder_slots` | id, user_id, local_time(예: 08:10), next_fire_at(UTC, 인덱스) |
+| `import_jobs` | id, user_id, status, input, result, created_at |
 | `concepts` | id, user_id, key, name, aliases[], domain(Java/Spring/DB/네트워크/AI…), final_answer, created_at |
 | `edges` | from_concept_id, to_concept_id, type(`prerequisite`/`follow_up`/`contrast`/`part_of`) |
 | `judgments` | id, concept_id, session_id, label(`맞음`/`애매`/`틀림`/`빠짐`), said, note |
@@ -249,12 +270,12 @@ dwesaegim-plugin/
 
 ## 8. 복습 스케줄링과 리마인드
 
-- **알고리즘**: FSRS. 참고 구현 `ts-fsrs`, `py-fsrs`. Java 공식 구현은 확인 필요. 핵심 공식이 짧아서 직접 포팅할 수 있다 (면접에서 설명할 거리도 된다).
+- **알고리즘**: FSRS. Java 공식 구현 `io.github.open-spaced-repetition:fsrs` 1.0.0(Maven Central)을 쓴다. `ts-fsrs` 결과와 비교하는 테스트를 둔다.
 - **자동 채점 → FSRS 등급**: 오답 = 다시(1), 정답이지만 15초 넘게 걸림 = 어려움(2), 정답 = 좋음(3), 5초 안에 정답 = 쉬움(4).
 - **형제 카드 분산**: 같은 개념 카드는 하루에 1장만 낸다.
 - **하루 상한**: 새 카드 10장, 복습 30장 (설정 가능). 밀렸을 때는 "가볍게 5장" 모드.
 - **세션 길이**: 기본 8장, 약 3분. 지하철 한두 정거장.
-- **리마인드**: 사용자가 정한 시간(예: 08:10, 22:30)에 Web Push. iOS는 16.4 이상에서 홈 화면에 추가한 PWA만 웹 푸시를 받는다. 온보딩에서 "홈 화면에 추가"를 안내한다.
+- **리마인드**: 사용자가 정한 시간(예: 08:10, 22:30)에 Web Push. EventBridge Scheduler가 1분마다 Lambda를 부르고, `next_fire_at`이 지난 슬롯만 골라 보낸다. 몇 분 이상 늦은 알림은 버린다. iOS는 16.4 이상에서 홈 화면에 추가한 PWA만 웹 푸시를 받고, 암호화 방식은 aes128gcm이어야 한다 (`com.interaso:webpush` 1.3.0). 온보딩에서 "홈 화면에 추가"를 안내한다.
 - **오프라인**: 오늘 큐를 미리 받아 두고, 답은 로컬(IndexedDB)에 쌓았다가 연결되면 동기화한다.
 
 ## 9. 재미 요소
@@ -282,34 +303,46 @@ dwesaegim-plugin/
 
 - 단가 기준: Haiku 5.5 $0.10/$0.50, Sonnet 5.5 $2/$10, Opus 5.5 $4/$20 (입력/출력, 100만 토큰당, 2026-10 기준).
 - 토큰 수는 가정이다. Phase 1에서 실제 사용량을 재서 다시 계산한다.
-- 어느 모델이든 한도 안에 들어간다. Opus 5.5는 여유가 적으니, 채점 품질을 같은 답변 20개로 비교해 보고 정한다 (결정 필요).
-- 안전장치: 사용자별 월 한도(예: $5), 채점 기준 프롬프트 캐싱, 과거 대화 일괄 가져오기는 Batch API(50% 할인).
+- 어느 모델이든 한도 안에 들어간다. 다만 Opus 5.5는 여유가 적다. 그래서 같은 답변 20개로 채점 품질을 비교하기 전까지는 Haiku 5.5를 기본으로 쓴다 (결정 필요).
+- 채점 결과 JSON은 structured outputs(`output_config.format`)로 받는다. 도구 호출을 강제하는 방식(`tool_choice`)은 Sonnet 5.5와 Opus 5.5에서 400 에러가 난다.
+- 안전장치: 사용자별 월 한도(예: $5), 전체 한도($90에서 중단), Console 지출 한도, 채점 기준 프롬프트 캐싱. 과거 대화 일괄 가져오기는 Batch API(50% 할인)로 한다.
+- 채점 화면에 "AI 판정이며 틀릴 수 있어요" 안내를 넣는다 (Commercial Terms 요구 사항).
 
-### 10.2 인프라
+### 10.2 인프라 (서버리스)
 
-| 구성 | 선택지 | 예상 |
+| 구성 | 선택 | 예상 |
 |---|---|---|
-| 프론트 PWA | Vercel Hobby / Cloudflare Pages | 무료 |
-| 백엔드 | 상시 구동 작은 VM (Oracle Cloud 무료 티어, 또는 Fly.io/Railway 등) | 무료 ~ 월 $5 |
-| DB | Supabase / Neon 무료 Postgres | 무료 |
+| 프론트 PWA + 앞단 프록시 | Cloudflare Worker + Workers Static Assets (내 도메인) | 무료 (하루 요청 10만 건, 정적 파일 무제한) |
+| 백엔드 | AWS Lambda java25 + SnapStart + Function URL | 무료 (매달 요청 100만 건, 40만 GB-초 계속 무료) |
+| 푸시 시계 | EventBridge Scheduler, 1분 주기 (월 약 4.3만 회) | 무료 (월 1,400만 회 무료) |
+| DB | Supabase 무료 Postgres (서울, 500MB) | 무료 |
+| 비밀값 | SSM Parameter Store 표준 SecureString | 무료 |
+| 배포 파일 | S3 (SAM 배포용, zip이 50MB를 넘음) | 몇 센트 |
 
-백엔드는 꺼졌다 켜지는(콜드 스타트) 무료 호스팅을 피한다. MCP 도구 호출이 타임아웃 날 수 있다.
+- 계정 정리: 2025-07-15 이후 만든 AWS 계정은 Free 플랜으로 두면 6개월 뒤 만료된다. 첫 배포 전에 Paid 플랜으로 바꾸고 Budgets 알람을 $1로 건다. 계속 무료 혜택은 Paid 플랜에서도 유지된다.
+- 피해야 할 것: VPC/NAT Gateway(월 약 $33), ALB(약 $16), RDS(약 $12), Secrets Manager, Provisioned Concurrency, 컨테이너 이미지에 SnapStart.
+- Neon 대신 Supabase를 고른 이유: 1분 틱이 Neon 컴퓨트를 계속 깨워서 무료 100 CU-시간을 넘긴다. Supabase는 컴퓨트 시간 제한이 없고, 틱 덕분에 7일 무활동 일시정지도 피한다.
 
 ## 11. 기술 스택 제안
 
-- **백엔드**: Java 21 + Spring Boot 3 + Spring AI MCP Server(Streamable HTTP) + Anthropic Java SDK + PostgreSQL(JPA, Flyway) + Spring Security OAuth2(GitHub/Google 로그인)
-- **프론트**: React + Vite PWA, 모바일 우선, 한 손 조작 (주요 버튼은 화면 아래쪽 1/3)
-- **푸시**: Web Push(VAPID)
-- **MCP 인증**: MVP는 사용자별 비밀 URL 토큰(`/mcp/u/{token}`, 재발급 가능) → 이후 OAuth로 전환
+- **백엔드**: Java 25 + Spring Boot 4.1 + Spring AI 2.0 (`spring-ai-starter-mcp-server-webmvc`, `spring.ai.mcp.server.protocol=STATELESS`) + Spring Security + JPA/Flyway, AWS Lambda Web Adapter(zip 배포) + SnapStart
+- **Claude API 호출**: 공식 Anthropic Java SDK. jar가 크고(압축 39MB) Spring AI와 Jackson 버전이 달라서 콜드 스타트에 영향이 있을 수 있다. Phase 0에서 측정하고, 문제가 되면 줄일 방법을 정한다.
+- **FSRS**: `io.github.open-spaced-repetition:fsrs` 1.0.0
+- **푸시**: Web Push(VAPID, aes128gcm), `com.interaso:webpush` 1.3.0
+- **프론트**: React + Vite PWA(`vite-plugin-pwa`), 모바일 우선, 한 손 조작 (주요 버튼은 화면 아래쪽 1/3). Cloudflare Workers Static Assets로 배포
+- **앞단**: Cloudflare Worker (TypeScript 약 50줄, Wrangler). Lambda Function URL로 전달한다. 재시도는 같은 요청을 여러 번 보내도 안전한 호출에만 한다.
+- **IaC/CI**: AWS SAM + GitHub Actions(OIDC) → `sam deploy`, `wrangler deploy`
+- **가입(초대 전용)**: 내가 1회용 초대 코드를 발급한다 (7일 유효, 해시로만 저장). 친구는 홈 화면에 추가한 PWA 안에서 코드를 입력해 가입한다. iOS에서는 Safari와 홈 화면 앱의 저장소가 따로라서, 앱 밖으로 나가는 Google 로그인 리다이렉트가 잘 깨진다. 그래서 MVP는 외부 로그인 없이 간다.
+- **MCP 인증**: MVP는 사용자별 비밀 URL 토큰(`/mcp/u/{token}`, 256비트, 해시로만 저장, 재발급 가능). claude.ai에서는 "로그인 없음"으로 추가한다. Phase 3에서 OAuth(DCR/CIMD)로 바꾼다. 10초 OAuth 마감이 JVM 콜드 스타트에 걸리지 않게 OAuth는 Worker(`workers-oauth-provider`)에 둔다.
 
-**Spring을 고른 이유**: 주 직무(Java/Spring 백엔드, AI 응용 서비스)와 그대로 겹친다. MCP 서버, 간격 반복 알고리즘, 스케줄러, 푸시를 직접 설계한 경험이 포트폴리오가 된다.
-**트레이드오프**: TypeScript 풀스택(Next.js + Supabase)이면 MVP를 더 빨리 만든다. 속도와 포트폴리오 중 무엇을 우선할지 결정 필요.
+**Spring을 유지하는 이유**: 주 직무(Java/Spring 백엔드, AI 응용 서비스)와 그대로 겹친다. MCP 서버, 간격 반복, 서버리스 콜드 스타트 대응을 직접 설계한 경험이 포트폴리오가 된다.
+**대안**: Spring을 쓰지 않을 거라면 Cloudflare Worker 하나에 TypeScript로 전부 넣는 구성(ADR 0001의 B안)이 가장 단순하고 빠르다.
 
 ## 12. 로드맵
 
 | 단계 | 기간 | 범위 | 끝났다는 기준 |
 |---|---|---|---|
-| **Phase 0: 검증** | 주말 1회 | 도구 1개짜리 더미 MCP 서버를 claude.ai 커스텀 커넥터로 붙인다. ① 폰 앱 프로젝트 대화에서 도구가 호출되는지 ② 친구들 요금제에서 커스텀 커넥터를 쓸 수 있는지 ③ Claude Code에서도 붙는지 확인한다. | 셋 다 확인. 막히면 C(붙여넣기)를 주력으로 바꾼다. |
+| **Phase 0: 검증** | 주말 1~2회 | 도구 1개짜리 Spring MCP 서버를 Lambda에 올리고 Worker를 거쳐 claude.ai 커스텀 커넥터로 붙인다. ① 폰 앱 프로젝트 대화와 친구의 Pro 계정에서 도구가 호출되는지 ② SnapStart 복원 p99가 3초 미만인지 ③ 토큰에서 꺼낸 사용자 ID가 도구 메서드까지 오는지 ④ 홈 화면 PWA에서 초대 가입과 푸시가 되는지 ⑤ Claude Code에서도 붙는지 확인한다. | 다 확인되면 진행. MCP가 막히면 C(붙여넣기)를 주력으로, Lambda가 막히면 ADR 0001의 B안으로 바꾼다. |
 | **Phase 1: 나 혼자** | 2주 | `find_concepts`/`save_learning`, 카드 3종(OX/객관식/빈칸), FSRS, 오늘의 복습 화면, 웹 푸시 | 14일 중 10일 이상 내가 복습함 |
 | **Phase 2: 친구 10명** | 2~3주 | 로그인, 사용자별 커넥터 URL, 지식 지도, 스트릭/XP/리그, 설명하기 카드 + AI 채점(쿼터), 붙여넣기 가져오기, 카드 신고/수정 | 아래 지표 |
 | **Phase 3: 확장** | 이후 | Claude Code 플러그인, 채팅 복습 도구, 꼬리물기 체인 / 모의면접 모드, 질문 은행 공유, 데이터 내보내기 가져오기, 음성 설명 | |
@@ -327,7 +360,11 @@ dwesaegim-plugin/
 
 | 리스크 | 영향 | 대응 |
 |---|---|---|
-| 커스텀 커넥터가 모바일이나 특정 요금제에서 제약됨 | 주력 경로가 막힘 | Phase 0에서 먼저 확인. 붙여넣기 폴백 |
+| 새 Projects 베타로 바뀐 프로젝트에서 커넥터를 못 씀 (보고가 있지만 확인 못 함) | 주력 경로가 막힘 | Phase 0에서 먼저 확인. 일반 대화에 코치 지침을 넣는 방법, 붙여넣기 폴백 |
+| Lambda 콜드 스타트 | 첫 호출이 느림 | SnapStart + 사전 준비(priming), 1분 틱으로 웜 유지. 도구 호출 한도 240초보다 훨씬 짧음 |
+| Cloudflare 봇 차단이 Anthropic 트래픽을 막음 | 커넥터 연결 실패 | `/mcp` 경로에서 Bot Fight Mode와 WAF 규칙의 예외로 `160.79.104.0/21` 지정 |
+| 비밀 URL 토큰 유출 | 그 사람 학습 데이터가 노출됨 | 해시로만 저장, 로그에서 경로 가리기, 재발급 기능, Phase 3에 OAuth |
+| iOS 홈 화면 PWA의 로그인이나 푸시가 안 됨 | 친구 온보딩 실패 | 앱 안에서 초대 코드로 가입, Phase 0에서 실제 iPhone으로 확인 |
 | 틀린 카드가 반복 학습됨 | 오개념이 오히려 굳음 (가장 치명적) | 정답은 세션 확정 내용에서만, 신고하면 즉시 정지, 해설에 출처 세션 표시 |
 | 객관식 착각 (알아보기 ≠ 설명하기) | 면접에서 막힘 | 카드 사다리, 설명하기 단계 필수 |
 | 저장을 잊음 | 재료가 안 쌓임 | 지침에 "정리 = 저장" 고정, Claude Code는 Stop hook |
@@ -337,8 +374,13 @@ dwesaegim-plugin/
 
 ## 15. 결정이 필요한 것
 
-1. 서비스 이름 (가칭 "되새김")
-2. 백엔드 스택: Spring (포트폴리오) vs TypeScript (속도)
-3. 친구 10명의 Claude 요금제 현황 (커스텀 커넥터 가능 여부와 직결)
-4. AI 채점 모델: Haiku 5.5 / Sonnet 5.5 / Opus 5.5 중 품질 비교 후 선택
-5. 친구끼리 질문 은행(질문만, 답은 제외) 공유를 기본값으로 할지
+1. 서비스 이름 (가칭 "되새김", 계속 고민 중)
+2. 런타임: Spring on Lambda(A안, 제안) vs TypeScript on Cloudflare Worker(B안). [ADR 0001](adr/0001-runtime.md)
+3. AI 채점 모델: Haiku 5.5 / Sonnet 5.5 / Opus 5.5 중 품질 비교 후 선택 (그 전까지 Haiku 5.5)
+4. 친구끼리 질문 은행(질문만, 답은 제외) 공유를 기본값으로 할지
+
+정해진 것:
+
+- 친구 요금제: Pro($20) / Max($100). 둘 다 커스텀 커넥터를 쓸 수 있다.
+- 서버 LLM 호출은 내 Console API 키로 한다. 가입은 초대받은 사람만 한다.
+- 배포: Cloudflare(무료 플랜, 도메인 보유)를 앞단으로, AWS는 서버리스 무료 범위 안에서만 쓴다. Vercel은 쓰지 않는다.
