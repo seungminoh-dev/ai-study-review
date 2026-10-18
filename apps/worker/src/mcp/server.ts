@@ -64,7 +64,11 @@ const LearnerContextInput = z.object({
   concept_keys: z.array(ConceptKey).min(1).max(10).optional(),
 });
 
-const ReviewQueueInput = z.object({ size: z.int().min(1).max(10).optional().describe('가져올 문제 수 (기본 5)') });
+const ReviewQueueInput = z.object({
+  size: z.int().min(1).max(10).optional().describe('가져올 문제 수 (기본 5)'),
+  category: z.string().max(80).optional().describe('이 분류(와 그 아래)만 복습. 예: "인프라"'),
+  material: z.string().max(120).optional().describe('이 자료(PDF 등) 풀기. 저장할 때 쓴 material.title'),
+});
 
 const SubmitReviewInput = z.object({
   card_id: z.uuid(),
@@ -78,6 +82,7 @@ const InterviewChainInput = z.object({
   topic: z.string().min(1).max(200).optional(),
   concept_key: ConceptKey.optional(),
   length: z.int().min(2).max(5).optional().describe('이어서 물을 개념 수 (기본 3)'),
+  category: z.string().max(80).optional().describe('이 분류 안에서만 묻는다. 예: "인프라/Kubernetes"'),
 });
 
 // 요청마다 CPU를 쓰는 준비 작업은 모듈 범위(isolate 시작)에서 미리 해 둔다. 이 시간은 요청 CPU에 들어가지 않는다.
@@ -99,8 +104,9 @@ if (warmup.success) checkSaveLearning(warmup.data);
 
 function describeConcept(concept: FoundConcept): string {
   const aliases = concept.aliases.length > 0 ? ` (별칭: ${concept.aliases.join(', ')})` : '';
+  const category = concept.category ? ` · 분류 ${concept.category}` : '';
   const last = concept.last_judgment ? ` · 마지막 판정 [${concept.last_judgment.label}] ${formatKstDate(concept.last_judgment.created_at)}` : '';
-  return `- \`${concept.key}\` ${concept.name}${aliases} · ${concept.state}${last}`;
+  return `- \`${concept.key}\` ${concept.name}${aliases}${category} · ${concept.state}${last}`;
 }
 
 function buildServer(deps: McpDeps): McpServer {
@@ -115,19 +121,25 @@ function buildServer(deps: McpDeps): McpServer {
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     async ({ query, limit }) => {
-      const { found, related } = await findConcepts(deps.env, deps.userId, query, limit ?? 10, Date.now());
+      const { found, related, categories } = await findConcepts(deps.env, deps.userId, query, limit ?? 10, Date.now());
+      // 새 개념의 분류는 이 목록에서 고르게 한다. 같은 분류가 여러 이름으로 갈라지지 않게 한다
+      const categoryLine =
+        categories.length > 0
+          ? `기존 분류 (새 개념의 domain은 이 중에서 고르고, 맞는 게 없을 때만 새로 만드세요): ${categories.map((item) => `${item.path}(${item.concepts})`).join(', ')}`
+          : '아직 분류가 없어요. 새 개념의 domain에 "큰분류/작은분류" 꼴로 분류를 넣어 주세요 (예: 인프라/Kubernetes).';
       if (found.length === 0) {
-        return { content: text('찾은 기존 개념이 없어요. 새 개념으로 저장하면 돼요.'), structuredContent: { concepts: [], related: [] } };
+        return { content: text(`찾은 기존 개념이 없어요. 새 개념으로 저장하면 돼요.\n\n${categoryLine}`), structuredContent: { concepts: [], related: [], categories } };
       }
       const lines = [`기존 개념 ${found.length}개를 찾았어요. 같은 개념이면 이 key를 그대로 쓰세요.`, ...found.map(describeConcept)];
       if (related.length > 0) {
         lines.push('', '연결된 개념:');
         for (const concept of related) lines.push(`${describeConcept(concept)} (${concept.via.key}와 ${concept.via.type})`);
       }
+      lines.push('', categoryLine);
       const strip = ({ id: _id, ...rest }: FoundConcept) => rest;
       return {
         content: text(lines.join('\n')),
-        structuredContent: { concepts: found.map(strip), related: related.map(({ via, ...rest }) => ({ ...strip(rest), via })) },
+        structuredContent: { concepts: found.map(strip), related: related.map(({ via, ...rest }) => ({ ...strip(rest), via })), categories },
       };
     },
   );
@@ -185,8 +197,8 @@ function buildServer(deps: McpDeps): McpServer {
       inputSchema: ReviewQueueSchema,
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
-    async ({ size }) => {
-      const { questions, remaining } = await chatQueue(deps.env, deps.userId, size ?? 5, Date.now());
+    async ({ size, category, material }) => {
+      const { questions, remaining } = await chatQueue(deps.env, deps.userId, size ?? 5, Date.now(), { category, material });
       if (questions.length === 0) return { content: text('오늘 복습할 카드가 없어요.'), structuredContent: { questions: [], remaining: 0 } };
       const lines = [`오늘 남은 ${remaining}장 중 ${questions.length}장이에요. 한 문제씩 내고 정답은 먼저 말하지 마세요.`];
       questions.forEach((question, index) => {

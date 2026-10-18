@@ -5,17 +5,18 @@ import { conceptState, parseAliases, statsQuery, type ConceptState } from './con
 
 // 지식 지도와 개념 상세 (설계서 §9.7). 상태는 Claude가 아니라 서버가 카드와 복습 기록으로 정한다.
 
-const STATE_KEY: Record<ConceptState, ConceptStateKey> = { '아직 안 배움': 'unlearned', 익숙함: 'familiar', 흔들림: 'shaky' };
+const STATE_KEY: Record<ConceptState, ConceptStateKey> = { '아직 안 배움': 'unlearned', 익숙함: 'familiar', 흔들림: 'shaky', 자료: 'material' };
 
 /** 지도에 그리는 개념 수 상한. 넘으면 최근에 바뀐 개념부터 보여 준다 */
 const MAP_LIMIT = 300;
 
 export async function loadMap(env: Env, userId: string, now: number): Promise<MapResponse> {
   const { results: concepts } = await env.DB.prepare(
-    'SELECT id, key, name FROM concepts WHERE user_id = ?1 ORDER BY updated_at DESC LIMIT ?2',
+    // 내 지식(풀어 본 개념)을 먼저, 그다음 자료 개념. 자료 개념은 화면에서 켤 때만 보인다
+    'SELECT id, key, name, domain FROM concepts WHERE user_id = ?1 ORDER BY adopted_at IS NULL, updated_at DESC LIMIT ?2',
   )
     .bind(userId, MAP_LIMIT)
-    .all<{ id: string; key: string; name: string }>();
+    .all<{ id: string; key: string; name: string; domain: string | null }>();
   if (concepts.length === 0) return { nodes: [], edges: [] };
   const ids = concepts.map((concept) => concept.id);
   const [stats, edges] = await env.DB.batch([
@@ -26,11 +27,13 @@ export async function loadMap(env: Env, userId: string, now: number): Promise<Ma
         WHERE e.user_id = ?1 AND e.from_id IN (SELECT value FROM json_each(?2)) AND e.to_id IN (SELECT value FROM json_each(?2))`,
     ).bind(userId, JSON.stringify(ids)),
   ]);
-  const byId = new Map((stats!.results as { id: string; cards: number; active: number; unstable: number; recent_fails: number }[]).map((row) => [row.id, row]));
+  const byId = new Map(
+    (stats!.results as { id: string; cards: number; active: number; unstable: number; recent_fails: number; adopted: number }[]).map((row) => [row.id, row]),
+  );
   return {
     nodes: concepts.map((concept) => {
       const row = byId.get(concept.id) ?? { cards: 0, active: 0, unstable: 0, recent_fails: 0 };
-      return { key: concept.key, name: concept.name, state: STATE_KEY[conceptState(row)], cards: row.cards };
+      return { key: concept.key, name: concept.name, state: STATE_KEY[conceptState(row)], cards: row.cards, category: concept.domain };
     }),
     edges: (edges!.results as { from_key: string; to_key: string; type: EdgeType }[]).map((edge) => ({ from: edge.from_key, to: edge.to_key, type: edge.type })),
   };
@@ -53,9 +56,9 @@ interface CardRow {
 }
 
 export async function loadConcept(env: Env, userId: string, key: string, now: number): Promise<ConceptDetail | null> {
-  const concept = await env.DB.prepare('SELECT id, key, name, aliases, final_answer FROM concepts WHERE user_id = ?1 AND key = ?2')
+  const concept = await env.DB.prepare('SELECT id, key, name, aliases, final_answer, domain FROM concepts WHERE user_id = ?1 AND key = ?2')
     .bind(userId, key)
-    .first<{ id: string; key: string; name: string; aliases: string; final_answer: string | null }>();
+    .first<{ id: string; key: string; name: string; aliases: string; final_answer: string | null; domain: string | null }>();
   if (!concept) return null;
   const [judgments, cards, followups, neighbors] = await env.DB.batch([
     env.DB.prepare(
@@ -86,6 +89,7 @@ export async function loadConcept(env: Env, userId: string, key: string, now: nu
     active: number;
     unstable: number;
     recent_fails: number;
+    adopted: number;
   }>();
   const stateOf = new Map(stats.map((row) => [row.id, STATE_KEY[conceptState(row)]]));
   const openFollowups = followups!.results as { id: string; question: string }[];
@@ -94,6 +98,7 @@ export async function loadConcept(env: Env, userId: string, key: string, now: nu
     key: concept.key,
     name: concept.name,
     aliases: parseAliases(concept.aliases),
+    category: concept.domain,
     state: stateOf.get(concept.id) ?? 'unlearned',
     final_answer: concept.final_answer,
     judgments: judgments!.results as unknown as ConceptDetail['judgments'],

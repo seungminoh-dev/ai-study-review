@@ -60,6 +60,13 @@ export const LearningCard = z.discriminatedUnion('type', [OxCard, McqCard, Cloze
 export const SaveLearningInput = z.object({
   topic: z.string().min(1).max(200),
   source: z.enum(['claude.ai', 'claude-code']).default('claude.ai'),
+  /** PDF 같은 자료에서 만든 카드면 자료 제목과 범위. 이 카드들은 사용자가 풀기 전까지 "자료"로 따로 둔다 */
+  material: z
+    .object({
+      title: z.string().trim().min(1).max(120),
+      part: z.string().trim().max(80).optional(),
+    })
+    .optional(),
   final_answer: z.string().max(2000).optional(),
   key_terms: z.array(z.string().min(1).max(40)).max(10).default([]),
   concepts: z
@@ -68,7 +75,8 @@ export const SaveLearningInput = z.object({
         key: ConceptKey,
         name: z.string().min(1).max(60),
         aliases: z.array(z.string().min(1).max(60)).max(5).default([]),
-        domain: z.string().max(20).optional(),
+        /** 분류 경로. 큰 분류부터 '/'로 잇는다 (예: "인프라/DevOps/Kubernetes"). 최대 3단계 */
+        domain: z.string().max(80).optional(),
         final_answer: z.string().max(2000).optional(),
       }),
     )
@@ -152,6 +160,8 @@ export function checkSaveLearning(input: SaveLearningInput, existing: ExistingCo
     if (edge.from === edge.to) problems.push(`edges ${i + 1}번은 자기 자신을 가리켜요.`);
   });
   input.judgments.forEach((judgment, i) => requireKnown(judgment.concept, `judgments ${i + 1}번`));
+  // 자료에는 사용자가 답한 것이 없다. 판정은 사용자가 풀거나 설명한 뒤에 생긴다
+  if (input.material && input.judgments.length > 0) problems.push('자료(material)에서 만든 저장에는 judgments를 넣지 않아요. 비워 주세요.');
   input.followups.forEach((followup, i) => requireKnown(followup.concept, `followups ${i + 1}번`));
 
   const finalAnswerKeys = new Set<string>(existing.withFinalAnswer);

@@ -96,6 +96,18 @@ export async function recordReviews(
       ).bind(userId, JSON.stringify([...touched.values()].map((row) => ({ id: row.id, read_reps: readReps.get(row.id), ...pickFsrsFields(row) })))),
     ]);
     recorded = inserted!.meta.changes;
+    // 풀어 본 개념은 이제 내 지식이다. 자료에서만 나왔던 개념도 여기서 지식 지도에 들어간다.
+    // 기록이 실제로 들어간 카드만 본다 (다른 기기와 겹쳐 못 쓴 카드는 다시 채점할 때 들어간다)
+    if (recorded > 0) {
+      await env.DB.prepare(
+        `UPDATE concepts SET adopted_at = ?3
+          WHERE user_id = ?1 AND adopted_at IS NULL
+            AND id IN (SELECT c.concept_id FROM cards c WHERE c.user_id = ?1 AND c.id IN (SELECT value FROM json_each(?2))
+                         AND EXISTS (SELECT 1 FROM review_logs r WHERE r.card_id = c.id))`,
+      )
+        .bind(userId, JSON.stringify([...touched.keys()]), now)
+        .run();
+    }
     if (updated!.meta.changes < touched.size) {
       // 못 쓴 카드의 답은 기록도 안 됐으니, 다시 읽으면 새 답으로 보인다. 사다리도 새 상태로 다시 본다
       if (attempt >= MAX_RETRIES) return { recorded, skipped: items.length - recorded, unlocked: 0, conflicted: true };

@@ -4,6 +4,7 @@ import { sha256Hex } from '../lib/crypto';
 import { describeKstMoment } from '../lib/kst';
 import { withObject } from '../lib/korean';
 import { emptyFsrsFields } from './fsrs';
+import { categoryLookupQueries, resolveCategories, resolvedCategory } from './categories';
 import { initialStatus } from './ladder';
 import { parseAliases } from './concepts';
 
@@ -90,7 +91,7 @@ export async function saveLearning(
 ): Promise<SaveResult> {
   const hash = await payloadHash(input);
   const findDuplicate = env.DB.prepare('SELECT id, summary FROM learning_sessions WHERE user_id = ?1 AND payload_hash = ?2').bind(userId, hash);
-  const [duplicate, existingRows, reminder] = await env.DB.batch([
+  const [duplicate, existingRows, reminder, categoryRows, aliasRows] = await env.DB.batch([
     findDuplicate,
     env.DB.prepare(
       `SELECT k.id, k.key, k.name, k.aliases, k.final_answer,
@@ -100,6 +101,7 @@ export async function saveLearning(
         WHERE k.user_id = ?1 AND k.key IN (SELECT value FROM json_each(?2))`,
     ).bind(userId, JSON.stringify(referencedKeys(input))),
     env.DB.prepare('SELECT min(next_fire_at) AS next FROM reminder_slots WHERE user_id = ?1 AND enabled = 1').bind(userId),
+    ...categoryLookupQueries(env, userId),
   ]);
 
   const previous = duplicate!.results[0] as { id: string; summary: string } | undefined;
@@ -115,6 +117,14 @@ export async function saveLearning(
 
   const sessionId = crypto.randomUUID();
   const explainKeys = new Set(input.cards.filter((card) => card.type === 'explain').map((card) => card.concept));
+  const categories = resolveCategories(
+    input.concepts.map((concept) => concept.domain),
+    categoryRows!.results as { domain: string }[],
+    aliasRows!.results as { alias: string; path: string }[],
+  );
+  // 자료에서 만든 개념은 사용자가 풀기 전까지 내 지식이 아니다. 공부한 대화에서 나온 개념은 바로 내 지식이다
+  const fromMaterial = input.material !== undefined;
+  const adoptedAt = fromMaterial ? null : now;
 
   // 개념: 있으면 이름·별칭·최종 버전을 갱신하고, 없으면 만든다.
   // 설명하기 카드에 세션 final_answer를 썼으면 그 개념의 final_answer로도 저장한다 (설계서 §6.4).
@@ -131,8 +141,9 @@ export async function saveLearning(
       name,
       aliases: JSON.stringify(mergedAliases),
       search_text: searchText([name, ...mergedAliases, key]),
-      domain,
+      domain: resolvedCategory(categories, domain),
       final_answer: finalAnswer ?? sessionFinal,
+      adopted_at: adoptedAt,
     });
   };
   for (const concept of input.concepts) {
@@ -161,6 +172,7 @@ export async function saveLearning(
       prompt: card.prompt,
       ...cardColumns(card),
       status: initialStatus(rung, openRung),
+      origin: fromMaterial ? 'material' : 'study',
       ...fsrs,
     };
   });
@@ -175,27 +187,54 @@ export async function saveLearning(
     edges: input.edges.length,
   };
   const nextReminder = (reminder!.results[0] as { next: number | null } | undefined)?.next ?? null;
-  const summary = summarize(counts, cards.filter((card) => card.status === 'active').length, nextReminder, now);
+  const summary = fromMaterial
+    ? `자료 "${input.material!.title}"${input.material!.part ? ` (${input.material!.part})` : ''}에서 ${withObject(`카드 ${counts.cards}장`)} 만들었어요. 앱의 자료 화면에서 풀면 그 개념이 내 지식이 돼요.`
+    : summarize(counts, cards.filter((card) => card.status === 'active').length, nextReminder, now);
 
   const conceptId = (path: string) => `(SELECT id FROM concepts WHERE user_id = ?1 AND key = json_extract(value, '${path}'))`;
   const statements = [
     env.DB.prepare(
-      `INSERT INTO learning_sessions (id, user_id, source, topic, final_answer, key_terms, payload_hash, summary, counts, created_at)
-       VALUES (?2, ?1, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)`,
-    ).bind(userId, sessionId, source, input.topic, input.final_answer ?? null, JSON.stringify(input.key_terms), hash, summary, JSON.stringify(counts), now),
+      `INSERT INTO learning_sessions (id, user_id, source, topic, final_answer, key_terms, payload_hash, summary, counts, created_at, material, material_part)
+       VALUES (?2, ?1, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)`,
+    ).bind(
+      userId,
+      sessionId,
+      source,
+      input.topic,
+      input.final_answer ?? null,
+      JSON.stringify(input.key_terms),
+      hash,
+      summary,
+      JSON.stringify(counts),
+      now,
+      input.material?.title ?? null,
+      input.material?.part ?? null,
+    ),
     // INSERT ... SELECT에 ON CONFLICT를 붙일 때는 SELECT에 WHERE가 있어야 한다 (SQLite 문법)
     env.DB.prepare(
-      `INSERT INTO concepts (id, user_id, key, name, aliases, search_text, domain, final_answer, created_at, updated_at)
+      `INSERT INTO concepts (id, user_id, key, name, aliases, search_text, domain, final_answer, created_at, updated_at, adopted_at)
        SELECT json_extract(value, '$.id'), ?1, json_extract(value, '$.key'), json_extract(value, '$.name'),
               json_extract(value, '$.aliases'), json_extract(value, '$.search_text'), json_extract(value, '$.domain'),
-              json_extract(value, '$.final_answer'), ?3, ?3
+              json_extract(value, '$.final_answer'), ?3, ?3, json_extract(value, '$.adopted_at')
          FROM json_each(?2) WHERE true
        ON CONFLICT (user_id, key) DO UPDATE SET
          name = excluded.name, aliases = excluded.aliases, search_text = excluded.search_text,
-         domain = coalesce(excluded.domain, concepts.domain), final_answer = coalesce(excluded.final_answer, concepts.final_answer),
+         -- 이미 분류가 있으면 그대로 둔다. 저장할 때마다 분류가 흔들리지 않게 하고, 바꾸는 것은 분류 정리에서 한다
+         domain = coalesce(concepts.domain, excluded.domain), final_answer = coalesce(excluded.final_answer, concepts.final_answer),
+         adopted_at = coalesce(concepts.adopted_at, excluded.adopted_at),
          updated_at = excluded.updated_at`,
     ).bind(userId, JSON.stringify([...conceptRows.values()]), now),
   ];
+  // 공부한 대화에서 다룬 개념은 자료에만 있던 것이라도 이제 내 지식이다 (concepts에 없이 카드·판정·질문만 가리킨 개념 포함)
+  if (!fromMaterial) {
+    statements.push(
+      env.DB.prepare('UPDATE concepts SET adopted_at = ?3 WHERE user_id = ?1 AND adopted_at IS NULL AND key IN (SELECT value FROM json_each(?2))').bind(
+        userId,
+        JSON.stringify(referencedKeys(input)),
+        now,
+      ),
+    );
+  }
   if (input.edges.length > 0) {
     statements.push(
       env.DB.prepare(
@@ -225,14 +264,14 @@ export async function saveLearning(
   statements.push(
     env.DB.prepare(
       `INSERT INTO cards (id, user_id, concept_id, session_id, rung, type, prompt, code, answer, options, explain, checklist, status,
-                          due, stability, difficulty, elapsed_days, scheduled_days, learning_steps, reps, lapses, state, last_review, created_at)
+                          due, stability, difficulty, elapsed_days, scheduled_days, learning_steps, reps, lapses, state, last_review, created_at, origin)
        SELECT json_extract(value, '$.id'), ?1, ${conceptId('$.concept')}, ?3, json_extract(value, '$.rung'), json_extract(value, '$.type'),
               json_extract(value, '$.prompt'), json_extract(value, '$.code'), json_extract(value, '$.answer'), json_extract(value, '$.options'),
               json_extract(value, '$.explain'), json_extract(value, '$.checklist'), json_extract(value, '$.status'),
               json_extract(value, '$.due'), json_extract(value, '$.stability'), json_extract(value, '$.difficulty'),
               json_extract(value, '$.elapsed_days'), json_extract(value, '$.scheduled_days'), json_extract(value, '$.learning_steps'),
               json_extract(value, '$.reps'), json_extract(value, '$.lapses'), json_extract(value, '$.state'),
-              json_extract(value, '$.last_review'), ?4
+              json_extract(value, '$.last_review'), ?4, json_extract(value, '$.origin')
          FROM json_each(?2)`,
     ).bind(userId, JSON.stringify(cards), sessionId, now),
   );

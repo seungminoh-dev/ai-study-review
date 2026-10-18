@@ -17,8 +17,8 @@ me.get('/export', async (c) => {
   const results = await c.env.DB.batch([
     query('SELECT display_name, role, timezone, daily_new_limit, daily_review_limit, daily_goal, created_at FROM users WHERE id = ?1'),
     query("SELECT login FROM user_identities WHERE user_id = ?1 AND provider = 'github'"),
-    query('SELECT id, source, topic, final_answer, key_terms, summary, created_at FROM learning_sessions WHERE user_id = ?1 ORDER BY created_at'),
-    query('SELECT id, key, name, aliases, domain, final_answer, created_at, updated_at FROM concepts WHERE user_id = ?1 ORDER BY created_at'),
+    query('SELECT id, source, topic, material, material_part, final_answer, key_terms, summary, created_at FROM learning_sessions WHERE user_id = ?1 ORDER BY created_at'),
+    query('SELECT id, key, name, aliases, domain, final_answer, created_at, updated_at, adopted_at FROM concepts WHERE user_id = ?1 ORDER BY created_at'),
     query(
       `SELECT f.key AS from_key, t.key AS to_key, e.type, e.created_at FROM edges e
          JOIN concepts f ON f.id = e.from_id JOIN concepts t ON t.id = e.to_id WHERE e.user_id = ?1`,
@@ -27,7 +27,7 @@ me.get('/export', async (c) => {
     query('SELECT id, concept_id, session_id, question, created_at, resolved_at FROM followups WHERE user_id = ?1 ORDER BY created_at'),
     query(
       `SELECT id, concept_id, session_id, rung, type, prompt, code, answer, options, explain, checklist, status, due, stability, difficulty,
-              reps, lapses, state, last_review, created_at, edited_at FROM cards WHERE user_id = ?1 ORDER BY created_at`,
+              reps, lapses, state, last_review, created_at, edited_at, origin FROM cards WHERE user_id = ?1 ORDER BY created_at`,
     ),
     query('SELECT id, card_id, grade, response, confidence, elapsed_ms, reviewed_at FROM review_logs WHERE user_id = ?1 ORDER BY reviewed_at'),
     query('SELECT local_time, enabled FROM reminder_slots WHERE user_id = ?1'),
@@ -83,6 +83,7 @@ export function deleteUserStatements(env: Env, userId: string): D1PreparedStatem
     run('DELETE FROM user_identities WHERE user_id = ?1'),
     run('DELETE FROM streak_freezes WHERE user_id = ?1'),
     run('DELETE FROM shared_questions WHERE user_id = ?1'),
+    run('DELETE FROM category_aliases WHERE user_id = ?1'),
     run('DELETE FROM llm_jobs WHERE user_id = ?1'),
     run("UPDATE llm_usage SET user_id = 'deleted' WHERE user_id = ?1"),
     run('UPDATE invites SET used_by = NULL WHERE used_by = ?1'),

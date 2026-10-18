@@ -75,19 +75,31 @@ interface CandidateRow extends QueueCandidate, FsrsFields {
 /** 후보는 넉넉히 읽되 끝없이 읽지는 않는다. 종류마다 따로 읽어서, 밀린 새 카드가 복습 카드를 밀어내지 않게 한다 */
 const CANDIDATE_LIMIT = 200;
 
+/**
+ * 후보 카드. ?3은 분류 필터(없으면 NULL): 그 분류와 그 아래 분류의 개념만 고른다.
+ * 자료에서 만든 카드는 한 번 풀기 전(state 0)에는 넣지 않는다. 자료 화면에서 "이 자료 풀기"로만 처음 푼다.
+ */
 const CANDIDATES = `SELECT c.id, c.concept_id, c.state, c.due, c.created_at, c.type, c.rung, c.prompt, c.code, c.answer, c.options, c.explain,
                           c.checklist, c.stability, c.difficulty, c.elapsed_days, c.scheduled_days, c.learning_steps, c.reps, c.lapses,
                           c.last_review, k.key AS concept_key, k.name AS concept_name, k.final_answer
                      FROM cards c JOIN concepts k ON k.id = c.concept_id
-                    WHERE c.user_id = ?1 AND c.status = 'active' AND c.due <= ?2`;
+                    WHERE c.user_id = ?1 AND c.status = 'active' AND c.due <= ?2
+                      AND NOT (c.origin = 'material' AND c.state = 0)
+                      AND (?3 IS NULL OR k.domain = ?3 OR substr(k.domain, 1, length(?3) + 1) = ?3 || '/')`;
+
+export interface QueueFilter {
+  /** 이 분류(와 그 아래)만 */
+  category?: string | null | undefined;
+}
 
 /** 오늘 복습할 카드 전체를 순서대로 돌려준다. 앞에서 원하는 장수만 쓴다. */
-export async function loadTodayQueue(env: Env, userId: string, now: number): Promise<QueueCard[]> {
+export async function loadTodayQueue(env: Env, userId: string, now: number, filter: QueueFilter = {}): Promise<QueueCard[]> {
   const dayStart = studyDayStart(now);
+  const category = filter.category ?? null;
   const [learning, review, fresh, today, user] = await env.DB.batch([
-    env.DB.prepare(`${CANDIDATES} AND c.state IN (1, 3) ORDER BY c.due LIMIT ${CANDIDATE_LIMIT}`).bind(userId, now),
-    env.DB.prepare(`${CANDIDATES} AND c.state = 2 ORDER BY c.due LIMIT ${CANDIDATE_LIMIT}`).bind(userId, now),
-    env.DB.prepare(`${CANDIDATES} AND c.state = 0 ORDER BY c.created_at LIMIT ${CANDIDATE_LIMIT}`).bind(userId, now),
+    env.DB.prepare(`${CANDIDATES} AND c.state IN (1, 3) ORDER BY c.due LIMIT ${CANDIDATE_LIMIT}`).bind(userId, now, category),
+    env.DB.prepare(`${CANDIDATES} AND c.state = 2 ORDER BY c.due LIMIT ${CANDIDATE_LIMIT}`).bind(userId, now, category),
+    env.DB.prepare(`${CANDIDATES} AND c.state = 0 ORDER BY c.created_at LIMIT ${CANDIDATE_LIMIT}`).bind(userId, now, category),
     env.DB.prepare(
       `SELECT r.card_id, c.concept_id, json_extract(r.prev_card, '$.state') AS prev_state
          FROM review_logs r JOIN cards c ON c.id = r.card_id
@@ -110,6 +122,25 @@ export async function loadTodayQueue(env: Env, userId: string, now: number): Pro
     reviewedCards: new Set(logs.map((log) => log.card_id)),
   });
   return picked.map((row) => toQueueCard(row, now));
+}
+
+/**
+ * 자료 하나를 푼다 ("이 자료 풀기"). 그 자료에서 만든 카드 중 지금 풀 수 있는 것을, 이미 푼 것(복습할 때가 된 것) → 아직 안 푼 것 순으로 준다.
+ * 사용자가 직접 고른 학습이라 하루 새 카드 상한과 "같은 개념 하루 1장"은 적용하지 않는다. 사다리(잠긴 단계)는 그대로다.
+ */
+export async function loadMaterialQueue(env: Env, userId: string, material: string, now: number, size: number): Promise<QueueCard[]> {
+  const { results } = await env.DB.prepare(
+    `SELECT c.id, c.concept_id, c.state, c.due, c.created_at, c.type, c.rung, c.prompt, c.code, c.answer, c.options, c.explain,
+            c.checklist, c.stability, c.difficulty, c.elapsed_days, c.scheduled_days, c.learning_steps, c.reps, c.lapses,
+            c.last_review, k.key AS concept_key, k.name AS concept_name, k.final_answer
+       FROM cards c JOIN concepts k ON k.id = c.concept_id JOIN learning_sessions s ON s.id = c.session_id
+      WHERE c.user_id = ?1 AND s.user_id = ?1 AND s.material = ?2 AND c.status = 'active' AND c.due <= ?3
+      ORDER BY (c.state = 0), c.due, s.created_at, c.created_at
+      LIMIT ?4`,
+  )
+    .bind(userId, material, now, size)
+    .all<CandidateRow>();
+  return results.map((row) => toQueueCard(row, now));
 }
 
 function toQueueCard(row: CandidateRow, now: number): QueueCard {

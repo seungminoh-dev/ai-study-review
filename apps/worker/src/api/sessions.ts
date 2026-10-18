@@ -13,19 +13,28 @@ interface SessionRow {
   id: string;
   topic: string;
   source: string;
+  material: string | null;
   created_at: number;
   counts: string;
 }
 
 export async function listSessions(env: Env, userId: string, limit: number): Promise<SessionSummary[]> {
   const { results } = await env.DB.prepare(
-    'SELECT id, topic, source, created_at, counts FROM learning_sessions WHERE user_id = ?1 ORDER BY created_at DESC LIMIT ?2',
+    'SELECT id, topic, source, material, created_at, counts FROM learning_sessions WHERE user_id = ?1 ORDER BY created_at DESC LIMIT ?2',
   )
     .bind(userId, limit)
     .all<SessionRow>();
   return results.map((row) => {
     const counts = JSON.parse(row.counts) as { concepts?: number; cards?: number };
-    return { id: row.id, topic: row.topic, source: row.source, created_at: row.created_at, concepts: counts.concepts ?? 0, cards: counts.cards ?? 0 };
+    return {
+      id: row.id,
+      topic: row.topic,
+      source: row.source,
+      material: row.material,
+      created_at: row.created_at,
+      concepts: counts.concepts ?? 0,
+      cards: counts.cards ?? 0,
+    };
   });
 }
 

@@ -1,11 +1,13 @@
 import { searchTerms, type EdgeType, type JudgmentLabel } from '@moai/shared';
 import type { Env } from '../env';
 import { DAY_MS } from '../lib/kst';
+import { categoriesQuery, type CategoryCount } from './categories';
 import { LADDER_STABILITY_DAYS } from './ladder';
 
 // 개념 찾기와 상태 (설계서 §6.6, §9.7)
 
-export type ConceptState = '아직 안 배움' | '익숙함' | '흔들림';
+/** 자료: PDF 같은 자료에서만 나왔고 아직 한 번도 풀지 않은 개념 (내 지식이 아니다) */
+export type ConceptState = '아직 안 배움' | '익숙함' | '흔들림' | '자료';
 
 /** 최근 이 기간에 틀린 적이 없어야 익숙함이다 */
 const FAMILIAR_WINDOW_MS = 14 * DAY_MS;
@@ -16,6 +18,7 @@ export interface ConceptRow {
   name: string;
   aliases: string;
   final_answer: string | null;
+  domain?: string | null;
 }
 
 export interface LastJudgment {
@@ -30,6 +33,7 @@ export interface FoundConcept {
   key: string;
   name: string;
   aliases: string[];
+  category: string | null;
   state: ConceptState;
   last_judgment: LastJudgment | null;
 }
@@ -40,7 +44,8 @@ export interface RelatedConcept extends FoundConcept {
 }
 
 /** 카드가 없으면 아직 안 배움, 활성 카드가 모두 익었고 최근 14일 동안 틀린 적이 없으면 익숙함, 나머지는 흔들림 */
-export function conceptState(stats: { cards: number; active: number; unstable: number; recent_fails: number }): ConceptState {
+export function conceptState(stats: { cards: number; active: number; unstable: number; recent_fails: number; adopted?: number }): ConceptState {
+  if (stats.adopted === 0) return '자료';
   if (stats.cards === 0) return '아직 안 배움';
   if (stats.active > 0 && stats.unstable === 0 && stats.recent_fails === 0) return '익숙함';
   return '흔들림';
@@ -52,6 +57,7 @@ interface StatsRow {
   active: number;
   unstable: number;
   recent_fails: number;
+  adopted: number;
 }
 
 export function statsQuery(env: Env, ids: readonly string[], now: number): D1PreparedStatement {
@@ -61,7 +67,8 @@ export function statsQuery(env: Env, ids: readonly string[], now: number): D1Pre
             (SELECT count(*) FROM cards c WHERE c.concept_id = k.value AND c.status = 'active') AS active,
             (SELECT count(*) FROM cards c WHERE c.concept_id = k.value AND c.status = 'active' AND c.stability < ${LADDER_STABILITY_DAYS}) AS unstable,
             (SELECT count(*) FROM cards c JOIN review_logs r ON r.card_id = c.id
-              WHERE c.concept_id = k.value AND r.grade = 1 AND r.reviewed_at >= ?2) AS recent_fails
+              WHERE c.concept_id = k.value AND r.grade = 1 AND r.reviewed_at >= ?2) AS recent_fails,
+            (SELECT adopted_at IS NOT NULL FROM concepts WHERE id = k.value) AS adopted
        FROM json_each(?1) AS k`,
   ).bind(JSON.stringify(ids), now - FAMILIAR_WINDOW_MS);
 }
@@ -97,15 +104,15 @@ export async function findConcepts(
   query: string,
   limit: number,
   now: number,
-): Promise<{ found: FoundConcept[]; related: RelatedConcept[] }> {
+): Promise<{ found: FoundConcept[]; related: RelatedConcept[]; categories: CategoryCount[] }> {
   const terms = searchTerms(query);
-  if (terms.length === 0) return { found: [], related: [] };
-  const match = `SELECT DISTINCT k.id, k.key, k.name, k.aliases, k.final_answer
+  const match = `SELECT DISTINCT k.id, k.key, k.name, k.aliases, k.final_answer, k.domain
        FROM concepts k, json_each(?2) AS t
       WHERE k.user_id = ?1 AND instr(k.search_text, t.value) > 0
       LIMIT ?3`;
   // 찾기와 연결 읽기를 한 번의 왕복으로 한다. MCP 요청은 미국에서, D1은 APAC에 있다
-  const [matched, edgeRows] = await env.DB.batch([
+  // 기존 분류 목록도 함께 준다. Claude가 새 개념에 같은 분류 이름을 고르게 한다
+  const [matched, edgeRows, categoryRows] = await env.DB.batch([
     env.DB.prepare(match).bind(userId, JSON.stringify(terms), limit),
     env.DB.prepare(
       `WITH m AS (SELECT id FROM (${match}))
@@ -114,9 +121,11 @@ export async function findConcepts(
         WHERE e.user_id = ?1 AND (e.from_id IN (SELECT id FROM m) OR e.to_id IN (SELECT id FROM m))
         LIMIT 60`,
     ).bind(userId, JSON.stringify(terms), limit),
+    categoriesQuery(env, userId),
   ]);
+  const categories = categoryRows!.results as unknown as CategoryCount[];
   const found = matched!.results as unknown as ConceptRow[];
-  if (found.length === 0) return { found: [], related: [] };
+  if (found.length === 0) return { found: [], related: [], categories };
   const foundIds = found.map((concept) => concept.id);
   const edges = { results: edgeRows!.results as unknown as { from_id: string; to_id: string; type: EdgeType; from_key: string; to_key: string }[] };
 
@@ -133,7 +142,7 @@ export async function findConcepts(
   const relatedIds = [...via.keys()];
   const allIds = [...foundIds, ...relatedIds];
   const [relatedRows, stats, judgments] = await env.DB.batch([
-    env.DB.prepare('SELECT id, key, name, aliases, final_answer FROM concepts WHERE user_id = ?1 AND id IN (SELECT value FROM json_each(?2))').bind(
+    env.DB.prepare('SELECT id, key, name, aliases, final_answer, domain FROM concepts WHERE user_id = ?1 AND id IN (SELECT value FROM json_each(?2))').bind(
       userId,
       JSON.stringify(relatedIds),
     ),
@@ -149,6 +158,7 @@ export async function findConcepts(
       key: row.key,
       name: row.name,
       aliases: parseAliases(row.aliases),
+      category: row.domain ?? null,
       state: states.get(row.id) ?? '아직 안 배움',
       last_judgment: last ? { label: last.label, said: last.said, note: last.note, created_at: last.created_at } : null,
     };
@@ -156,6 +166,7 @@ export async function findConcepts(
   return {
     found: found.map(describe),
     related: (relatedRows!.results as unknown as ConceptRow[]).map((row) => ({ ...describe(row), via: via.get(row.id)! })),
+    categories,
   };
 }
 

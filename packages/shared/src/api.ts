@@ -169,14 +169,15 @@ export interface LeagueEntry {
   me: boolean;
 }
 
-/** 개념 상태 (설계서 §9.7): 아직 안 배움(점선) · 익숙함(초록) · 흔들림(노랑) */
-export type ConceptStateKey = 'unlearned' | 'familiar' | 'shaky';
+/** 개념 상태 (설계서 §9.7): 아직 안 배움(점선) · 익숙함(초록) · 흔들림(노랑) · 자료(아직 안 푼 자료, 내 지식 아님) */
+export type ConceptStateKey = 'unlearned' | 'familiar' | 'shaky' | 'material';
 
 export interface MapNode {
   key: string;
   name: string;
   state: ConceptStateKey;
   cards: number;
+  category: string | null;
 }
 
 export interface MapResponse {
@@ -188,6 +189,7 @@ export interface ConceptDetail {
   key: string;
   name: string;
   aliases: string[];
+  category: string | null;
   state: ConceptStateKey;
   final_answer: string | null;
   judgments: { id: string; label: JudgmentLabel; said: string | null; note: string; created_at: number; topic: string }[];
@@ -217,6 +219,29 @@ export interface LoginCode {
   code: string;
   expires_at: number;
 }
+
+/** 자료 하나 (PDF 등). 같은 제목의 저장을 묶는다 */
+export interface MaterialSummary {
+  title: string;
+  parts: string[];
+  cards: number;
+  /** 한 번이라도 푼 카드 */
+  solved: number;
+  /** 지금 풀 수 있는(열린) 안 푼 카드 */
+  unsolved_open: number;
+  concepts: number;
+  /** 풀어서 내 지식이 된 개념 */
+  adopted: number;
+  created_at: number;
+}
+
+export interface CategoryNode {
+  path: string;
+  concepts: number;
+}
+
+export const ConceptCategoryBody = z.object({ category: z.string().trim().max(80).nullable() });
+export const MaterialBody = z.object({ title: z.string().trim().min(1).max(120) });
 
 /** 질문 은행에 질문 하나 공유하기. 질문과 개념 이름만 보낸다 */
 export const ShareQuestionBody = z.object({
@@ -307,6 +332,8 @@ export interface SessionSummary {
   id: string;
   topic: string;
   source: string;
+  /** 자료에서 만든 저장이면 자료 제목 */
+  material: string | null;
   created_at: number;
   concepts: number;
   cards: number;

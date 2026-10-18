@@ -1,3 +1,4 @@
+import { normalizeCategory } from '@moai/shared';
 import type { Env } from '../env';
 import { DAY_MS } from '../lib/kst';
 import { pickTopicConcepts } from './learner-context';
@@ -24,11 +25,17 @@ export interface InterviewChain {
 export async function interviewChain(
   env: Env,
   userId: string,
-  request: { topic?: string | undefined; concept_key?: string | undefined; length?: number | undefined },
+  request: { topic?: string | undefined; concept_key?: string | undefined; length?: number | undefined; category?: string | undefined },
   now: number,
 ): Promise<InterviewChain | null> {
+  const category = normalizeCategory(request.category);
   const [concepts, edges, weak] = await env.DB.batch([
-    env.DB.prepare('SELECT id, key, name, search_text FROM concepts WHERE user_id = ?1 LIMIT 5000').bind(userId),
+    // 내 지식(한 번이라도 풀었거나 공부한 개념)만 묻는다. 분류를 주면 그 분류 안에서만
+    env.DB.prepare(
+      `SELECT id, key, name, search_text FROM concepts
+        WHERE user_id = ?1 AND adopted_at IS NOT NULL
+          AND (?2 IS NULL OR domain = ?2 OR substr(domain, 1, length(?2) + 1) = ?2 || '/') LIMIT 5000`,
+    ).bind(userId, category),
     env.DB.prepare('SELECT from_id, to_id, type FROM edges WHERE user_id = ?1 LIMIT 5000').bind(userId),
     // 최근에 틀린 횟수가 많은 개념이 먼저다
     env.DB.prepare(

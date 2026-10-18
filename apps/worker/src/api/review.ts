@@ -1,7 +1,7 @@
-import { ReviewItem, ReviewsBody, estimateMinutes, type OpenFollowup, type QueueResponse, type SessionSummary, type TodayResponse } from '@moai/shared';
+import { ReviewItem, ReviewsBody, estimateMinutes, normalizeCategory, type OpenFollowup, type QueueResponse, type SessionSummary, type TodayResponse } from '@moai/shared';
 import { Hono } from 'hono';
 import type { AppEnv } from '../context';
-import { countReviewedToday, loadTodayQueue } from '../domain/queue';
+import { countReviewedToday, loadMaterialQueue, loadTodayQueue } from '../domain/queue';
 import { recordReviews } from '../domain/reviews';
 import { loadMe } from '../domain/users';
 import { errorJson, readJson } from '../lib/http';
@@ -43,9 +43,16 @@ review.get('/today', async (c) => {
   return c.json(body);
 });
 
+/** ?category=분류 경로: 그 분류만 복습. ?material=자료 제목: 그 자료 풀기 (아직 안 푼 자료 카드 포함) */
 review.get('/queue', async (c) => {
   const size = Math.min(Math.max(Number.parseInt(c.req.query('size') ?? '8', 10) || 8, 1), 20);
-  const queue = await loadTodayQueue(c.env, c.var.userId, Date.now());
+  const now = Date.now();
+  const material = c.req.query('material')?.slice(0, 120);
+  if (material) {
+    const cards = await loadMaterialQueue(c.env, c.var.userId, material, now, size);
+    return c.json({ cards, remaining: cards.length } satisfies QueueResponse);
+  }
+  const queue = await loadTodayQueue(c.env, c.var.userId, now, { category: normalizeCategory(c.req.query('category')) });
   const body: QueueResponse = { cards: queue.slice(0, size), remaining: queue.length };
   return c.json(body);
 });

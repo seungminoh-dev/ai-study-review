@@ -1,7 +1,7 @@
-import { gradeAnswer, type Confidence, type McqOption, type QueueCard, type ReviewGrade } from '@moai/shared';
+import { gradeAnswer, normalizeCategory, type Confidence, type McqOption, type QueueCard, type ReviewGrade } from '@moai/shared';
 import type { Env } from '../env';
 import { describeKstMoment } from '../lib/kst';
-import { loadTodayQueue } from './queue';
+import { loadMaterialQueue, loadTodayQueue } from './queue';
 import { recordReviews } from './reviews';
 
 // 채팅 복습 (설계서 §2.4): claude.ai 채팅에서 "오늘 복습 퀴즈 내줘"를 처리한다.
@@ -50,8 +50,16 @@ function choicesOf(card: { id: string; type: QueueCard['type']; options: McqOpti
   return texts ? shuffled(texts, seedOf(card.id, texts)) : null;
 }
 
-export async function chatQueue(env: Env, userId: string, size: number, now: number): Promise<{ questions: ChatQuestion[]; remaining: number }> {
-  const queue = await loadTodayQueue(env, userId, now);
+export async function chatQueue(
+  env: Env,
+  userId: string,
+  size: number,
+  now: number,
+  filter: { category?: string | null | undefined; material?: string | undefined } = {},
+): Promise<{ questions: ChatQuestion[]; remaining: number }> {
+  const queue = filter.material
+    ? await loadMaterialQueue(env, userId, filter.material, now, size)
+    : await loadTodayQueue(env, userId, now, { category: normalizeCategory(filter.category) });
   return {
     remaining: queue.length,
     questions: queue.slice(0, size).map((card) => ({
@@ -74,6 +82,9 @@ interface CardRow {
   explain: string | null;
   checklist: string | null;
   status: string;
+  origin: 'study' | 'material';
+  state: number;
+  due: number;
   final_answer: string | null;
   concept_name: string;
 }
@@ -122,7 +133,7 @@ export async function chatSubmit(
   now: number,
 ): Promise<ChatSubmitResult> {
   const card = await env.DB.prepare(
-    `SELECT c.id, c.type, c.prompt, c.answer, c.options, c.explain, c.checklist, c.status, k.final_answer, k.name AS concept_name
+    `SELECT c.id, c.type, c.prompt, c.answer, c.options, c.explain, c.checklist, c.status, c.origin, c.state, c.due, k.final_answer, k.name AS concept_name
        FROM cards c JOIN concepts k ON k.id = c.concept_id WHERE c.id = ?1 AND c.user_id = ?2`,
   )
     .bind(input.card_id, userId)
@@ -134,8 +145,10 @@ export async function chatSubmit(
     .first();
   if (recent) return { kind: 'duplicate' };
   // 오늘 복습할 카드만 받는다. 앱에서 이미 푼 카드, 어제 목록의 카드, 아직 때가 안 된 카드를 다시 채점하지 않는다
+  // 아직 안 푼 자료 카드는 오늘 큐에 없다. "이 자료 풀기"로 낸 문제라 따로 받는다
   const queue = await loadTodayQueue(env, userId, now);
-  if (!queue.some((item) => item.id === card.id)) return { kind: 'not_due' };
+  const unsolvedMaterial = card.origin === 'material' && card.state === 0 && card.due <= now;
+  if (!unsolvedMaterial && !queue.some((item) => item.id === card.id)) return { kind: 'not_due' };
 
   let grade: ReviewGrade;
   let correct: boolean | null = null;
