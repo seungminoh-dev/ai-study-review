@@ -25,4 +25,4 @@ Claude Code에서 공부한 내용을 [모아이](https://moai.smoh.dev) 복습 
    ```
    커넥터 URL은 비밀번호와 같다. 레포나 공유 설정 파일(`.mcp.json`)에 넣지 않는다. `--scope user`는 내 컴퓨터의 사용자 설정에만 저장한다. 새었으면 앱에서 다시 만들면 이전 URL은 바로 막힌다.
 
-도구는 부를 때마다 승인을 묻는다. 자주 쓰면 `/permissions`에서 **읽기 도구만** 허용해 둔다: `mcp__moai__find_concepts`, `mcp__moai__get_learner_context`, `mcp__moai__get_review_queue`, `mcp__moai__get_interview_chain` (직접 추가한 경우 이름). 저장·채점(`save_learning`, `submit_review`)은 매번 확인하는 편이 안전하다.
+도구는 부를 때마다 승인을 묻는다. 자주 쓰면 `/permissions`에서 **읽기 도구만** 허용해 둔다: `mcp__moai__find_concepts`, `mcp__moai__get_learner_context`, `mcp__moai__get_review_queue`, `mcp__moai__get_interview_chain`, `mcp__moai__get_categories` (직접 추가한 경우 이름). 저장·채점(`save_learning`, `submit_review`)은 매번 확인하는 편이 안전하다.
