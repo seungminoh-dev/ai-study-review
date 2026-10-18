@@ -1,5 +1,6 @@
 import type { ConceptDetail } from '@moai/shared';
 import { useState } from 'react';
+import { errorMessage, request } from '../api';
 import { copyText } from '../copy';
 import { Link } from '../router';
 import { formatDate, useApi } from '../useApi';
@@ -73,7 +74,10 @@ export function Concept({ conceptKey }: { conceptKey: string }) {
           <h2>다음에 볼 질문</h2>
           <ul className="list">
             {data.followups.map((followup) => (
-              <li key={followup.id}>{followup.question}</li>
+              <li key={followup.id}>
+                {followup.question}
+                <ShareButton conceptName={data.name} question={followup.question} />
+              </li>
             ))}
           </ul>
         </section>
@@ -110,5 +114,27 @@ export function Concept({ conceptKey }: { conceptKey: string }) {
         <p className="muted">아직 이 개념의 카드가 없어요. 위 프롬프트로 공부하고 저장하면 카드가 생겨요.</p>
       )}
     </div>
+  );
+}
+
+/** 질문만 친구들과 공유한다 (설계서 §2.4) */
+function ShareButton({ conceptName, question }: { conceptName: string; question: string }) {
+  const [state, setState] = useState<'idle' | 'shared' | string>('idle');
+  if (state === 'shared') return <p className="muted small">질문 은행에 공유했어요.</p>;
+  return (
+    <>
+      <button
+        type="button"
+        className="text-button"
+        onClick={() =>
+          void request('/shared-questions', { method: 'POST', json: { concept_name: conceptName, question } })
+            .then(() => setState('shared'))
+            .catch((error: unknown) => setState(errorMessage(error)))
+        }
+      >
+        친구들에게 질문만 공유
+      </button>
+      {state !== 'idle' ? <p className="notice bad">{state}</p> : null}
+    </>
   );
 }

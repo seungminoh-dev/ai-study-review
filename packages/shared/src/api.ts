@@ -218,6 +218,24 @@ export interface LoginCode {
   expires_at: number;
 }
 
+/** 질문 은행에 질문 하나 공유하기. 질문과 개념 이름만 보낸다 */
+export const ShareQuestionBody = z.object({
+  concept_name: z.string().trim().min(1).max(60),
+  question: z.string().trim().min(5).max(300),
+});
+
+export interface SharedQuestion {
+  id: string;
+  concept_name: string;
+  question: string;
+  /** 공유한 친구 이름 */
+  by: string;
+  mine: boolean;
+  created_at: number;
+  /** claude.ai에 붙여 넣을 프롬프트 */
+  prompt: string;
+}
+
 /** 베타 지표 (설계서 §2.3 끝났다는 기준) */
 export interface BetaMetrics {
   users: number;

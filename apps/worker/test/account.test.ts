@@ -13,6 +13,7 @@ async function fillAccount(user: TestUser): Promise<void> {
   await api(user, '/reminders', { method: 'PUT', json: { times: ['08:10'] } });
   await api(user, '/login-codes', { method: 'POST' });
   await api(user, `/cards/${card}/report`, { method: 'POST', json: { reason: 'unclear' } });
+  expect((await api(user, '/shared-questions', { method: 'POST', json: { concept_name: '깊은 복사', question: '깊은 복사는 언제 필요할까요?' } })).status).toBe(204);
   const now = Date.now();
   await env.DB.batch([
     env.DB.prepare("INSERT INTO user_identities (provider, subject, user_id, login, created_at) VALUES ('github', ?1, ?2, 'gone', ?3)").bind(crypto.randomUUID(), user.id, now),

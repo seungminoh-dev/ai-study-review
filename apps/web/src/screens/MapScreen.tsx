@@ -34,6 +34,9 @@ export function MapScreen() {
   return (
     <div className="screen">
       <h1>지식 지도</h1>
+      <Link href="/questions" className="notice link">
+        친구들이 공유한 질문 은행 →
+      </Link>
       <p className="legend small">
         <span className="dot familiar" /> 익숙함 {counts.familiar} · <span className="dot shaky" /> 흔들림 {counts.shaky} · <span className="dot unlearned" /> 아직 안 배움{' '}
         {counts.unlearned}

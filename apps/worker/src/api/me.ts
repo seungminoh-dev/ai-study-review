@@ -33,8 +33,9 @@ me.get('/export', async (c) => {
     query('SELECT local_time, enabled FROM reminder_slots WHERE user_id = ?1'),
     query('SELECT day FROM streak_freezes WHERE user_id = ?1 ORDER BY day'),
     query('SELECT card_id, reason, note, created_at FROM card_reports WHERE user_id = ?1 ORDER BY created_at'),
+    query('SELECT concept_name, question, created_at FROM shared_questions WHERE user_id = ?1 ORDER BY created_at'),
   ]);
-  const [user, identity, sessions, concepts, edges, judgments, followups, cards, reviews, reminders, freezes, reports] = results.map((result) => result.results);
+  const [user, identity, sessions, concepts, edges, judgments, followups, cards, reviews, reminders, freezes, reports, shared] = results.map((result) => result.results);
   const body = {
     format: 'moai-export-v1',
     exported_at: new Date().toISOString(),
@@ -50,6 +51,7 @@ me.get('/export', async (c) => {
     reminders,
     streak_freezes: freezes,
     card_reports: reports,
+    shared_questions: shared,
   };
   const day = new Date().toISOString().slice(0, 10);
   return new Response(JSON.stringify(body, null, 2), {
@@ -80,6 +82,7 @@ export function deleteUserStatements(env: Env, userId: string): D1PreparedStatem
     run('DELETE FROM login_codes WHERE user_id = ?1'),
     run('DELETE FROM user_identities WHERE user_id = ?1'),
     run('DELETE FROM streak_freezes WHERE user_id = ?1'),
+    run('DELETE FROM shared_questions WHERE user_id = ?1'),
     run('DELETE FROM llm_jobs WHERE user_id = ?1'),
     run("UPDATE llm_usage SET user_id = 'deleted' WHERE user_id = ?1"),
     run('UPDATE invites SET used_by = NULL WHERE used_by = ?1'),
