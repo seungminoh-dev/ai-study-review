@@ -43,13 +43,14 @@ review.get('/today', async (c) => {
   return c.json(body);
 });
 
-/** ?category=분류 경로: 그 분류만 복습. ?material=자료 제목: 그 자료 풀기 (아직 안 푼 자료 카드 포함) */
+/** ?category=분류 경로: 그 분류만 복습. ?material=자료 제목: 그 자료 풀기 (아직 안 푼 자료 카드 포함), &part=섹션 이름이면 그 섹션만 */
 review.get('/queue', async (c) => {
   const size = Math.min(Math.max(Number.parseInt(c.req.query('size') ?? '8', 10) || 8, 1), 20);
   const now = Date.now();
   const material = c.req.query('material')?.slice(0, 120);
   if (material) {
-    return c.json((await loadMaterialQueue(c.env, c.var.userId, material, now, size)) satisfies QueueResponse);
+    const part = c.req.query('part');
+    return c.json((await loadMaterialQueue(c.env, c.var.userId, material, now, size, part === undefined ? null : part.slice(0, 80))) satisfies QueueResponse);
   }
   const queue = await loadTodayQueue(c.env, c.var.userId, now, { category: normalizeCategory(c.req.query('category')) });
   const body: QueueResponse = { cards: queue.slice(0, size), remaining: queue.length };

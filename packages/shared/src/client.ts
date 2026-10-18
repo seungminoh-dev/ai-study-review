@@ -3,3 +3,4 @@ export * from './grading';
 export * from './limits';
 export { MAX_IMPORT_CHARS } from './llm-limits';
 export { inCategory, normalizeCategory } from './category';
+export { isPdf, materialLabel, splitPart } from './material';

@@ -1,9 +1,11 @@
 import type { MapResponse, MaterialSummary, McpTokenStatus, StatsResponse, TodayResponse } from '@moai/shared';
+import { materialLabel } from '@moai/shared/client';
 import { useEffect, useState } from 'react';
 import { request } from '../api';
 import { IconArrow, IconBook, IconCheck, IconFlame, IconSettings } from '../icons';
 import { Loading } from '../Loading';
 import { Mascot } from '../Mascot';
+import { materialReview, partView } from '../materials';
 import { cachedQueue } from '../offline/store';
 import { CategoryProgress, Heatmap, Ring, WeekDays, conceptCounts, todayLabel } from '../progress';
 import { isStandalone, pushState } from '../push';
@@ -214,18 +216,19 @@ function GrowthRows({ stats, map }: { stats: StatsResponse; map: MapResponse | n
 
 /** 이어서 풀 자료: 안 푼 카드가 남은 첫 자료 */
 function ContinueMaterial({ materials }: { materials: MaterialSummary[] }) {
-  const material = materials.find((item) => item.unsolved_open > 0);
-  if (!material) return null;
+  const material = materials.find((item) => item.next !== null);
+  if (!material?.next) return null;
   const progress = material.cards === 0 ? 0 : material.solved / material.cards;
+  // 다음 섹션부터 이어서 푼다
   return (
-    <Link className="card material-card o-material" href={`/review?material=${encodeURIComponent(material.title)}&size=10`}>
+    <Link className="card material-card o-material" href={materialReview(material.title, material.next.part)}>
       <span className="icon-tile">
         <IconBook />
       </span>
       <div className="grow">
-        <strong>{material.title}</strong>
+        <strong>{materialLabel(material.title)}</strong>
         <span className="muted small">
-          안 푼 카드 {material.unsolved_open}장 · {material.cards}장 중 {material.solved}장 풂
+          다음 섹션 · {material.next.part ? partView(material.next.part, 0).name : '안 푼 카드'} · {material.next.unsolved_open}장
         </span>
         <div className="bar">
           <div style={{ width: `${progress * 100}%` }} />

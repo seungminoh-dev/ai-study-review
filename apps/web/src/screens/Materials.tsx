@@ -1,75 +1,101 @@
 import type { MaterialSummary } from '@moai/shared';
-import { useState } from 'react';
-import { errorMessage, request } from '../api';
+import { isPdf, materialLabel } from '@moai/shared/client';
 import { Loading } from '../Loading';
-import { BackLink, Link } from '../router';
-import { formatDate, useApi } from '../useApi';
+import { Mascot } from '../Mascot';
+import { materialHref, materialReview, partView } from '../materials';
+import { RecordsNav } from '../RecordsNav';
+import { Link } from '../router';
+import { useApi } from '../useApi';
 
-// 자료 (설계서 §5.6): PDF 같은 자료에서 만든 카드. 풀기 전에는 내 지식이 아니다.
-// 한 번 푼 카드는 평소 복습으로 들어가고, 그 개념은 지식 지도에 생긴다.
+// 자료 목록 (설계서 §5.6, 3단계 시안): PDF 하나가 카드 하나다. 섹션별 진행은 자료 상세(MaterialDetail)에서 본다.
+// 자료 카드는 풀기 전까지 내 지식이 아니고, 한 번 푼 카드는 평소 복습에 들어간다.
+
+/** 책 모양 표지: PDF면 PDF, 아니면 자료라고 쓰고 섹션 수를 적는다 */
+export function BookTile({ title, sections, done = false }: { title: string; sections: number; done?: boolean }) {
+  return (
+    <span className={done ? 'book-tile done' : 'book-tile'} aria-hidden="true">
+      <span>{isPdf(title) ? 'PDF' : '자료'}</span>
+      <strong>{sections}</strong>
+    </span>
+  );
+}
+
+function MaterialCard({ material }: { material: MaterialSummary }) {
+  const sections = Math.max(material.parts.length, 1);
+  const done = material.cards > 0 && material.unsolved_open === 0;
+  const percent = material.cards === 0 ? 0 : Math.round((material.solved / material.cards) * 100);
+  const next = material.next ? partView(material.next.part, Math.max(material.parts.indexOf(material.next.part), 0)) : null;
+  return (
+    <article className="material-item">
+      <div className="material-item-head">
+        <BookTile title={material.title} sections={sections} done={done} />
+        <div className="grow">
+          <Link className="material-item-title" href={materialHref(material.title)}>
+            {materialLabel(material.title)}
+          </Link>
+          <span className="muted small">
+            섹션 {sections}개 · 카드 {material.cards}장
+          </span>
+        </div>
+        {done ? <span className="done-chip">다 풂</span> : null}
+      </div>
+      <div className="material-item-progress">
+        <div className="material-item-numbers small">
+          <strong>{material.solved}장 풂</strong>
+          <span className="muted">
+            개념 {material.concepts}개 중 {material.adopted}개가 내 지식
+          </span>
+        </div>
+        <div className="bar thick" role="progressbar" aria-label="푼 카드" aria-valuemin={0} aria-valuemax={material.cards} aria-valuenow={material.solved}>
+          <div className={done ? 'grow-in good' : 'grow-in'} style={{ width: `${Math.max(percent, material.solved > 0 ? 3 : 0)}%` }} />
+        </div>
+      </div>
+      {material.next && next ? (
+        <>
+          <p className="material-next">
+            <span className="material-next-label">다음</span>
+            <span className="material-next-name">{material.next.part ? `${next.no} ${next.name}` : '안 푼 카드'}</span>
+            <span className="muted">{material.next.unsolved_open}장</span>
+          </p>
+          <div className="material-item-actions">
+            <Link className="button primary" href={materialReview(material.title, material.next.part)}>
+              이어서 풀기
+            </Link>
+            <Link className="button" href={materialHref(material.title)}>
+              섹션 보기
+            </Link>
+          </div>
+        </>
+      ) : (
+        <div className="material-item-actions">
+          <span className="muted small grow">푼 카드는 평소 복습에 나와요.</span>
+          <Link className="button" href={materialHref(material.title)}>
+            섹션 보기
+          </Link>
+        </div>
+      )}
+    </article>
+  );
+}
 
 export function Materials() {
-  const { data, error, reload } = useApi<{ materials: MaterialSummary[] }>('/materials');
-  const [message, setMessage] = useState<{ text: string; tone: 'good' | 'bad' } | null>(null);
+  const { data, error } = useApi<{ materials: MaterialSummary[] }>('/materials');
   if (error) return <div className="screen"><p className="notice bad">{error}</p></div>;
   if (!data) return <Loading />;
-
-  const suspend = async (material: MaterialSummary) => {
-    if (!confirm(`"${material.title}"에서 아직 안 푼 카드를 모두 끌까요? 이미 푼 카드는 그대로예요. 기록 탭에서 다시 켤 수 있어요.`)) return;
-    try {
-      const result = await request<{ suspended: number }>('/materials/suspend-unsolved', { method: 'POST', json: { title: material.title } });
-      setMessage({ text: `${result.suspended}장을 껐어요.`, tone: 'good' });
-      reload();
-    } catch (reason) {
-      setMessage({ text: errorMessage(reason), tone: 'bad' });
-    }
-  };
-
   return (
-    <div className="screen">
-      <BackLink href="/sessions" className="back">
-        ← 저장 기록
-      </BackLink>
+    <div className="screen materials">
+      <RecordsNav current="materials" materials={data.materials.length} />
       <h1>자료</h1>
-      <p className="muted small">
-        PDF나 문서로 만든 카드예요. 아직은 내 지식이 아니에요. 풀어 본 카드는 평소 복습에 들어가고, 그 개념은 지식 지도에 생겨요.
-      </p>
-      <p className="muted small">claude.ai 채팅에 PDF를 올리고 "이 PDF로 모아이 카드 만들어줘"라고 하면 여기에 생겨요.</p>
-      {message ? <p className={`notice ${message.tone}`}>{message.text}</p> : null}
-      {data.materials.length === 0 ? <p className="muted">아직 자료가 없어요.</p> : null}
-      <ul className="list">
-        {data.materials.map((material) => {
-          const progress = material.cards === 0 ? 0 : material.solved / material.cards;
-          return (
-            <li key={material.title}>
-              <p>
-                <strong>{material.title}</strong>
-              </p>
-              <p className="muted small">
-                {formatDate(material.created_at)} · {material.parts.length > 0 ? `${material.parts.join(', ')} · ` : ''}카드 {material.cards}장 중 {material.solved}장 풂 · 개념{' '}
-                {material.concepts}개 중 {material.adopted}개가 내 지식
-              </p>
-              <div className="goal" role="progressbar" aria-valuemin={0} aria-valuemax={material.cards} aria-valuenow={material.solved}>
-                <div style={{ width: `${progress * 100}%` }} />
-              </div>
-              <div className="material-actions">
-                {material.unsolved_open > 0 ? (
-                  <Link className="button primary" href={`/review?material=${encodeURIComponent(material.title)}&size=10`}>
-                    이 자료 풀기 ({material.unsolved_open}장 남음)
-                  </Link>
-                ) : (
-                  <span className="muted small">지금 풀 카드가 없어요. 푼 카드는 평소 복습에 나와요.</span>
-                )}
-                {material.unsolved_open > 0 ? (
-                  <button type="button" className="text-button" onClick={() => void suspend(material)}>
-                    안 푼 카드 끄기
-                  </button>
-                ) : null}
-              </div>
-            </li>
-          );
-        })}
-      </ul>
+      <p className="muted small">PDF로 만든 카드예요. 풀어 본 카드부터 내 지식이 되고, 그 개념이 지식 지도에 생겨요.</p>
+      <div className="material-list">
+        {data.materials.map((material) => (
+          <MaterialCard key={material.title} material={material} />
+        ))}
+      </div>
+      <div className="material-tip">
+        <Mascot mood="study" size={56} />
+        <p className="small">claude.ai에 PDF를 올리고 "이 PDF로 모아이 카드 만들어줘"라고 하면 여기에 생겨요.</p>
+      </div>
     </div>
   );
 }

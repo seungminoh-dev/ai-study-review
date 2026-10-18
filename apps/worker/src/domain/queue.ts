@@ -143,9 +143,12 @@ export async function loadMaterialQueue(
   material: string,
   now: number,
   size: number,
+  /** 섹션만 풀 때 그 섹션 이름 (이름 없는 섹션은 빈 문자열). null이면 자료 전체 */
+  part: string | null = null,
 ): Promise<{ cards: QueueCard[]; remaining: number }> {
   const from = `FROM cards c JOIN concepts k ON k.id = c.concept_id JOIN learning_sessions s ON s.id = c.session_id
-      WHERE c.user_id = ?1 AND s.user_id = ?1 AND s.material = ?2 AND c.status = 'active' AND c.due <= ?3`;
+      WHERE c.user_id = ?1 AND s.user_id = ?1 AND s.material = ?2 AND c.status = 'active' AND c.due <= ?3${part === null ? '' : " AND coalesce(s.material_part, '') = ?4"}`;
+  const binds = part === null ? [userId, material, now] : [userId, material, now, part];
   const [rows, count] = await env.DB.batch([
     env.DB.prepare(
       `SELECT c.id, c.concept_id, c.state, c.due, c.created_at, c.type, c.rung, c.prompt, c.code, c.answer, c.options, c.explain,
@@ -153,9 +156,9 @@ export async function loadMaterialQueue(
               c.last_review, k.key AS concept_key, k.name AS concept_name, k.final_answer
          ${from}
         ORDER BY (c.state = 0), c.due, s.created_at, c.created_at
-        LIMIT ?4`,
-    ).bind(userId, material, now, size),
-    env.DB.prepare(`SELECT count(*) AS n ${from}`).bind(userId, material, now),
+        LIMIT ?${binds.length + 1}`,
+    ).bind(...binds, size),
+    env.DB.prepare(`SELECT count(*) AS n ${from}`).bind(...binds),
   ]);
   return {
     cards: (rows!.results as unknown as CandidateRow[]).map((row) => toQueueCard(row, now)),

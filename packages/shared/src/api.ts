@@ -229,6 +229,7 @@ export interface LoginCode {
 /** 자료 하나 (PDF 등). 같은 제목의 저장을 묶는다 */
 export interface MaterialSummary {
   title: string;
+  /** 섹션 이름. 쪽수 순서(없으면 저장한 순서) */
   parts: string[];
   cards: number;
   /** 한 번이라도 푼 카드 */
@@ -239,6 +240,34 @@ export interface MaterialSummary {
   /** 풀어서 내 지식이 된 개념 */
   adopted: number;
   created_at: number;
+  /** 이어서 풀 섹션: 안 푼 열린 카드가 남은 첫 섹션 */
+  next: { part: string; unsolved_open: number } | null;
+}
+
+export interface MaterialConcept {
+  key: string;
+  name: string;
+  /** 풀어서 내 지식이 됐다 */
+  adopted: boolean;
+}
+
+export interface MaterialPart {
+  /** 저장할 때 받은 범위 이름 (예: "프로그램 기초 (p.3–21)"). 없으면 빈 문자열 */
+  name: string;
+  /** 이 섹션의 가장 최근 저장. "카드 보기"가 연다 */
+  session_id: string;
+  cards: number;
+  solved: number;
+  unsolved_open: number;
+  /** 이 섹션의 개념 (최대 12개) */
+  concepts: MaterialConcept[];
+  /** 카드 미리보기: 안 푼 카드부터 3장 */
+  preview: { type: CardType; prompt: string }[];
+}
+
+/** 자료 하나의 섹션별 진행 (GET /api/materials/detail?title=) */
+export interface MaterialDetail extends Omit<MaterialSummary, 'parts' | 'next'> {
+  parts: MaterialPart[];
 }
 
 export interface CategoryNode {

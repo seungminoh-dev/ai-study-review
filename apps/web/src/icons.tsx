@@ -119,6 +119,21 @@ export const IconOffline = ({ size }: Props) => (
   </Icon>
 );
 
+/** 펼치기 (아래 꺾쇠) */
+export const IconChevron = ({ size = 18 }: Props) => (
+  <Icon size={size} strokeWidth={2.4}>
+    <path d="M6 9l6 6 6-6" />
+  </Icon>
+);
+
+/** 바깥 사이트로 나가는 링크 */
+export const IconExternal = ({ size = 18 }: Props) => (
+  <Icon size={size} strokeWidth={2.4}>
+    <path d="M7 17 17 7" />
+    <path d="M9 7h8v8" />
+  </Icon>
+);
+
 export const IconCopy = ({ size = 18 }: Props) => (
   <Icon size={size}>
     <rect x="9" y="9" width="11" height="11" rx="2" />

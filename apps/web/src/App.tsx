@@ -41,9 +41,10 @@ const Concept = lazyScreen(() => import('./screens/Concept').then((module) => mo
 const Growth = lazyScreen(() => import('./screens/Growth').then((module) => module.Growth));
 const Import = lazyScreen(() => import('./screens/Import').then((module) => module.Import));
 const Materials = lazyScreen(() => import('./screens/Materials').then((module) => module.Materials));
+const MaterialDetail = lazyScreen(() => import('./screens/MaterialDetail').then((module) => module.MaterialDetail));
 const Settings = lazyScreen(() => import('./screens/Settings').then((module) => module.Settings));
 const Welcome = lazyScreen(() => import('./screens/Welcome').then((module) => module.Welcome));
-const LATER = [Review, Sessions, SessionDetail, MapScreen, Concept, Growth, Import, Materials, Settings, Welcome];
+const LATER = [Review, Sessions, SessionDetail, MapScreen, Concept, Growth, Import, Materials, MaterialDetail, Settings, Welcome];
 
 type Auth = { state: 'loading' } | { state: 'in'; me: Me } | { state: 'setup' } | { state: 'out'; github: boolean } | { state: 'error'; message: string };
 
@@ -74,7 +75,7 @@ function sectionOf(path: string): Section | null {
   if (path === '/') return 'today';
   if (path === '/map' || path.startsWith('/concepts/')) return 'map';
   if (path === '/growth') return 'growth';
-  if (path === '/materials') return 'materials';
+  if (path === '/materials' || path.startsWith('/materials/')) return 'materials';
   if (path.startsWith('/sessions') || path === '/import') return 'records';
   if (path === '/settings') return 'settings';
   return null;
@@ -224,7 +225,7 @@ export function App() {
   let screen;
   if (path === '/review') {
     const size = Math.min(Math.max(Number(query.get('size')) || 8, 1), 20);
-    screen = <Review key={location.search} size={size} category={query.get('category')} material={query.get('material')} />;
+    screen = <Review key={location.search} size={size} category={query.get('category')} material={query.get('material')} part={query.get('part')} />;
   }
   else if (path === '/sessions') screen = <Sessions />;
   else if (sessionMatch) screen = <SessionDetail id={sessionMatch[1]!} />;
@@ -233,6 +234,7 @@ export function App() {
   else if (path === '/growth') screen = <Growth />;
   else if (path === '/import') screen = <Import />;
   else if (path === '/materials') screen = <Materials />;
+  else if (path === '/materials/detail') screen = <MaterialDetail key={query.get('title') ?? ''} title={query.get('title') ?? ''} />;
   else if (path === '/welcome') screen = <Welcome name={auth.me.display_name} />;
   else if (path === '/settings') {
     screen = (
@@ -249,7 +251,7 @@ export function App() {
 
   // 복습과 시작 가이드는 메뉴 없이 집중한다. 오늘·성장·지도는 컴퓨터에서 넓게 쓴다
   const focus = path === '/review' || path === '/welcome';
-  const wide = path === '/' || path === '/growth' || path === '/map';
+  const wide = path === '/' || path === '/growth' || path === '/map' || path === '/materials/detail';
   const section = sectionOf(path);
   // 휴대폰 탭에는 자료가 없어서 자료 화면에서는 기록 탭을 밝힌다
   const tabSection = section === 'materials' ? 'records' : section;

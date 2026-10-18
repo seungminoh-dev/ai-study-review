@@ -24,6 +24,11 @@
   - 로그인은 `/login`이다. 서버가 GitHub 실패로 `/?auth=`에 돌려보내면 랜딩 대신 로그인 화면이 이유와 함께 뜬다. 가입(`/join`)을 마치면 시작 가이드(`/welcome`)로 간다.
   - 시작 가이드는 설치(`install.ts`가 `beforeinstallprompt`를 잡아 둔다), 연결 주소(이미 있으면 새로 만들지 않고, 주소는 가려서 보여 준다), 첫 저장(이 단계를 보는 동안만 5초마다 `/sessions` 확인), 알림(기존 시간은 두고 더한다)을 실제 기능으로 한다. 오늘 화면의 "시작하기" 항목은 `/welcome?step=`으로 그 단계를 연다.
   - 로그인 뒤에만 쓰는 큰 화면은 `App.tsx`의 `lazyScreen`으로 따로 받고, 로그인하면 쉬는 틈에 미리 받는다. 첫 화면 JS는 약 103KB(gzip)다.
+- **3단계 3-3 자료**: 마이그레이션 없이 `learning_sessions.material`/`material_part`로 묶는다.
+  - 섹션 순서는 이름 끝의 쪽수(`(p.3–21)`) 순, 없으면 저장한 순서다 (`packages/shared/src/material.ts`의 `comparePart`). 이름이 "5. 상속"처럼 번호로 시작하면 그 번호를 배지에 쓴다 (`apps/web/src/materials.ts`의 `partView`).
+  - `GET /api/materials`에 `next`(이어서 풀 섹션)를 더했고, `GET /api/materials/detail?title=`이 섹션별 진행·개념(12개까지)·카드 미리보기(3장)를 준다. `GET /api/queue?material=&part=`는 그 섹션만 낸다.
+  - 화면: 자료 목록(`Materials.tsx`), 자료 상세(`MaterialDetail.tsx`, 휴대폰은 펼침·컴퓨터는 두 칸). 휴대폰 기록 탭 위에 "공부한 대화 | 자료" 나누기(`RecordsNav.tsx`)가 있고, 저장 기록 목록은 같은 자료의 섹션 저장을 한 줄로 묶는다. 오늘 화면의 "이어서 풀 자료"는 다음 섹션을 푼다.
+  - "Claude에서 이어 공부하기"는 섹션 이름을 넣은 질문으로 `claude.ai/new?q=`를 연다.
 - **테스트**: worker 124개, shared 23개 통과. CI·Deploy 모두 초록.
 - **브랜치**: 클라우드 작업 브랜치 `claude/elegant-galileo-iupy8p`는 `main`에 합치고 지웠다. 열린 PR은 없다. 앞으로는 `main`에서 시작한다.
 - **확인 못 한 것**: 마지막 배포(`a6ea056`) 뒤 운영 화면은 직접 열어 보지 못했다 (클라우드 환경에서 moai.smoh.dev 접속이 막혀 있었다). 로컬에서 먼저 볼 것:

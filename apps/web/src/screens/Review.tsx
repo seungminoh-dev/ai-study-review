@@ -51,7 +51,7 @@ const MAX_QUEUE = 20;
 
 type Load = { state: 'loading' } | { state: 'error'; message: string } | { state: 'ready'; cards: QueueCard[]; offline: boolean };
 
-export function Review({ size, category, material }: { size: number; category?: string | null; material?: string | null }) {
+export function Review({ size, category, material, part }: { size: number; category?: string | null; material?: string | null; part?: string | null }) {
   const [load, setLoad] = useState<Load>({ state: 'loading' });
 
   useEffect(() => {
@@ -64,6 +64,8 @@ export function Review({ size, category, material }: { size: number; category?: 
         const params = new URLSearchParams({ size: String(Math.min(size + pending.size, MAX_QUEUE)) });
         if (category) params.set('category', category);
         if (material) params.set('material', material);
+        // 자료의 섹션 하나만 풀 때
+        if (material && part !== null && part !== undefined) params.set('part', part);
         const queue = await request<QueueResponse>(`/queue?${params}`);
         const cards = queue.cards.filter((card) => !pending.has(card.id)).slice(0, size);
         // 오프라인용으로는 오늘 큐 전체만 남긴다. 분류·자료로 거른 큐를 남기면 다음 오프라인 복습이 그 카드만 낸다
@@ -81,7 +83,7 @@ export function Review({ size, category, material }: { size: number; category?: 
     return () => {
       cancelled = true;
     };
-  }, [size, category, material]);
+  }, [size, category, material, part]);
 
   if (load.state === 'loading') return <Loading label="카드를 가져오는 중" />;
   if (load.state === 'error') {

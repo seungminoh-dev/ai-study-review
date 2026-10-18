@@ -1,12 +1,42 @@
 import type { CardEditBody, SessionCard, SessionDetail as Detail, SessionSummary } from '@moai/shared';
+import { materialLabel } from '@moai/shared/client';
 import { useState, type FormEvent } from 'react';
 import { errorMessage, request } from '../api';
 import { CodeBlock } from '../cards/CodeBlock';
 import { Loading } from '../Loading';
+import { materialHref } from '../materials';
+import { RecordsNav } from '../RecordsNav';
 import { BackLink, Link } from '../router';
 import { formatDate, formatDateTime, useApi } from '../useApi';
 
 // 저장 기록 (설계서 §12.1): 세션별 개념·판정·카드, 카드 고치기·끄기
+// 자료(PDF)는 섹션마다 저장이 하나씩 생겨서, 목록에서는 자료 하나로 묶고 누르면 자료 상세로 간다.
+
+type Row =
+  | { kind: 'session'; session: SessionSummary }
+  | { kind: 'material'; title: string; created_at: number; sections: number; cards: number };
+
+/** 같은 자료의 섹션 저장을 한 줄로 묶는다. 묶인 줄은 그 자료가 처음 나온(가장 최근) 자리에 둔다 */
+function rowsOf(sessions: SessionSummary[]): Row[] {
+  const rows: Row[] = [];
+  const materials = new Map<string, Extract<Row, { kind: 'material' }>>();
+  for (const session of sessions) {
+    if (!session.material) {
+      rows.push({ kind: 'session', session });
+      continue;
+    }
+    const group = materials.get(session.material);
+    if (group) {
+      group.sections += 1;
+      group.cards += session.cards;
+      continue;
+    }
+    const row = { kind: 'material' as const, title: session.material, created_at: session.created_at, sections: 1, cards: session.cards };
+    materials.set(session.material, row);
+    rows.push(row);
+  }
+  return rows;
+}
 
 export function Sessions() {
   const { data, error } = useApi<{ sessions: SessionSummary[] }>('/sessions');
@@ -14,27 +44,36 @@ export function Sessions() {
   if (!data) return <Loading />;
   return (
     <div className="screen">
+      <RecordsNav current="sessions" />
       <h1>저장 기록</h1>
-      <Link href="/materials" className="notice link">
-        자료 (PDF로 만든 카드) →
-      </Link>
       <Link href="/import" className="notice link">
         커넥터 없이 공부한 대화를 붙여 넣어 카드로 만들기 →
       </Link>
       {data.sessions.length === 0 ? <p className="muted">아직 저장한 세션이 없어요. claude.ai에서 공부하고 "정리해줘"라고 해 보세요.</p> : null}
       <ul className="list">
-        {data.sessions.map((session) => (
-          <li key={session.id}>
-            <Link href={`/sessions/${session.id}`} className="row-link">
-              <span>
-                {session.material ? <span className="chip state-material">자료</span> : null} {session.topic}
-              </span>
-              <span className="muted small">
-                {formatDate(session.created_at)} · 개념 {session.concepts}개 · 카드 {session.cards}장
-              </span>
-            </Link>
-          </li>
-        ))}
+        {rowsOf(data.sessions).map((row) =>
+          row.kind === 'session' ? (
+            <li key={row.session.id}>
+              <Link href={`/sessions/${row.session.id}`} className="row-link">
+                <span>{row.session.topic}</span>
+                <span className="muted small">
+                  {formatDate(row.session.created_at)} · 개념 {row.session.concepts}개 · 카드 {row.session.cards}장
+                </span>
+              </Link>
+            </li>
+          ) : (
+            <li key={`material:${row.title}`}>
+              <Link href={materialHref(row.title)} className="row-link">
+                <span>
+                  <span className="chip state-material">자료</span> {materialLabel(row.title)}
+                </span>
+                <span className="muted small">
+                  {formatDate(row.created_at)} · 섹션 {row.sections}개 · 카드 {row.cards}장
+                </span>
+              </Link>
+            </li>
+          ),
+        )}
       </ul>
     </div>
   );
