@@ -220,6 +220,10 @@ function Session({ initial, offline }: { initial: QueueCard[]; offline: boolean 
       setCards((list) => [...list.slice(0, index), last.card, ...list.slice(index)]);
       setResults((list) => list.slice(0, -1));
       setLast(null);
+      // 지금 카드에서 고르던 답과 확신도는 버린다. 남기면 되돌아온 카드에 그 답이 기록된다
+      setChosen(null);
+      setConfidence(null);
+      setPicked(null);
     } catch (error) {
       setNotice(errorMessage(error));
     } finally {
@@ -314,7 +318,7 @@ function Session({ initial, offline }: { initial: QueueCard[]; offline: boolean 
       </header>
       {offline ? <p className="notice">오프라인이에요. 답은 저장해 두었다가 연결되면 보내요.</p> : null}
       {practice ? <p className="notice">다시 보기는 연습이라 기록하지 않아요. 틀린 카드는 곧 다시 나와요.</p> : null}
-      {last && !picked ? (
+      {last && !picked && !chosen ? (
         <button type="button" className="text-button undo" disabled={busy} onClick={() => void undo()}>
           ↶ 방금 답 되돌리기
         </button>
@@ -349,7 +353,7 @@ function Session({ initial, offline }: { initial: QueueCard[]; offline: boolean 
           {picked ? (
             <div className="answer-panel" aria-live="polite">
               <p className={picked.correct ? 'verdict right' : 'verdict wrong'}>
-            {picked.correct ? (confidence === 'guess' ? '맞았지만 찍었으니 곧 다시 볼게요' : '맞았어요') : '틀렸어요'}
+            {picked.correct ? (confidence === 'guess' ? '맞았지만 찍었으니 조금 일찍 다시 볼게요' : '맞았어요') : '틀렸어요'}
           </p>
           {!picked.correct && confidence === 'sure' ? (
             <p className="notice">확신했는데 틀린 문제예요. 왜 그렇게 생각했는지 떠올려 보고 해설과 비교해 보세요. 이렇게 바로잡은 기억이 오래 남아요.</p>

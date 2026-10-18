@@ -8,7 +8,8 @@ import { formatDate, useApi } from '../useApi';
 // 질문 은행 (설계서 §2.4): 친구들이 공유한 질문. 답과 판정은 없다. 복사해서 claude.ai에서 내 말로 답해 본다.
 
 export function QuestionBank() {
-  const { data, error, reload } = useApi<{ questions: SharedQuestion[] }>('/shared-questions');
+  const [mineOnly, setMineOnly] = useState(false);
+  const { data, error, reload } = useApi<{ questions: SharedQuestion[] }>(mineOnly ? '/shared-questions?mine=1' : '/shared-questions');
   const [message, setMessage] = useState<{ text: string; tone: 'good' | 'bad' } | null>(null);
   if (error) return <div className="screen"><p className="notice bad">{error}</p></div>;
   if (!data) return <div className="center muted">불러오는 중…</div>;
@@ -32,9 +33,17 @@ export function QuestionBank() {
         ← 지식 지도
       </Link>
       <h1>질문 은행</h1>
-      <p className="muted small">친구들이 공유한 질문이에요. 답과 판정은 공유되지 않아요. 개념 화면의 "다음에 볼 질문"에서 내 질문도 공유할 수 있어요.</p>
+      <p className="muted small">친구들이 공유한 질문이에요. 공유되는 건 질문과 개념 이름뿐이고, 답과 판정은 공유되지 않아요. 개념 화면의 "다음에 볼 질문"에서 내 질문도 공유할 수 있어요.</p>
+      <div className="segmented" role="group" aria-label="보기">
+        <button type="button" className={mineOnly ? '' : 'current'} aria-pressed={!mineOnly} onClick={() => setMineOnly(false)}>
+          모두의 질문
+        </button>
+        <button type="button" className={mineOnly ? 'current' : ''} aria-pressed={mineOnly} onClick={() => setMineOnly(true)}>
+          내가 공유한 질문
+        </button>
+      </div>
       {message ? <p className={`notice ${message.tone}`}>{message.text}</p> : null}
-      {data.questions.length === 0 ? <p className="muted">아직 공유된 질문이 없어요.</p> : null}
+      {data.questions.length === 0 ? <p className="muted">{mineOnly ? '아직 공유한 질문이 없어요.' : '아직 공유된 질문이 없어요.'}</p> : null}
       <ul className="list">
         {data.questions.map((question) => (
           <li key={question.id}>

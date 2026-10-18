@@ -68,7 +68,7 @@ const ReviewQueueInput = z.object({ size: z.int().min(1).max(10).optional().desc
 
 const SubmitReviewInput = z.object({
   card_id: z.uuid(),
-  answer: z.string().min(1).max(2000).describe('ox는 O/X, mcq·cloze는 보기 글자, explain은 사용자 설명 원문'),
+  answer: z.string().min(1).max(2000).describe('ox는 O/X, mcq·cloze는 사용자가 고른 보기 글 그대로(보기 글자도 받는다), explain은 사용자 설명 원문'),
   grade: ReviewGrade.optional().describe('explain만: 1 다시, 2 어려움, 3 좋음, 4 쉬움'),
   easy: z.boolean().optional().describe('맞혔고 사용자가 너무 쉬웠다고 할 때'),
   confidence: z.enum(['sure', 'unsure', 'guess']).optional().describe('ox·mcq·cloze: 답하기 전에 물어본 확신도 (확실, 반반, 찍음)'),
@@ -211,6 +211,10 @@ function buildServer(deps: McpDeps): McpServer {
       switch (result.kind) {
         case 'not_found':
           return { isError: true, content: text('복습 중인 카드가 아니에요. get_review_queue로 받은 card_id를 넣어 주세요.') };
+        case 'not_due':
+          return { isError: true, content: text('오늘 복습할 카드가 아니에요. 앱에서 이미 풀었거나 아직 때가 안 됐어요. get_review_queue로 새 목록을 받아 주세요.') };
+        case 'busy':
+          return { isError: true, content: text('다른 기기의 답과 겹쳐 기록하지 못했어요. 같은 답으로 한 번 더 불러 주세요.') };
         case 'unreadable':
           return { isError: true, content: text(result.hint) };
         case 'duplicate':

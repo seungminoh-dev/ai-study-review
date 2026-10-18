@@ -132,7 +132,7 @@ function ShareButton({ conceptName, question }: { conceptName: string; question:
             .catch((error: unknown) => setState(errorMessage(error)))
         }
       >
-        친구들에게 질문만 공유
+        친구들에게 공유 (질문과 개념 이름만)
       </button>
       {state !== 'idle' ? <p className="notice bad">{state}</p> : null}
     </>

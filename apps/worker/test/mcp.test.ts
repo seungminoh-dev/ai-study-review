@@ -4,6 +4,7 @@ import { env } from 'cloudflare:workers';
 import { beforeEach, describe, expect, it } from 'vitest';
 import example from '../../../packages/shared/fixtures/immutable-object.json';
 import max from '../../../packages/shared/fixtures/save-learning-max.json';
+import { chatQueue } from '../src/domain/chat-review';
 import { ORIGIN, api, callTool, mcpUrl, newUser, readRpc, rpc, workerFetch, type TestUser } from './helpers';
 
 const json = (value: unknown) => JSON.parse(JSON.stringify(value));
@@ -274,6 +275,18 @@ describe('chat review tools', () => {
     expect((await callTool(url, 'submit_review', { card_id: ox.card_id, answer: '모르겠어요' })).isError).toBe(true);
     // 남의 카드는 채점하지 않는다
     expect((await callTool(await mcpUrl(await newUser()), 'submit_review', { card_id: ox.card_id, answer: 'O' })).isError).toBe(true);
+
+    // 앱에서 먼저 푼 카드는 채팅에서 다시 채점하지 않는다
+    await api(user, '/reviews', { method: 'POST', json: { reviews: [{ id: crypto.randomUUID(), card_id: ox.card_id, grade: 3, reviewed_at: Date.now() }] } });
+    // 1분 넘게 지난 뒤라고 친다 (1분 안이면 "방금 기록했어요"로 답한다)
+    await env.DB.prepare('UPDATE review_logs SET reviewed_at = reviewed_at - 120000 WHERE card_id = ?1').bind(ox.card_id).run();
+    expect((await callTool(url, 'submit_review', { card_id: ox.card_id, answer: 'O' })).content[0].text).toContain('오늘 복습할 카드가 아니에요');
+    // 보기 글자는 날이 바뀌어도 같은 보기를 가리킨다 (04:00을 넘겨 답해도 된다)
+    const later = await chatQueue(env, user.id, 10, Date.now() + 86_400_000);
+    for (const question of later.questions) {
+      const before = questions.find((item) => item.card_id === question.card_id);
+      if (before?.choices) expect(question.choices).toEqual(before.choices);
+    }
 
     // 모의면접: 연결선을 따라 개념을 고른다
     const chain = await callTool(url, 'get_interview_chain', { concept_key: 'immutable-object', length: 3 });

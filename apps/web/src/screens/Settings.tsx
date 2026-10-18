@@ -587,7 +587,7 @@ function ConfidenceSection() {
         />{' '}
         답을 고른 뒤 확신도 묻기 (권장)
       </label>
-      <p className="muted small">찍어서 맞힌 카드는 곧 다시 나오고, 확신했는데 틀린 카드는 따로 짚어 줘요. 한 번 더 누르는 대신 기억이 정확해져요.</p>
+      <p className="muted small">찍어서 맞힌 카드는 조금 일찍 다시 나오고, 확신했는데 틀린 카드는 따로 짚어 줘요. 한 번 더 누르는 대신 기억이 정확해져요.</p>
     </section>
   );
 }
