@@ -191,7 +191,7 @@ function ConnectorSection() {
           <ol className="steps small">
             <li>웹 claude.ai → Customize → Connectors → Add custom connector</li>
             <li>이름은 "모아이", 주소에 위 URL을 넣고 "No sign in"을 고른다.</li>
-            <li>도구 6개(저장·찾기·과거 기록·복습 문제·채점·모의면접)를 모두 "Always allow"로 바꾼다.</li>
+            <li>도구 8개(저장·찾기·과거 기록·복습 문제·채점·모의면접·분류 보기·분류 바꾸기)를 모두 "Always allow"로 바꾼다.</li>
             <li>폰 앱에서는 따로 할 일 없이 바로 쓸 수 있다.</li>
           </ol>
         </div>

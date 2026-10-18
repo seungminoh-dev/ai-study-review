@@ -44,7 +44,7 @@ const MAX_QUEUE = 20;
 
 type Load = { state: 'loading' } | { state: 'error'; message: string } | { state: 'ready'; cards: QueueCard[]; offline: boolean };
 
-export function Review({ size }: { size: number }) {
+export function Review({ size, category, material }: { size: number; category?: string | null; material?: string | null }) {
   const [load, setLoad] = useState<Load>({ state: 'loading' });
 
   useEffect(() => {
@@ -54,7 +54,10 @@ export function Review({ size }: { size: number }) {
         // 밀린 답을 먼저 보낸다. 못 보낸 답의 카드는 서버가 아직 모르니 큐에서 뺀다
         await flushReviews();
         const pending = await pendingCardIds();
-        const queue = await request<QueueResponse>(`/queue?size=${Math.min(size + pending.size, MAX_QUEUE)}`);
+        const params = new URLSearchParams({ size: String(Math.min(size + pending.size, MAX_QUEUE)) });
+        if (category) params.set('category', category);
+        if (material) params.set('material', material);
+        const queue = await request<QueueResponse>(`/queue?${params}`);
         const cards = queue.cards.filter((card) => !pending.has(card.id)).slice(0, size);
         await cacheQueue(cards);
         if (!cancelled) setLoad({ state: 'ready', cards, offline: false });
@@ -68,7 +71,7 @@ export function Review({ size }: { size: number }) {
     return () => {
       cancelled = true;
     };
-  }, [size]);
+  }, [size, category, material]);
 
   if (load.state === 'loading') return <div className="center muted">카드를 가져오는 중…</div>;
   if (load.state === 'error') {

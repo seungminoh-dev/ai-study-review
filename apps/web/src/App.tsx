@@ -7,6 +7,7 @@ import { Import } from './screens/Import';
 import { Join } from './screens/Join';
 import { League } from './screens/League';
 import { Login } from './screens/Login';
+import { Materials } from './screens/Materials';
 import { MapScreen } from './screens/MapScreen';
 import { QuestionBank } from './screens/QuestionBank';
 import { Review } from './screens/Review';
@@ -104,7 +105,10 @@ export function App() {
   const sessionMatch = /^\/sessions\/([\w-]+)$/.exec(path);
   const conceptMatch = /^\/concepts\/([a-z0-9-]+)$/.exec(path);
   let screen;
-  if (path === '/review') screen = <Review key={location.search} size={query.get('size') === '5' ? 5 : 8} />;
+  if (path === '/review') {
+    const size = Math.min(Math.max(Number(query.get('size')) || 8, 1), 20);
+    screen = <Review key={location.search} size={size} category={query.get('category')} material={query.get('material')} />;
+  }
   else if (path === '/sessions') screen = <Sessions />;
   else if (sessionMatch) screen = <SessionDetail id={sessionMatch[1]!} />;
   else if (path === '/map') screen = <MapScreen />;
@@ -112,6 +116,7 @@ export function App() {
   else if (path === '/league') screen = <League />;
   else if (path === '/import') screen = <Import />;
   else if (path === '/questions') screen = <QuestionBank />;
+  else if (path === '/materials') screen = <Materials />;
   else if (path === '/settings') {
     screen = (
       <Settings
@@ -131,7 +136,7 @@ export function App() {
       {path === '/review' ? null : (
         <nav className="tabs" aria-label="화면">
           {TABS.map((tab) => {
-            const current = tab.href === '/' ? path === '/' || path === '/league' : tab.href === '/map' ? path === '/map' || path === '/questions' || path.startsWith('/concepts/') : path.startsWith(tab.href) || (tab.href === '/sessions' && path === '/import');
+            const current = tab.href === '/' ? path === '/' || path === '/league' : tab.href === '/map' ? path === '/map' || path === '/questions' || path.startsWith('/concepts/') : path.startsWith(tab.href) || (tab.href === '/sessions' && (path === '/import' || path === '/materials'));
             return (
               <Link key={tab.href} href={tab.href} className={current ? 'tab current' : 'tab'} aria-current={current ? 'page' : undefined}>
                 {tab.label}

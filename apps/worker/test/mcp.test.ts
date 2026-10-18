@@ -36,7 +36,7 @@ describe('MCP endpoint, raw 2025-era requests', () => {
   it('lists the tools with the schema zod produces, and cards have no rung field', async () => {
     const message = await readRpc(await rpc(url, 'tools/list', {}, { 'mcp-protocol-version': '2025-06-18' }));
     const tools = message.result.tools as { name: string; inputSchema: Record<string, any> }[];
-    expect(tools.map((tool) => tool.name).sort()).toEqual(['find_concepts', 'get_interview_chain', 'get_learner_context', 'get_review_queue', 'save_learning', 'submit_review']);
+    expect(tools.map((tool) => tool.name).sort()).toEqual(['find_concepts', 'get_categories', 'get_interview_chain', 'get_learner_context', 'get_review_queue', 'save_learning', 'submit_review', 'update_categories']);
     const save = tools.find((tool) => tool.name === 'save_learning')!;
     expect(save.inputSchema).toEqual({ type: 'object', ...json(SaveLearningInput['~standard'].jsonSchema.input({ target: 'draft-2020-12' })) });
     expect(JSON.stringify(save.inputSchema)).not.toContain('"rung"');
@@ -243,7 +243,7 @@ describe('MCP endpoint, official SDK client', () => {
       const transport = new StreamableHTTPClientTransport(new URL(url), { fetch: (input, init) => workerFetch(input, init) });
       await client.connect(transport);
       const { tools } = await client.listTools();
-      expect(tools.map((tool) => tool.name).sort()).toEqual(['find_concepts', 'get_interview_chain', 'get_learner_context', 'get_review_queue', 'save_learning', 'submit_review']);
+      expect(tools.map((tool) => tool.name).sort()).toEqual(['find_concepts', 'get_categories', 'get_interview_chain', 'get_learner_context', 'get_review_queue', 'save_learning', 'submit_review', 'update_categories']);
       expect((await client.callTool({ name: 'find_concepts', arguments: { query: '불변 객체' } })).isError).toBeFalsy();
       const result = await client.callTool({ name: 'save_learning', arguments: example });
       expect(result.isError).toBeFalsy();

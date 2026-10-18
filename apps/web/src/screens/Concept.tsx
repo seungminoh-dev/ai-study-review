@@ -31,6 +31,8 @@ export function Concept({ conceptKey }: { conceptKey: string }) {
         <span className={`chip state-${data.state}`}>{STATE_LABEL[data.state]}</span>
         {data.aliases.length > 0 ? <span className="muted"> · 별칭 {data.aliases.join(', ')}</span> : null}
       </p>
+      <CategoryEditor conceptKey={data.key} initial={data.category} />
+      {data.state === 'material' ? <p className="notice">자료에서만 나온 개념이에요. 카드를 한 번 풀면 내 지식이 돼요.</p> : null}
 
       <section>
         <h2>Claude에서 이어서 공부하기</h2>
@@ -136,5 +138,48 @@ function ShareButton({ conceptName, question }: { conceptName: string; question:
       </button>
       {state !== 'idle' ? <p className="notice bad">{state}</p> : null}
     </>
+  );
+}
+
+/** 분류 고치기. 저장할 때 Claude가 정한 분류를 손으로 바꾼다 */
+function CategoryEditor({ conceptKey, initial }: { conceptKey: string; initial: string | null }) {
+  const [category, setCategory] = useState(initial);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(initial ?? '');
+  const [error, setError] = useState<string | null>(null);
+  const save = async () => {
+    try {
+      const result = await request<{ category: string | null }>(`/concepts/${conceptKey}/category`, { method: 'PATCH', json: { category: draft.trim() || null } });
+      setCategory(result.category);
+      setEditing(false);
+      setError(null);
+    } catch (reason) {
+      setError(errorMessage(reason));
+    }
+  };
+  if (!editing) {
+    return (
+      <p className="small muted">
+        분류: {category ?? '없음'}{' '}
+        <button type="button" className="text-button" onClick={() => setEditing(true)}>
+          고치기
+        </button>
+      </p>
+    );
+  }
+  return (
+    <div className="field">
+      <span className="small">분류 (큰 분류부터 / 로 잇기, 예: 인프라/Kubernetes)</span>
+      <input value={draft} onChange={(event) => setDraft(event.target.value)} maxLength={80} />
+      {error ? <p className="notice bad">{error}</p> : null}
+      <div className="actions">
+        <button type="button" className="button" onClick={() => setEditing(false)}>
+          취소
+        </button>
+        <button type="button" className="button primary" onClick={() => void save()}>
+          저장
+        </button>
+      </div>
+    </div>
   );
 }

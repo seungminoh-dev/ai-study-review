@@ -14,6 +14,9 @@ export function Sessions() {
   return (
     <div className="screen">
       <h1>저장 기록</h1>
+      <Link href="/materials" className="notice link">
+        자료 (PDF로 만든 카드) →
+      </Link>
       <Link href="/import" className="notice link">
         커넥터 없이 공부한 대화를 붙여 넣어 카드로 만들기 →
       </Link>
@@ -22,7 +25,9 @@ export function Sessions() {
         {data.sessions.map((session) => (
           <li key={session.id}>
             <Link href={`/sessions/${session.id}`} className="row-link">
-              <span>{session.topic}</span>
+              <span>
+                {session.material ? <span className="chip state-material">자료</span> : null} {session.topic}
+              </span>
               <span className="muted small">
                 {formatDate(session.created_at)} · 개념 {session.concepts}개 · 카드 {session.cards}장
               </span>

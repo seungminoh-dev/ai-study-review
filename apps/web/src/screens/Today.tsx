@@ -1,4 +1,4 @@
-import type { McpTokenStatus, StatsResponse, TodayResponse } from '@moai/shared';
+import type { CategoryNode, MaterialSummary, McpTokenStatus, StatsResponse, TodayResponse } from '@moai/shared';
 import { request } from '../api';
 import { isStandalone, pushState } from '../push';
 import { useEffect, useState } from 'react';
@@ -69,6 +69,36 @@ function Onboarding({ saved }: { saved: boolean }) {
       <button type="button" className="text-button" onClick={hide}>
         그만 보기
       </button>
+    </section>
+  );
+}
+
+/** 분류별 복습과 안 푼 자료 바로 가기 */
+function ByCategory() {
+  const { data: categories } = useApi<{ categories: CategoryNode[]; unclassified: number }>('/categories');
+  const { data: materials } = useApi<{ materials: MaterialSummary[] }>('/materials');
+  const tops = [...new Set((categories?.categories ?? []).map((item) => item.path.split('/')[0]!))];
+  const unsolved = (materials?.materials ?? []).reduce((sum, material) => sum + material.unsolved_open, 0);
+  if (tops.length < 2 && unsolved === 0) return null;
+  return (
+    <section>
+      {tops.length >= 2 ? (
+        <>
+          <h2>분류별로 복습</h2>
+          <p className="chips">
+            {tops.map((top) => (
+              <Link key={top} className="chip" href={`/review?category=${encodeURIComponent(top)}`}>
+                {top}
+              </Link>
+            ))}
+          </p>
+        </>
+      ) : null}
+      {unsolved > 0 ? (
+        <Link href="/materials" className="notice link">
+          아직 안 푼 자료 카드 {unsolved}장 · 풀면 내 지식이 돼요 →
+        </Link>
+      ) : null}
     </section>
   );
 }
@@ -155,6 +185,7 @@ export function Today({ name }: { name: string }) {
       </section>
 
       <Onboarding saved={data.sessions.length > 0} />
+      <ByCategory />
       {stats ? <StreakCard stats={stats} /> : null}
 
       {!data.reminders_set ? (

@@ -57,7 +57,7 @@ Android는 브라우저에서 만든 로그인이 설치한 앱에도 이어진�
 
 1. Customize → Connectors에서 **MVP 0의 모아이 커넥터(SPIKE_TOKEN URL)를 지운다.**
 2. **Add custom connector** → 이름 `모아이`, URL은 1-4에서 복사한 주소, 인증은 **No sign in**.
-3. 도구를 모두 **Always allow**로 바꾼다 (`find_concepts`, `save_learning`, `get_learner_context`, `get_review_queue`, `submit_review`, `get_interview_chain`). 그래야 폰에서 승인 버튼을 누르지 않는다.
+3. 도구를 모두 **Always allow**로 바꾼다 (`find_concepts`, `save_learning`, `get_learner_context`, `get_review_queue`, `submit_review`, `get_interview_chain`, `get_categories`, `update_categories`). 그래야 폰에서 승인 버튼을 누르지 않는다.
 
 ### 1-6. 코치 지침 바꾸기 (🙋 직접, 선택)
 
@@ -162,6 +162,16 @@ claude.ai 계정으로 로그인한 Claude Code면 claude.ai의 모아이 커넥
 ### 2-4. 채팅으로 복습·모의면접 (설정 없음)
 
 커넥터를 켠 claude.ai 채팅에서 "오늘 복습 퀴즈 내줘", "꼬리질문으로 모의면접 해줘"라고 하면 된다. 도구가 3개에서 6개로 늘었으니 claude.ai 커넥터 설정에서 새 도구(`get_review_queue`, `submit_review`, `get_interview_chain`)도 **Always allow**로 바꾼다.
+
+### 2-5. PDF로 카드 만들기 (설정 없음)
+
+- **claude.ai**: 채팅에 PDF를 올리고 "이 PDF로 모아이 카드 만들어줘". Claude가 장별로 나눠 저장한다.
+- **Claude Code**: `/moai:pdf ~/Downloads/책.pdf` (범위를 주려면 `/moai:pdf 책.pdf 1-40쪽`).
+- 만든 카드는 **자료**로 따로 있다 (기록 탭 → 자료). "이 자료 풀기"로 한 번 풀면 평소 복습과 지식 지도에 들어간다. 잘못 가져왔으면 "안 푼 카드 끄기".
+
+### 2-6. 분류 (설정 없음)
+
+저장할 때 Claude가 분류를 정한다 (예: `인프라/Kubernetes`). 분류가 흩어졌으면 claude.ai에서 "모아이 분류 정리해줘" → 제안을 확인하면 합쳐진다. 개념 화면에서 손으로 고칠 수도 있다.
 
 ---
 

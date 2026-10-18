@@ -8,7 +8,7 @@ argument-hint: "[문제 수]"
 
 모아이 MCP 서버의 `get_review_queue`, `submit_review` 도구를 쓴다 (도구 이름이 그렇게 끝난다).
 
-1. `get_review_queue`를 부른다. 문제 수가 주어졌으면 `size`에 넣는다 ($ARGUMENTS, 없으면 5).
+1. `get_review_queue`를 부른다. 문제 수가 주어졌으면 `size`에 넣는다 ($ARGUMENTS, 없으면 5). 사용자가 분류("인프라만")나 자료("그 PDF")를 말하면 `category`나 `material`에 넣는다.
 2. 한 번에 한 문제만 낸다. 보기가 있으면 보기 글자(A, B, C…)와 함께 보여 준다. 정답이나 힌트는 먼저 말하지 않는다.
 3. 사용자가 답하면 확신도(확실/반반/찍음)도 짧게 물어 `submit_review`의 `confidence`에 넣는다. ox는 `answer`에 O/X, 객관식·빈칸은 보기 글자를 넣는다.
 4. 설명하기 문제는 사용자가 먼저 자기 말로 설명하게 한다. `grade` 없이 한 번 불러 기준을 받고, 비교해서 맞은 점·빠진 점을 짚은 뒤 사용자와 등급(1~4)을 정해 다시 부른다.

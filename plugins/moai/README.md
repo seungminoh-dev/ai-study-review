@@ -6,7 +6,8 @@ Claude Code에서 공부한 내용을 [모아이](https://moai.smoh.dev) 복습 
 |---|---|
 | `/moai:coach [주제]` | 예전에 틀렸던 지점부터 묻는 코칭 |
 | `/moai:capture` | 이 대화의 학습을 세 줄로 정리하고 카드로 저장 (`source: claude-code`) |
-| `/moai:review [문제 수]` | 오늘 복습 카드를 대화로 풀기 |
+| `/moai:review [문제 수]` | 오늘 복습 카드를 대화로 풀기 (분류·자료로 거를 수 있다) |
+| `/moai:pdf <PDF 경로> [쪽 범위]` | PDF를 장별로 읽어 "자료" 카드로 만들기. 풀기 전까지 내 지식에 들어가지 않는다 |
 
 ## 설치
 

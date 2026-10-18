@@ -247,6 +247,8 @@ claude.ai에서 공부하다가 "정리해줘"라고 하면, 대화 중인 Claud
 | 꼬리물기 체인·모의면접 | 완료 | `get_interview_chain`: 최근에 많이 틀린 개념(또는 주제·key)에서 시작해 연결선(꼬리질문 → 비교 → 선행)을 따라 2~5개를 고르고 과거 기록을 준다 |
 | 질문 은행 공유 | 완료 | 친구끼리 질문과 개념 이름만 공유한다. 답과 판정은 공유하지 않는다 (`shared_questions`, 0005) |
 | 베타 지표 | 완료 | 오너 설정 화면: 주간 복습자 비율, 카드 신고율, 이번 달 AI 비용 (§2.3 끝났다는 기준) |
+| 자동 분류 | 완료 | 저장할 때 Claude가 기존 분류에서 고르고 서버가 모양·철자를 맞춘다. 지도·복습·모의면접 필터, 채팅 분류 정리 도구 (§5.6) |
+| PDF 자료 | 완료 | claude.ai에 PDF 첨부 또는 `/moai:pdf`. 장별로 나눠 저장하고, 풀기 전까지 내 지식과 분리한다 (§5.6). 앱에서 PDF를 올리는 방식(서버 AI)은 남았다 |
 | 데이터 내보내기 zip 가져오기 | 남음 | claude.ai에서 내보낸 과거 대화를 Batch API(50% 할인)로 한꺼번에 카드로 만든다. 서버 AI 설정 뒤에 한다 |
 | OAuth 커넥터 인증 | 남음 | `@cloudflare/workers-oauth-provider` + KV. 비밀 URL 대신 쓴다. KV를 만들어야 해서 계정 작업이 필요하다. B2C 전에 한다 |
 | 그 밖 | 남음 | 한국 외 시간대, 음성으로 설명하기 (방법 미정) |
@@ -628,6 +630,28 @@ ALTER TABLE users ADD COLUMN daily_goal INTEGER NOT NULL DEFAULT 5;
 ```
 
 XP, 스트릭, 리그는 따로 저장하지 않고 `review_logs`와 `learning_sessions`에서 계산한다 (§9.6).
+
+### 5.6 자료와 분류 (`migrations/0006_materials_categories.sql`)
+
+**분류**: `concepts.domain`은 분류 경로다. 큰 분류부터 `/`로 잇고 3단계까지다 (예: `인프라/DevOps/Kubernetes`).
+
+- 저장할 때 대화 중인 Claude가 정한다. 서버 API를 따로 부르지 않아서 비용이 없다. `find_concepts`가 기존 분류 목록(개념 수 포함)을 주고, 지침이 그중에서 고르게 한다.
+- 서버는 `normalizeCategory`로 모양을 맞춘다: 구분자(`/ > › |`), 공백, 흔한 줄임말(k8s → Kubernetes 등). 그다음 `category_aliases`(합치면서 남긴 옛 이름)를 따르고, 대소문자만 다른 기존 분류의 철자를 따른다.
+- 이미 분류가 있는 개념은 다시 저장해도 분류를 바꾸지 않는다. 바꾸는 것은 앱의 개념 화면이나 채팅의 `get_categories` → `update_categories`(사용자 확인 뒤)로 한다. 합치면 옛 이름을 별칭으로 남긴다.
+- 쓰는 곳: 지식 지도의 큰 분류 필터, 오늘 화면의 "분류별로 복습"(`/api/queue?category=`), 채팅 퀴즈와 모의면접의 `category`.
+
+**자료**: PDF 같은 자료에서 만든 카드는 사용자가 풀기 전까지 "내 지식"에 넣지 않는다.
+
+| 열 | 뜻 |
+|---|---|
+| `learning_sessions.material`, `material_part` | 자료 제목과 범위(장·쪽). `save_learning`의 `material` |
+| `cards.origin` | `study`(공부한 대화) / `material`(자료) |
+| `concepts.adopted_at` | 내 지식이 된 시각. NULL이면 자료에만 있다. 마이그레이션 전 개념은 모두 `created_at`으로 채웠다 |
+
+- 안 푼 자료 카드(`origin = 'material'`이고 `state = 0`)는 오늘 큐에 없다. 자료 화면의 "이 자료 풀기"(`/api/queue?material=`)나 채팅 `get_review_queue({ material })`로만 처음 푼다. 이때는 하루 새 카드 상한과 "같은 개념 하루 1장"을 적용하지 않는다(사다리는 적용).
+- 한 번 풀면 그 카드는 평소 FSRS 복습으로 들어가고, 개념의 `adopted_at`이 채워져 지식 지도·모의면접에 들어간다. 공부한 대화에서 그 개념을 다뤄도 내 지식이 된다.
+- 자료 저장에는 판정을 넣지 않는다(검사에서 거절). 카드 해설 끝에 쪽 번호를 붙인다.
+- 지식 지도는 내 지식만 보여 주고, "아직 안 푼 자료 개념도 보기"를 켜면 자료 개념을 점선으로 보여 준다. 개념 상태에 `자료`가 더해졌다.
 
 ### 5.5 용량 감각
 

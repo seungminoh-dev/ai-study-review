@@ -75,3 +75,79 @@ export function resolvedCategory(resolved: Map<string, string>, input: string | 
   const path = normalizeCategory(input);
   return path ? (resolved.get(path) ?? path) : null;
 }
+
+export interface CategoryOverview {
+  categories: CategoryCount[];
+  unclassified: { key: string; name: string }[];
+  aliases: { alias: string; path: string }[];
+}
+
+/** 분류 정리용: 분류와 개념 수, 분류 없는 개념, 남겨 둔 옛 이름 */
+export async function categoryOverview(env: Env, userId: string): Promise<CategoryOverview> {
+  const [categories, unclassified, aliases] = await env.DB.batch([
+    categoriesQuery(env, userId, 300),
+    env.DB.prepare('SELECT key, name FROM concepts WHERE user_id = ?1 AND domain IS NULL AND adopted_at IS NOT NULL ORDER BY updated_at DESC LIMIT 150').bind(userId),
+    env.DB.prepare('SELECT alias, path FROM category_aliases WHERE user_id = ?1 ORDER BY created_at DESC LIMIT 50').bind(userId),
+  ]);
+  return {
+    categories: categories!.results as unknown as CategoryCount[],
+    unclassified: unclassified!.results as { key: string; name: string }[],
+    aliases: aliases!.results as { alias: string; path: string }[],
+  };
+}
+
+/**
+ * 분류를 고친다. assign: 개념마다 분류를 정한다(null이면 지운다). rename: 분류(와 그 아래)를 새 이름으로 옮기고 옛 이름을 남긴다.
+ * 옮긴 뒤에도 3단계를 넘지 않게 자른다.
+ */
+export async function updateCategories(
+  env: Env,
+  userId: string,
+  change: { assign: { concept_key: string; category: string | null }[]; rename: { from: string; to: string }[] },
+  now: number,
+): Promise<{ assigned: number; renamed: number }> {
+  const [existing, aliases] = await env.DB.batch(categoryLookupQueries(env, userId));
+  const domains = existing!.results as { domain: string }[];
+  const resolved = resolveCategories(
+    change.assign.map((item) => item.category),
+    domains,
+    aliases!.results as { alias: string; path: string }[],
+  );
+  const statements: D1PreparedStatement[] = [];
+  if (change.assign.length > 0) {
+    const rows = change.assign.map((item) => ({ key: item.concept_key, category: resolvedCategory(resolved, item.category) }));
+    statements.push(
+      env.DB.prepare(
+        `UPDATE concepts SET domain = json_extract(j.value, '$.category'), updated_at = ?3
+           FROM json_each(?2) AS j WHERE concepts.user_id = ?1 AND concepts.key = json_extract(j.value, '$.key')`,
+      ).bind(userId, JSON.stringify(rows), now),
+    );
+  }
+  const moves: { from: string; to: string }[] = [];
+  for (const rename of change.rename) {
+    const from = normalizeCategory(rename.from);
+    const to = normalizeCategory(rename.to);
+    if (!from || !to || from === to) continue;
+    for (const { domain } of domains) {
+      if (domain === from || domain.startsWith(`${from}/`)) moves.push({ from: domain, to: normalizeCategory(to + domain.slice(from.length))! });
+    }
+    statements.push(
+      env.DB.prepare(
+        'INSERT INTO category_aliases (user_id, alias, path, created_at) VALUES (?1, ?2, ?3, ?4) ON CONFLICT (user_id, alias) DO UPDATE SET path = excluded.path',
+      ).bind(userId, from.toLowerCase(), to, now),
+    );
+  }
+  if (moves.length > 0) {
+    statements.push(
+      env.DB.prepare(
+        `UPDATE concepts SET domain = json_extract(m.value, '$.to'), updated_at = ?3
+           FROM json_each(?2) AS m WHERE concepts.user_id = ?1 AND concepts.domain = json_extract(m.value, '$.from')`,
+      ).bind(userId, JSON.stringify(moves), now),
+    );
+  }
+  if (statements.length === 0) return { assigned: 0, renamed: 0 };
+  const results = await env.DB.batch(statements);
+  const assigned = change.assign.length > 0 ? results[0]!.meta.changes : 0;
+  const renamed = moves.length > 0 ? results.at(-1)!.meta.changes : 0;
+  return { assigned, renamed };
+}

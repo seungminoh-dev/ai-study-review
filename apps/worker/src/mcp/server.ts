@@ -8,6 +8,7 @@ import {
 import { ConceptKey, ReviewGrade, SaveLearningInput, checkSaveLearning } from '@moai/shared';
 import saveLearningExample from '@moai/shared/fixtures/immutable-object.json';
 import { z } from 'zod';
+import { categoryOverview, updateCategories } from '../domain/categories';
 import { chatQueue, chatSubmit } from '../domain/chat-review';
 import { findConcepts, type FoundConcept } from '../domain/concepts';
 import { interviewChain } from '../domain/interview';
@@ -17,12 +18,14 @@ import type { Env } from '../env';
 import { formatKstDate } from '../lib/kst';
 import {
   FIND_CONCEPTS_DESCRIPTION,
+  GET_CATEGORIES_DESCRIPTION,
   GET_INTERVIEW_CHAIN_DESCRIPTION,
   GET_LEARNER_CONTEXT_DESCRIPTION,
   GET_REVIEW_QUEUE_DESCRIPTION,
   SAVE_LEARNING_DESCRIPTION,
   SERVER_INSTRUCTIONS,
   SUBMIT_REVIEW_DESCRIPTION,
+  UPDATE_CATEGORIES_DESCRIPTION,
 } from './descriptions.ko';
 
 /** 요청마다 라우트가 authInfo.extra로 넘기는 값. 핸들러는 모듈 범위에서 한 번만 만든다. */
@@ -85,6 +88,19 @@ const InterviewChainInput = z.object({
   category: z.string().max(80).optional().describe('이 분류 안에서만 묻는다. 예: "인프라/Kubernetes"'),
 });
 
+const CategoriesInput = z.object({});
+
+const UpdateCategoriesInput = z.object({
+  assign: z
+    .array(z.object({ concept_key: ConceptKey, category: z.string().max(80).nullable() }))
+    .max(100)
+    .default([]),
+  rename: z
+    .array(z.object({ from: z.string().min(1).max(80), to: z.string().min(1).max(80) }))
+    .max(20)
+    .default([]),
+});
+
 // 요청마다 CPU를 쓰는 준비 작업은 모듈 범위(isolate 시작)에서 미리 해 둔다. 이 시간은 요청 CPU에 들어가지 않는다.
 // SDK도 엣지 런타임에서 preloadSchemas()를 모듈 범위에서 부르라고 안내한다.
 preloadSchemas();
@@ -94,8 +110,19 @@ const LearnerContextSchema = memoJsonSchema(LearnerContextInput);
 const ReviewQueueSchema = memoJsonSchema(ReviewQueueInput);
 const SubmitReviewSchema = memoJsonSchema(SubmitReviewInput);
 const InterviewChainSchema = memoJsonSchema(InterviewChainInput);
+const CategoriesSchema = memoJsonSchema(CategoriesInput);
+const UpdateCategoriesSchema = memoJsonSchema(UpdateCategoriesInput);
 // SDK가 쓰는 target과 같다. 달라져도 isolate마다 첫 요청에서 한 번 더 변환할 뿐이다.
-for (const schema of [SaveLearningSchema, FindConceptsSchema, LearnerContextSchema, ReviewQueueSchema, SubmitReviewSchema, InterviewChainSchema]) {
+for (const schema of [
+  SaveLearningSchema,
+  FindConceptsSchema,
+  LearnerContextSchema,
+  ReviewQueueSchema,
+  SubmitReviewSchema,
+  InterviewChainSchema,
+  CategoriesSchema,
+  UpdateCategoriesSchema,
+]) {
   schema['~standard'].jsonSchema.input({ target: 'draft-2020-12' });
 }
 // 처음 실행하는 함수는 V8이 그때 컴파일한다. 첫 tools/call이 그 비용을 내지 않도록 기획서 예시를 한 번 검사해 둔다.
@@ -266,6 +293,44 @@ function buildServer(deps: McpDeps): McpServer {
       const context = await learnerContext(deps.env, deps.userId, { concept_keys: chain.keys }, now);
       const header = `물을 순서: ${chain.names.join(' → ')}\n첫 개념부터 한 질문씩 묻고, 답의 약한 곳을 파고드는 꼬리질문으로 다음 개념으로 넘어가세요. 정답은 먼저 말하지 마세요.`;
       return { content: text(`${header}\n\n${context.text}`), structuredContent: { order: chain.keys, concepts: context.concepts } };
+    },
+  );
+
+  server.registerTool(
+    'get_categories',
+    {
+      title: '분류 목록',
+      description: GET_CATEGORIES_DESCRIPTION,
+      inputSchema: CategoriesSchema,
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    async () => {
+      const overview = await categoryOverview(deps.env, deps.userId);
+      const lines = [
+        `분류 ${overview.categories.length}개:`,
+        ...overview.categories.map((item) => `- ${item.path} (${item.concepts})`),
+        '',
+        overview.unclassified.length > 0
+          ? `분류 없는 개념 ${overview.unclassified.length}개: ${overview.unclassified.map((item) => `${item.name}(\`${item.key}\`)`).join(', ')}`
+          : '분류 없는 개념은 없어요.',
+      ];
+      if (overview.aliases.length > 0) lines.push('', `옛 이름: ${overview.aliases.map((item) => `${item.alias} → ${item.path}`).join(', ')}`);
+      lines.push('', '바꿀 내용을 사용자에게 보여 주고 확인을 받은 뒤 update_categories를 부르세요.');
+      return { content: text(lines.join('\n')), structuredContent: { ...overview } };
+    },
+  );
+
+  server.registerTool(
+    'update_categories',
+    {
+      title: '분류 바꾸기',
+      description: UPDATE_CATEGORIES_DESCRIPTION,
+      inputSchema: UpdateCategoriesSchema,
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    },
+    async (input) => {
+      const result = await updateCategories(deps.env, deps.userId, input, Date.now());
+      return { content: text(`개념 ${result.assigned}개의 분류를 정하고, ${result.renamed}개를 새 분류로 옮겼어요.`), structuredContent: result };
     },
   );
 

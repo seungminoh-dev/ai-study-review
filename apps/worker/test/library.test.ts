@@ -98,3 +98,29 @@ describe('categories', () => {
     expect(await (await api(user, '/concepts/helm/category', { method: 'PATCH', json: { category: 'infra/devops' } })).json()).toEqual({ category: '인프라/DevOps' });
   });
 });
+
+describe('category tools', () => {
+  it('fills missing categories, merges one into another and follows the old name next time', async () => {
+    const save = (key: string, domain?: string) =>
+      callTool(url, 'save_learning', {
+        topic: key,
+        concepts: [{ key, name: key, ...(domain ? { domain } : {}) }],
+        cards: [{ type: 'ox', concept: key, prompt: `${key} 문제`, answer: 'O', explain: '해설' }],
+      });
+    await save('pod', 'K8s/기본');
+    await save('jvm');
+    const overview = await callTool(url, 'get_categories', {});
+    expect(overview.structuredContent.unclassified.map((item: { key: string }) => item.key)).toContain('jvm');
+
+    const updated = await callTool(url, 'update_categories', {
+      assign: [{ concept_key: 'jvm', category: '백엔드 / java' }],
+      rename: [{ from: 'Kubernetes', to: '인프라/Kubernetes' }],
+    });
+    expect(updated.structuredContent).toEqual({ assigned: 1, renamed: 1 });
+    expect((await concept('jvm'))!.domain).toBe('백엔드/Java');
+    expect((await concept('pod'))!.domain).toBe('인프라/Kubernetes/기본');
+    // 옛 이름으로 저장해도 새 분류로 간다
+    await save('service', 'k8s/네트워크');
+    expect((await concept('service'))!.domain).toBe('인프라/Kubernetes/네트워크');
+  });
+});

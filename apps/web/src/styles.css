@@ -1120,3 +1120,21 @@ a.chip {
 .bad-text {
   color: var(--bad);
 }
+
+/* 자료 */
+.map .node.material circle {
+  fill: var(--surface);
+  stroke: var(--pen);
+  stroke-dasharray: 2 2;
+  opacity: 0.7;
+}
+
+.chip.state-material {
+  background: transparent;
+  border: 1px dashed var(--pen);
+  color: var(--pen);
+}
+
+.row-actions .button {
+  flex: 0 1 auto;
+}

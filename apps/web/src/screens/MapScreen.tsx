@@ -1,28 +1,42 @@
 import type { ConceptStateKey, MapResponse } from '@moai/shared';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { layoutGraph } from '../map/layout';
 import { Link, navigate } from '../router';
 import { useApi } from '../useApi';
 
 // 지식 지도 (설계서 §9.7): 초록 익숙함, 노랑 흔들림, 회색 점선 아직 안 배움. 점을 누르면 개념 상세로 간다.
 
-export const STATE_LABEL: Record<ConceptStateKey, string> = { familiar: '익숙함', shaky: '흔들림', unlearned: '아직 안 배움' };
-const ORDER: ConceptStateKey[] = ['shaky', 'unlearned', 'familiar'];
+export const STATE_LABEL: Record<ConceptStateKey, string> = { familiar: '익숙함', shaky: '흔들림', unlearned: '아직 안 배움', material: '자료 (아직 안 풂)' };
+const ORDER: ConceptStateKey[] = ['shaky', 'unlearned', 'familiar', 'material'];
+
+const topOf = (category: string | null) => (category ? category.split('/')[0]! : null);
 
 function shortName(name: string): string {
   return name.length > 9 ? `${name.slice(0, 8)}…` : name;
 }
 
 export function MapScreen() {
-  const { data, error } = useApi<MapResponse>('/map');
+  const { data: raw, error } = useApi<MapResponse>('/map');
+  /** 큰 분류 하나만 보기 (null이면 전체) */
+  const [top, setTop] = useState<string | null>(null);
+  /** 아직 안 푼 자료 개념도 보기. 기본은 내 지식만 */
+  const [withMaterials, setWithMaterials] = useState(false);
+  const tops = useMemo(() => [...new Set((raw?.nodes ?? []).filter((node) => node.state !== 'material').map((node) => topOf(node.category)).filter((value): value is string => value !== null))].sort(), [raw]);
+  const data = useMemo(() => {
+    if (!raw) return null;
+    const nodes = raw.nodes.filter((node) => (withMaterials || node.state !== 'material') && (top === null || topOf(node.category) === top));
+    const keys = new Set(nodes.map((node) => node.key));
+    return { nodes, edges: raw.edges.filter((edge) => keys.has(edge.from) && keys.has(edge.to)) };
+  }, [raw, top, withMaterials]);
   const size = data ? Math.max(340, Math.round(Math.sqrt(data.nodes.length) * 80)) : 340;
   const positions = useMemo(
     () => (data ? layoutGraph(data.nodes.map((node) => node.key), data.edges.map((edge) => [edge.from, edge.to] as const), size) : new Map()),
     [data, size],
   );
+  const materialCount = raw?.nodes.filter((node) => node.state === 'material').length ?? 0;
   if (error) return <div className="screen"><p className="notice bad">{error}</p></div>;
-  if (!data) return <div className="center muted">불러오는 중…</div>;
-  if (data.nodes.length === 0) {
+  if (!data || !raw) return <div className="center muted">불러오는 중…</div>;
+  if (raw && raw.nodes.length === 0) {
     return (
       <div className="screen">
         <h1>지식 지도</h1>
@@ -37,10 +51,29 @@ export function MapScreen() {
       <Link href="/questions" className="notice link">
         친구들이 공유한 질문 은행 →
       </Link>
+      {tops.length > 0 ? (
+        <div className="segmented" role="group" aria-label="분류">
+          <button type="button" className={top === null ? 'current' : ''} aria-pressed={top === null} onClick={() => setTop(null)}>
+            전체
+          </button>
+          {tops.map((name) => (
+            <button key={name} type="button" className={top === name ? 'current' : ''} aria-pressed={top === name} onClick={() => setTop(name)}>
+              {name}
+            </button>
+          ))}
+        </div>
+      ) : null}
       <p className="legend small">
         <span className="dot familiar" /> 익숙함 {counts.familiar} · <span className="dot shaky" /> 흔들림 {counts.shaky} · <span className="dot unlearned" /> 아직 안 배움{' '}
         {counts.unlearned}
       </p>
+      {materialCount > 0 ? (
+        <label className="toggle small">
+          <input type="checkbox" checked={withMaterials} onChange={(event) => setWithMaterials(event.target.checked)} /> 아직 안 푼 자료 개념도 보기 ({materialCount}) ·{' '}
+          <Link href="/materials">자료 화면</Link>
+        </label>
+      ) : null}
+      {data.nodes.length === 0 ? <p className="muted">이 분류에는 아직 내 지식이 없어요.</p> : null}
       <div className="map-scroll">
         <svg className="map" width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-label="개념 지도">
           {data.edges.map((edge) => {
