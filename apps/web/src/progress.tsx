@@ -1,22 +1,22 @@
 import type { MapNode, StatsDay, StatsResponse } from '@moai/shared';
-import type { ReactNode } from 'react';
+import * as m from 'motion/react-m';
+import type { CSSProperties, ReactNode } from 'react';
 import { IconCheck, IconSnow } from './icons';
 import { Link } from './router';
 
 // 오늘 화면과 내 성장 화면이 같이 쓰는 진행 표시: 목표 링, 이번 주 7칸, 최근 12주, 분류별 진행
 
-/** 둥근 진행 링. tone="hero"는 남색 카드 위에서 쓴다 */
+/** 둥근 진행 링. tone="hero"는 남색 카드 위에서 쓴다. 채운 만큼 0에서부터 차오른다 */
 export function Ring({ value, max, size = 96, label, children, tone = 'card' }: { value: number; max: number; size?: number; label: string; children: ReactNode; tone?: 'card' | 'hero' }) {
   const stroke = Math.round(size / 9);
   const radius = (size - stroke) / 2;
-  const length = 2 * Math.PI * radius;
-  const filled = max > 0 ? Math.min(1, value / max) * length : 0;
+  const ratio = max > 0 ? Math.min(1, value / max) : 0;
   return (
     <div className="ring" style={{ width: size, height: size }}>
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-label={label}>
         <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke={tone === 'hero' ? 'var(--hero-line)' : 'var(--surface-2)'} strokeWidth={stroke} />
-        {filled > 0 ? (
-          <circle
+        {ratio > 0 ? (
+          <m.circle
             cx={size / 2}
             cy={size / 2}
             r={radius}
@@ -24,8 +24,10 @@ export function Ring({ value, max, size = 96, label, children, tone = 'card' }: 
             stroke="var(--accent)"
             strokeWidth={stroke}
             strokeLinecap="round"
-            strokeDasharray={`${filled} ${length}`}
             transform={`rotate(-90 ${size / 2} ${size / 2})`}
+            initial={{ pathLength: 0 }}
+            animate={{ pathLength: ratio }}
+            transition={{ duration: 0.9, ease: [0.2, 0.8, 0.2, 1], delay: 0.15 }}
           />
         ) : null}
       </svg>
@@ -53,7 +55,7 @@ export function WeekDays({ stats }: { stats: StatsResponse }) {
         const state = day.met ? 'met' : day.frozen ? 'frozen' : isToday ? 'today' : day.future ? 'future' : '';
         const text = day.met ? '목표 채움' : day.frozen ? '프리즈' : isToday ? `${day.reviewed}/${stats.goal}장` : day.future ? '' : '쉼';
         return (
-          <li key={day.day} className={isToday ? 'is-today' : undefined}>
+          <li key={day.day} className={isToday ? 'is-today' : undefined} style={{ '--i': index } as CSSProperties}>
             <span className={`day ${state}`} title={text}>
               {day.met ? <IconCheck /> : day.frozen ? <IconSnow /> : isToday && !day.met ? `${day.reviewed}/${stats.goal}` : null}
             </span>

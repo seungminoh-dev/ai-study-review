@@ -1,6 +1,7 @@
 import type { MaterialSummary } from '@moai/shared';
 import { useState } from 'react';
 import { errorMessage, request } from '../api';
+import { Loading } from '../Loading';
 import { BackLink, Link } from '../router';
 import { formatDate, useApi } from '../useApi';
 
@@ -11,7 +12,7 @@ export function Materials() {
   const { data, error, reload } = useApi<{ materials: MaterialSummary[] }>('/materials');
   const [message, setMessage] = useState<{ text: string; tone: 'good' | 'bad' } | null>(null);
   if (error) return <div className="screen"><p className="notice bad">{error}</p></div>;
-  if (!data) return <div className="center muted">불러오는 중…</div>;
+  if (!data) return <Loading />;
 
   const suspend = async (material: MaterialSummary) => {
     if (!confirm(`"${material.title}"에서 아직 안 푼 카드를 모두 끌까요? 이미 푼 카드는 그대로예요. 기록 탭에서 다시 켤 수 있어요.`)) return;

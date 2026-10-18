@@ -85,7 +85,7 @@ export function QuestionCard({
       {card.code ? <CodeBlock code={card.code} /> : null}
       <div className={card.type === 'ox' ? 'choices ox' : 'choices'} role="group" aria-label="보기">
         {choices.map((choice, index) => {
-          const state = !answered ? (choice === chosen ? 'chosen' : '') : choice.correct ? 'right' : choice === picked ? 'wrong' : 'dim';
+          const state = !answered ? (choice === chosen ? 'chosen' : '') : choice.correct ? (choice === picked ? 'right picked' : 'right') : choice === picked ? 'wrong' : 'dim';
           return (
             <button key={choice.value} type="button" className={`choice ${state}`} disabled={answered} onClick={() => onPick(choice)}>
               {/* 컴퓨터에서는 단축키 번호를 보여 준다. OX는 O·X 키라 번호가 없다 */}

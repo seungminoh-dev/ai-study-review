@@ -2,6 +2,7 @@ import type { ConceptDetail } from '@moai/shared';
 import { useState } from 'react';
 import { errorMessage, request } from '../api';
 import { copyText } from '../copy';
+import { Loading } from '../Loading';
 import { BackLink, Link } from '../router';
 import { formatDate, useApi } from '../useApi';
 import { STATE_LABEL } from './MapScreen';
@@ -20,7 +21,7 @@ export function Concept({ conceptKey }: { conceptKey: string }) {
   const { data, error } = useApi<ConceptDetail>(`/concepts/${encodeURIComponent(conceptKey)}`);
   const [copied, setCopied] = useState<boolean | null>(null);
   if (error) return <div className="screen"><p className="notice bad">{error}</p></div>;
-  if (!data) return <div className="center muted">불러오는 중…</div>;
+  if (!data) return <Loading />;
   return (
     <div className="screen">
       <BackLink href="/map" className="back">

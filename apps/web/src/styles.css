@@ -30,7 +30,16 @@
   --warn-soft: #fdf3e1;
   --code-bg: #f5f0e6;
   --mascot-line: #192849;
+  --mascot-mark: #192849;
+  --mascot-up: #2c7a45;
+  --mascot-claude: #b44d12;
   --nav-current: #192849;
+  /* 누르는 버튼의 아랫단. 누르면 이만큼 내려간다 */
+  --pen-edge: #0b1530;
+  --accent-edge: #c9611f;
+  --surface-edge: #e2d8c6;
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
   --heat-1: #ffd9bd;
   --heat-2: #ffb27a;
   --heat-3: #ff914d;
@@ -73,7 +82,13 @@
     --warn-soft: #33270f;
     --code-bg: #10141b;
     --mascot-line: #070b14;
+    --mascot-mark: #fff0c7;
+    --mascot-up: #78c98c;
+    --mascot-claude: #ffb27a;
     --nav-current: #ffb27a;
+    --pen-edge: #b8561a;
+    --accent-edge: #b8561a;
+    --surface-edge: #0b1220;
     --heat-1: #4a3324;
     --heat-2: #7a4a2a;
     --heat-3: #c4652a;
@@ -142,6 +157,79 @@ textarea {
   min-height: 60dvh;
 }
 
+/* 불러오는 중: 화면 모양의 뼈대 위로 빛이 지나간다. 빨리 끝나면 보이지 않게 조금 늦게 나타난다 */
+.loading {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-top: 8px;
+  animation: fade-in 0.3s ease 0.15s both;
+}
+
+.loading-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.loading-lines {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.skeleton {
+  display: block;
+  height: 14px;
+  border-radius: 8px;
+  background: linear-gradient(90deg, var(--surface-2) 0%, var(--surface) 45%, var(--surface-2) 90%);
+  background-size: 300% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+
+.skeleton.short {
+  height: 10px;
+}
+
+.skeleton.block {
+  height: 120px;
+  border-radius: 18px;
+}
+
+.skeleton.block.small {
+  height: 64px;
+}
+
+.splash {
+  min-height: 100dvh;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 14px;
+}
+
+.splash strong {
+  font-size: 1.25rem;
+  font-weight: 800;
+  animation: fade-in 0.5s ease 0.2s both;
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
 .muted {
   color: var(--muted);
 }
@@ -207,6 +295,16 @@ textarea {
   background: transparent;
   border-color: var(--hero-text);
   color: var(--hero-text);
+  box-shadow: none;
+}
+
+.hero .button.ghost:not(:disabled):hover {
+  box-shadow: none;
+  background: var(--hero-line);
+}
+
+.hero .button.ghost:not(:disabled):active {
+  transform: scale(0.97);
 }
 
 .ring {
@@ -253,6 +351,13 @@ textarea {
   text-decoration: none;
   cursor: pointer;
   flex: 1;
+  /* 누르는 버튼: 아랫단이 있고, 누르면 그만큼 내려간다 */
+  box-shadow: 0 3px 0 var(--surface-edge);
+  transition:
+    transform 0.12s var(--ease-out),
+    box-shadow 0.12s var(--ease-out),
+    background-color 0.15s ease,
+    filter 0.15s ease;
 }
 
 /* 강조 버튼: 남색 카드 위에서 쓰는 주황 버튼 */
@@ -261,16 +366,46 @@ textarea {
   border-color: var(--accent);
   color: var(--accent-text);
   font-weight: 700;
+  box-shadow: 0 4px 0 var(--accent-edge);
 }
 
 .button.primary {
   background: var(--pen);
   border-color: var(--pen);
   color: var(--pen-text);
+  box-shadow: 0 4px 0 var(--pen-edge);
 }
 
 .button:disabled {
   opacity: 0.6;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .button:not(:disabled):hover {
+    transform: translateY(-1px);
+    filter: brightness(1.04);
+    box-shadow: 0 4px 0 var(--surface-edge);
+  }
+
+  .button.accent:not(:disabled):hover {
+    box-shadow: 0 5px 0 var(--accent-edge);
+  }
+
+  .button.primary:not(:disabled):hover {
+    box-shadow: 0 5px 0 var(--pen-edge);
+  }
+}
+
+.button:not(:disabled):active {
+  transform: translateY(3px);
+  box-shadow: 0 0 0 var(--surface-edge);
+  filter: none;
+}
+
+.button.accent:not(:disabled):active,
+.button.primary:not(:disabled):active {
+  transform: translateY(4px);
+  box-shadow: 0 0 0 var(--pen-edge);
 }
 
 .text-button {
@@ -285,14 +420,33 @@ textarea {
   align-self: flex-start;
 }
 
+.text-button:hover {
+  color: var(--text);
+}
+
 .icon-button {
   width: 44px;
   height: 44px;
+  display: grid;
+  place-items: center;
   border: none;
+  border-radius: 12px;
   background: none;
   font-size: 1.25rem;
   color: var(--muted);
   cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    transform 0.12s var(--ease-out);
+}
+
+.icon-button:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.icon-button:active {
+  transform: scale(0.92);
 }
 
 .actions {
@@ -403,6 +557,7 @@ textarea {
   text-decoration: none;
   margin: -14px -16px;
   padding: 14px 16px;
+  border-radius: inherit;
 }
 
 blockquote {
@@ -518,13 +673,21 @@ blockquote {
   height: 100%;
   background: var(--accent);
   border-radius: 999px;
-  transition: width 0.25s ease;
+  transition: width 0.5s var(--ease-out);
 }
 
 .count {
   min-width: 3em;
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+
+/* 카드 한 장의 자리. Motion이 카드를 바꿀 때 이 상자째 밀어 넣는다 */
+.card-stage {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
 }
 
 .question {
@@ -588,6 +751,25 @@ blockquote {
   font-weight: 500;
   line-height: 1.5;
   flex: 1;
+  box-shadow: 0 3px 0 var(--border);
+  transition:
+    transform 0.12s var(--ease-out),
+    box-shadow 0.12s var(--ease-out),
+    border-color 0.15s ease,
+    background-color 0.2s ease,
+    opacity 0.2s ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .choice:not(:disabled):hover {
+    border-color: var(--border-strong);
+    transform: translateY(-1px);
+  }
+}
+
+.choice:not(:disabled):active {
+  transform: translateY(3px);
+  box-shadow: 0 0 0 var(--border);
 }
 
 .choice-body {
@@ -633,11 +815,57 @@ blockquote {
 .choice.right {
   border-color: var(--good);
   background: var(--good-soft);
+  box-shadow: 0 3px 0 color-mix(in srgb, var(--good) 45%, transparent);
 }
 
 .choice.wrong {
   border-color: var(--bad);
   background: var(--bad-soft);
+  box-shadow: 0 3px 0 color-mix(in srgb, var(--bad) 40%, transparent);
+  animation: shake 0.45s cubic-bezier(0.36, 0.07, 0.19, 0.97);
+}
+
+/* 내가 고른 정답은 톡 튀고, 고른 오답은 흔들린다 */
+.choice.right.picked {
+  animation: pop 0.45s var(--ease-spring);
+}
+
+.choice.right .tag,
+.choice.wrong .tag {
+  animation: tag-in 0.35s var(--ease-spring) 0.1s both;
+}
+
+@keyframes pop {
+  40% {
+    transform: scale(1.04);
+  }
+}
+
+@keyframes shake {
+  10%,
+  90% {
+    transform: translateX(-1px);
+  }
+  20%,
+  80% {
+    transform: translateX(3px);
+  }
+  30%,
+  50%,
+  70% {
+    transform: translateX(-6px);
+  }
+  40%,
+  60% {
+    transform: translateX(6px);
+  }
+}
+
+@keyframes tag-in {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
 }
 
 .choice.right .tag {
@@ -829,12 +1057,41 @@ blockquote {
   text-decoration: none;
   font-size: 0.75rem;
   font-weight: 600;
+  position: relative;
+  isolation: isolate;
+  transition:
+    color 0.2s ease,
+    transform 0.12s var(--ease-out);
+}
+
+.tab:active {
+  transform: scale(0.94);
 }
 
 .tab.current {
   color: var(--nav-current);
-  background: var(--pen-soft);
   font-weight: 700;
+}
+
+/* 지금 탭 뒤의 크림색 알약. Motion이 탭 사이로 미끄러지게 옮긴다 (App.tsx의 layoutId) */
+.tab-pill,
+.side-pill {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: 14px;
+  background: var(--pen-soft);
+}
+
+.tab.current .icon,
+.side-link.current .icon {
+  animation: tab-pop 0.4s var(--ease-spring);
+}
+
+@keyframes tab-pop {
+  40% {
+    transform: scale(1.22) translateY(-1px);
+  }
 }
 
 :focus-visible {
@@ -842,10 +1099,166 @@ blockquote {
   outline-offset: 2px;
 }
 
+/* 동작 줄이기: 자리를 옮기는 움직임(밀기, 튀기, 흔들기, 꽃가루)은 멈추고 색·투명도 변화와 깜빡임만 남긴다.
+   화면 전환은 밀지 않고 겹쳐 바꾼다. Motion도 같은 규칙이다 (motion.tsx의 reducedMotion="user") */
 @media (prefers-reduced-motion: reduce) {
-  * {
-    transition: none !important;
+  *,
+  *::before,
+  *::after {
+    transition-property: color, background-color, border-color, opacity, box-shadow, filter !important;
+  }
+
+  .mascot.alive .m-bob,
+  .mascot.alive .m-hop,
+  .mascot.alive .m-breathe,
+  .mascot.alive .m-ring,
+  .mascot.alive .m-float,
+  .mascot.alive .m-drop,
+  .mascot.alive .m-wave-a,
+  .mascot.alive .m-wave-b,
+  .mascot.alive .m-z1,
+  .mascot.alive .m-z2,
+  .choice.wrong,
+  .choice.right.picked,
+  .choice .tag,
+  .day.met,
+  .day.frozen,
+  .tab.current .icon,
+  .side-link.current .icon,
+  .skeleton,
+  .plus-one,
+  .summary-head,
+  .summary-stat,
+  .summary > section,
+  .summary-actions {
     animation: none !important;
+  }
+
+  .confetti {
+    display: none;
+  }
+
+  ::view-transition-group(page) {
+    animation: none !important;
+  }
+
+  html[data-nav]::view-transition-old(page) {
+    animation: vt-fade-out 0.15s ease both !important;
+  }
+
+  html[data-nav]::view-transition-new(page) {
+    animation: vt-fade-in 0.2s ease both !important;
+  }
+}
+
+/* 화면 전환 (router.tsx의 show). 휴대폰은 들어갈 때 오른쪽에서, 돌아갈 때 왼쪽에서 밀려 온다. 탭끼리는 살짝 겹친다.
+   아래 탭과 사이드바는 그대로 두고, 그 안의 알약만 Motion이 옮긴다 */
+.app {
+  view-transition-name: page;
+}
+
+.tabs {
+  view-transition-name: tabs;
+}
+
+.sidebar {
+  view-transition-name: sidebar;
+}
+
+::view-transition-old(root),
+::view-transition-new(root),
+::view-transition-new(tabs),
+::view-transition-new(sidebar) {
+  animation: none;
+}
+
+::view-transition-old(tabs),
+::view-transition-old(sidebar) {
+  display: none;
+}
+
+::view-transition-group(page),
+::view-transition-old(page),
+::view-transition-new(page) {
+  animation-duration: 0.28s;
+  animation-timing-function: var(--ease-out);
+}
+
+html[data-nav='forward']::view-transition-old(page) {
+  animation-name: vt-out-left;
+}
+
+html[data-nav='forward']::view-transition-new(page) {
+  animation-name: vt-in-right;
+}
+
+html[data-nav='back']::view-transition-old(page) {
+  animation-name: vt-out-right;
+}
+
+html[data-nav='back']::view-transition-new(page) {
+  animation-name: vt-in-left;
+}
+
+html[data-nav='tab']::view-transition-old(page) {
+  animation: vt-fade-out 0.14s ease both;
+}
+
+html[data-nav='tab']::view-transition-new(page) {
+  animation: vt-fade-up 0.24s var(--ease-out) both;
+}
+
+@keyframes vt-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(var(--vt-shift, 36px));
+  }
+}
+
+@keyframes vt-out-left {
+  to {
+    opacity: 0;
+    transform: translateX(calc(var(--vt-shift, 36px) * -1));
+  }
+}
+
+@keyframes vt-in-left {
+  from {
+    opacity: 0;
+    transform: translateX(calc(var(--vt-shift, 36px) * -1));
+  }
+}
+
+@keyframes vt-out-right {
+  to {
+    opacity: 0;
+    transform: translateX(var(--vt-shift, 36px));
+  }
+}
+
+@keyframes vt-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@keyframes vt-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes vt-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* 컴퓨터는 화면이 넓어서 조금만 민다 */
+@media (min-width: 1024px) {
+  :root {
+    --vt-shift: 14px;
   }
 }
 
@@ -1257,6 +1670,7 @@ a.chip {
 .choice.chosen {
   border-color: var(--pen);
   background: var(--pen-soft);
+  box-shadow: 0 3px 0 var(--pen);
 }
 
 .confidence {
@@ -1437,10 +1851,19 @@ a.chip {
   color: var(--muted);
   font-weight: 600;
   text-decoration: none;
+  position: relative;
+  isolation: isolate;
+  transition:
+    color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.side-link:not(.current):hover {
+  background: var(--surface-2);
+  color: var(--text);
 }
 
 .side-link.current {
-  background: var(--pen-soft);
   color: var(--nav-current);
   font-weight: 700;
 }
@@ -1468,6 +1891,7 @@ a.chip {
   display: block;
   flex-shrink: 0;
   shape-rendering: crispEdges;
+  overflow: visible;
 }
 
 .mascot .m-line {
@@ -1512,6 +1936,287 @@ a.chip {
 
 .mascot .m-spark2 {
   fill: #78c98c;
+}
+
+.mascot .m-mark {
+  fill: var(--mascot-mark);
+}
+
+.mascot .m-up {
+  fill: var(--mascot-up);
+}
+
+.mascot .m-claude {
+  fill: var(--mascot-claude);
+}
+
+.mascot .m-page {
+  fill: #fff0c7;
+}
+
+.mascot .m-page2 {
+  fill: #ffe2a0;
+}
+
+.mascot .m-text {
+  fill: #e0c88f;
+}
+
+.mascot .m-screen {
+  fill: #bfe3fa;
+}
+
+.mascot .m-screen2 {
+  fill: #ffb27a;
+}
+
+/* 마스코트 움직임. 픽셀 그림답게 계단식(steps)으로 움직인다. 감은 눈과 흔드는 팔의 두 번째 칸은 평소엔 숨긴다 */
+.mascot .m-eyes-closed,
+.mascot .m-wave-b {
+  opacity: 0;
+}
+
+.mascot.alive .m-bob {
+  animation: m-bob 1.6s steps(1, end) infinite;
+}
+
+.mascot.alive .m-hop {
+  animation: m-hop 0.9s var(--ease-out) infinite;
+}
+
+.mascot.alive .m-breathe {
+  animation: m-breathe 2.4s ease-in-out infinite;
+}
+
+.mascot.alive .m-eyes-open {
+  animation: m-blink-open 4.2s steps(1, end) infinite;
+}
+
+.mascot.alive .m-eyes-closed {
+  animation: m-blink-closed 4.2s steps(1, end) infinite;
+}
+
+.mascot.alive .m-wave-a {
+  animation: m-flip-a 0.8s steps(1, end) infinite;
+}
+
+.mascot.alive .m-wave-b {
+  animation: m-flip-b 0.8s steps(1, end) infinite;
+}
+
+.mascot.alive .m-dot1 {
+  animation: m-dot1 1.6s steps(1, end) infinite;
+}
+
+.mascot.alive .m-dot2 {
+  animation: m-dot2 1.6s steps(1, end) infinite;
+}
+
+.mascot.alive .m-dot3 {
+  animation: m-dot3 1.6s steps(1, end) infinite;
+}
+
+.mascot.alive .m-twinkle {
+  animation: m-twinkle 1.2s steps(2, end) infinite;
+}
+
+.mascot.alive .m-drop {
+  animation: m-drop 1.8s ease-in infinite;
+}
+
+.mascot.alive .m-z1 {
+  animation: m-z 2.6s ease-in-out infinite;
+}
+
+.mascot.alive .m-z2 {
+  animation: m-z 2.6s ease-in-out 1.3s infinite;
+}
+
+.mascot.alive .m-ring {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation: m-ring 2.2s ease-in-out infinite;
+}
+
+.mascot.alive .m-float {
+  animation: m-float 1.4s ease-in-out infinite;
+}
+
+@keyframes m-bob {
+  0%,
+  49.9% {
+    transform: translateY(0);
+  }
+  50%,
+  100% {
+    transform: translateY(-0.5px);
+  }
+}
+
+@keyframes m-hop {
+  0%,
+  55%,
+  100% {
+    transform: translateY(0);
+  }
+  25% {
+    transform: translateY(-2px);
+  }
+}
+
+@keyframes m-breathe {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(0.4px);
+  }
+}
+
+@keyframes m-blink-open {
+  0%,
+  93.9% {
+    opacity: 1;
+  }
+  94%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes m-blink-closed {
+  0%,
+  93.9% {
+    opacity: 0;
+  }
+  94%,
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes m-flip-a {
+  0%,
+  49.9% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes m-flip-b {
+  0%,
+  49.9% {
+    opacity: 0;
+  }
+  50%,
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes m-dot1 {
+  0%,
+  19.9% {
+    opacity: 0;
+  }
+  20%,
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes m-dot2 {
+  0%,
+  39.9% {
+    opacity: 0;
+  }
+  40%,
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes m-dot3 {
+  0%,
+  59.9% {
+    opacity: 0;
+  }
+  60%,
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes m-twinkle {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+
+@keyframes m-drop {
+  0% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  70% {
+    transform: translateY(2px);
+    opacity: 0;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes m-z {
+  0% {
+    transform: translate(0, 1px);
+    opacity: 0;
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(1px, -2px);
+    opacity: 0;
+  }
+}
+
+@keyframes m-ring {
+  0%,
+  62%,
+  100% {
+    transform: rotate(0);
+  }
+  68% {
+    transform: rotate(-12deg);
+  }
+  74% {
+    transform: rotate(12deg);
+  }
+  80% {
+    transform: rotate(-8deg);
+  }
+  86% {
+    transform: rotate(6deg);
+  }
+}
+
+@keyframes m-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-1px);
+  }
 }
 
 .icon-link {
@@ -1601,6 +2306,56 @@ a.chip {
   font-weight: 600;
   text-decoration: none;
   white-space: nowrap;
+}
+
+/* 누를 수 있는 카드와 줄: 컴퓨터에서는 마우스를 올리면 살짝 뜨고, 누르면 눌린다 */
+a.card,
+a.notice.link,
+.row-link,
+.steps-list a,
+.small-button,
+.icon-link {
+  transition:
+    transform 0.18s var(--ease-out),
+    box-shadow 0.18s var(--ease-out),
+    background-color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  a.card:hover,
+  a.notice.link:hover {
+    transform: translateY(-2px);
+    border-color: var(--border-strong);
+    box-shadow: 0 14px 28px -18px rgba(25, 40, 73, 0.45);
+  }
+
+  .row-link:hover,
+  .steps-list a:hover,
+  .small-button:hover,
+  .icon-link:hover {
+    background: var(--surface-2);
+  }
+
+  /* 카드 끝의 → 화살표는 조금 나아간다 */
+  a.card:hover > .icon:last-child {
+    transform: translateX(3px);
+  }
+}
+
+a.card > .icon:last-child {
+  transition: transform 0.18s var(--ease-out);
+}
+
+a.card:active,
+a.notice.link:active,
+.row-link:active {
+  transform: scale(0.99);
+}
+
+.small-button:active,
+.icon-link:active {
+  transform: scale(0.95);
 }
 
 /* 오늘 */
@@ -1757,6 +2512,20 @@ a.chip {
 .day.frozen {
   background: var(--pen-soft);
   color: var(--text);
+}
+
+/* 채운 날은 월요일부터 차례로 톡 나타난다 (--i는 progress.tsx의 요일 순서) */
+.day.met,
+.day.frozen {
+  animation: day-pop 0.4s var(--ease-spring) both;
+  animation-delay: calc(var(--i, 0) * 45ms);
+}
+
+@keyframes day-pop {
+  from {
+    transform: scale(0.5);
+    opacity: 0;
+  }
 }
 
 .day.today {
@@ -1973,11 +2742,104 @@ a.chip {
 }
 
 .summary-head {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 8px;
   text-align: center;
+}
+
+/* 끝 화면은 위에서부터 차례로 떠오른다 */
+.summary-head,
+.summary-stat,
+.summary > section,
+.summary-actions {
+  animation: rise 0.5s var(--ease-out) both;
+}
+
+.summary-stat:nth-child(2) {
+  animation-delay: 0.08s;
+}
+
+.summary-stat:nth-child(3) {
+  animation-delay: 0.16s;
+}
+
+.summary > section {
+  animation-delay: 0.22s;
+}
+
+.summary-actions {
+  animation-delay: 0.28s;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+
+/* 목표 달성 꽃가루 (Confetti.tsx). 조각마다 --x --y --r --c를 받는다 */
+.confetti {
+  position: absolute;
+  left: 50%;
+  top: 50px;
+  pointer-events: none;
+}
+
+.confetti span {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  margin: -4.5px 0 0 -4.5px;
+  background: var(--c);
+  animation: burst 1.25s cubic-bezier(0.15, 0.7, 0.3, 1) both;
+}
+
+@keyframes burst {
+  from {
+    transform: translate(0, 0) rotate(0);
+    opacity: 1;
+  }
+  75% {
+    opacity: 1;
+  }
+  to {
+    transform: translate(var(--x), var(--y)) rotate(var(--r));
+    opacity: 0;
+  }
+}
+
+/* 연속 학습이 하루 늘면 +1이 떠오른다 */
+.plus-one {
+  position: absolute;
+  top: -10px;
+  right: 10px;
+  font-weight: 800;
+  font-size: 0.875rem;
+  color: var(--accent-ink);
+  animation: plus-one 1.8s var(--ease-out) 0.5s both;
+}
+
+@keyframes plus-one {
+  0% {
+    opacity: 0;
+    transform: translateY(8px) scale(0.8);
+  }
+  25% {
+    opacity: 1;
+    transform: translateY(-4px) scale(1.1);
+  }
+  70% {
+    opacity: 1;
+    transform: translateY(-8px);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-16px);
+  }
 }
 
 .summary-head h1 {
@@ -1996,6 +2858,7 @@ a.chip {
 }
 
 .summary-stat {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;

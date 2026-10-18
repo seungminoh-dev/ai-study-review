@@ -2,6 +2,7 @@ import type { CardEditBody, SessionCard, SessionDetail as Detail, SessionSummary
 import { useState, type FormEvent } from 'react';
 import { errorMessage, request } from '../api';
 import { CodeBlock } from '../cards/CodeBlock';
+import { Loading } from '../Loading';
 import { BackLink, Link } from '../router';
 import { formatDate, formatDateTime, useApi } from '../useApi';
 
@@ -10,7 +11,7 @@ import { formatDate, formatDateTime, useApi } from '../useApi';
 export function Sessions() {
   const { data, error } = useApi<{ sessions: SessionSummary[] }>('/sessions');
   if (error) return <div className="screen"><p className="notice bad">{error}</p></div>;
-  if (!data) return <div className="center muted">불러오는 중…</div>;
+  if (!data) return <Loading />;
   return (
     <div className="screen">
       <h1>저장 기록</h1>
@@ -256,7 +257,7 @@ export function CardRow({ card: initial }: { card: SessionCard }) {
 export function SessionDetail({ id }: { id: string }) {
   const { data, error } = useApi<Detail>(`/sessions/${id}`);
   if (error) return <div className="screen"><p className="notice bad">{error}</p></div>;
-  if (!data) return <div className="center muted">불러오는 중…</div>;
+  if (!data) return <Loading />;
   return (
     <div className="screen">
       <BackLink href="/sessions" className="back">

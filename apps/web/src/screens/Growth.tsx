@@ -1,5 +1,6 @@
 import type { MapResponse, StatsResponse } from '@moai/shared';
 import { IconFlame } from '../icons';
+import { Loading } from '../Loading';
 import { Mascot } from '../Mascot';
 import { CategoryProgress, Heatmap, conceptCounts } from '../progress';
 import { useApi } from '../useApi';
@@ -10,7 +11,7 @@ export function Growth() {
   const { data: stats, error } = useApi<StatsResponse>('/stats');
   const { data: map } = useApi<MapResponse>('/map');
   if (error) return <div className="screen"><p className="notice bad">{error}</p></div>;
-  if (!stats) return <div className="center muted">불러오는 중…</div>;
+  if (!stats) return <Loading />;
 
   const counts = map ? conceptCounts(map.nodes) : null;
   const diff = stats.week.xp - stats.last_week_xp;

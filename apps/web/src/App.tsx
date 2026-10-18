@@ -1,8 +1,11 @@
 import type { AuthOptions, Me } from '@moai/shared';
+import * as m from 'motion/react-m';
 import { useEffect, useState, type ReactNode } from 'react';
 import { OfflineError, RequestError, errorMessage, request } from './api';
 import { IconBook, IconGrowth, IconHome, IconMap, IconRecords, IconSettings } from './icons';
+import { Splash } from './Loading';
 import { Mascot } from './Mascot';
+import { SNAPPY } from './motion';
 import { TabLink, navigate, useLocation } from './router';
 import { Concept } from './screens/Concept';
 import { Growth } from './screens/Growth';
@@ -81,6 +84,7 @@ const SIDE: { href: string; label: string; section: Section }[] = [
 function Sidebar({ current }: { current: Section | null }) {
   const link = (item: { href: string; label: string; section: Section }) => (
     <TabLink key={item.href} href={item.href} className={current === item.section ? 'side-link current' : 'side-link'} aria-current={current === item.section ? 'page' : undefined}>
+      {current === item.section ? <m.span layoutId="side-pill" className="side-pill" transition={SNAPPY} /> : null}
       {ICONS[item.section]()}
       {item.label}
     </TabLink>
@@ -117,7 +121,7 @@ export function App() {
   const signedIn = (me: Me, to = '/') => {
     rememberMe(me);
     setAuth({ state: 'in', me });
-    navigate(to, { replace: true });
+    navigate(to, { replace: true, direction: 'tab' });
   };
 
   useEffect(() => {
@@ -139,7 +143,7 @@ export function App() {
     })();
   }, []);
 
-  if (auth.state === 'loading') return <div className="center muted">모아이</div>;
+  if (auth.state === 'loading') return <Splash />;
   if (auth.state === 'error') {
     return (
       <Bare>
@@ -178,7 +182,7 @@ export function App() {
         me={auth.me}
         onLogout={async () => {
           setAuth(await loggedOut());
-          navigate('/', { replace: true });
+          navigate('/', { replace: true, direction: 'tab' });
         }}
       />
     );
@@ -201,6 +205,7 @@ export function App() {
             const current = tabSection === tab.section;
             return (
               <TabLink key={tab.href} href={tab.href} className={current ? 'tab current' : 'tab'} aria-current={current ? 'page' : undefined}>
+                {current ? <m.span layoutId="tab-pill" className="tab-pill" transition={SNAPPY} /> : null}
                 {ICONS[tab.section]()}
                 {tab.label}
               </TabLink>

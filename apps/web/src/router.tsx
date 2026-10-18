@@ -1,6 +1,7 @@
 import { useEffect, useState, type AnchorHTMLAttributes, type MouseEvent } from 'react';
+import { flushSync } from 'react-dom';
 
-// 화면이 몇 개뿐이라 라이브러리 없이 History API로 옮겨 다닌다.
+// 화면이 몇 개뿐이라 라이브러리 없이 History API로 옮겨 다닌다. 화면이 바뀔 때는 View Transitions로 밀어 넘긴다 (show).
 // 뒤로가기 규칙 (Android 앱과 같게):
 // - 오늘 탭이 맨 아래 한 칸(depth 0)이고, 다른 탭은 그 위 한 칸(depth 1)이다. 탭끼리는 기록을 쌓지 않는다.
 // - 상세 화면(개념, 기록 상세, 자료, 복습)만 기록을 쌓는다.
@@ -30,20 +31,56 @@ function notify(): void {
   for (const listener of listeners) listener();
 }
 
+/** 화면 전환 방향. styles.css의 ::view-transition 규칙이 html[data-nav]로 고른다 */
+type Direction = 'forward' | 'back' | 'tab';
+
+/**
+ * 새 화면을 그린다. 브라우저가 View Transitions를 지원하면 이전 화면에서 새 화면으로 밀어 넘긴다
+ * (동작 줄이기면 밀지 않고 겹쳐 바꾼다). 보이지 않는 탭과 지원하지 않는 브라우저에서는 바로 바꾼다.
+ */
+function show(direction: Direction, toTop: boolean): void {
+  const update = () => {
+    if (toTop) window.scrollTo(0, 0);
+    notify();
+  };
+  const doc = document as Document & {
+    startViewTransition?: (callback: () => void) => { skipTransition(): void; ready: Promise<void>; finished: Promise<void> };
+  };
+  if (!doc.startViewTransition || document.visibilityState !== 'visible') return update();
+  document.documentElement.dataset.nav = direction;
+  let shown = false;
+  const once = () => {
+    if (shown) return;
+    shown = true;
+    update();
+  };
+  // 새 화면을 찍기 전에 React가 다 그리도록 동기로 그린다
+  const transition = doc.startViewTransition(() => flushSync(once));
+  // 전환이 건너뛰어지거나 다음 전환에 밀리면 약속이 거부된다. 화면은 이미 바뀌었으니 무시한다
+  transition.ready.catch(() => undefined);
+  transition.finished.catch(() => undefined);
+  // 브라우저가 화면을 그리지 않는 동안(가려진 창 등)에는 전환이 시작되지 않는다. 오래 걸리면 그냥 바꾼다
+  setTimeout(() => {
+    if (shown) return;
+    transition.skipTransition();
+    once();
+  }, 400);
+}
+
 if (typeof window !== 'undefined') {
   // 처음 연 화면을 맨 아래 칸으로 표시한다. 새로고침해도 브라우저가 이 값을 그대로 돌려준다
   if ((history.state as Partial<NavState> | null)?.moai !== 1) history.replaceState({ moai: 1, depth: 0, from: null } satisfies NavState, '', here());
   window.addEventListener('popstate', () => {
-    if (!rewinding) notify();
+    if (!rewinding) show('back', false);
   });
 }
 
-export function navigate(path: string, options: { replace?: boolean } = {}): void {
+/** replace는 보통 돌아가기라 뒤로 가는 방향으로 넘긴다. 로그인 뒤처럼 다르면 direction을 준다 */
+export function navigate(path: string, options: { replace?: boolean; direction?: Direction } = {}): void {
   const state = current();
   if (options.replace) history.replaceState(state, '', path);
   else history.pushState({ moai: 1, depth: state.depth + 1, from: here() } satisfies NavState, '', path);
-  window.scrollTo(0, 0);
-  notify();
+  show(options.direction ?? (options.replace ? 'back' : 'forward'), true);
 }
 
 /** history.go(-steps)가 끝날 때까지 기다린다 */
@@ -81,8 +118,7 @@ export async function goTab(path: string): Promise<void> {
   } finally {
     rewinding = false;
   }
-  window.scrollTo(0, 0);
-  notify();
+  show('tab', true);
 }
 
 const pathOf = (url: string) => url.split('?')[0];

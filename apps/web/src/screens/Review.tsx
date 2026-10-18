@@ -1,13 +1,18 @@
 import type { QueueCard, QueueResponse, ReportReason, ReviewGrade, StatsResponse } from '@moai/shared';
 import type { Confidence } from '@moai/shared/client';
 import { MAX_ELAPSED_MS, gradeAnswer } from '@moai/shared/client';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { AnimatePresence } from 'motion/react';
+import * as m from 'motion/react-m';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { OfflineError, errorMessage, request } from '../api';
 import { AiGrade } from '../cards/AiGrade';
 import { ExplainCard } from '../cards/ExplainCard';
 import { QuestionCard, choicesOf, type Choice } from '../cards/QuestionCard';
+import { Confetti } from '../Confetti';
 import { IconFlame } from '../icons';
+import { Loading } from '../Loading';
 import { Mascot } from '../Mascot';
+import { LEAVE, Presence, SOFT, useCountUp } from '../motion';
 import { cacheQueue, cachedQueue, enqueueReview, flushReviews, forgetAnswered, pendingCardIds, removeFromOutbox } from '../offline/store';
 import { goTab, leave } from '../router';
 
@@ -78,7 +83,7 @@ export function Review({ size, category, material }: { size: number; category?: 
     };
   }, [size, category, material]);
 
-  if (load.state === 'loading') return <div className="center muted">카드를 가져오는 중…</div>;
+  if (load.state === 'loading') return <Loading label="카드를 가져오는 중" />;
   if (load.state === 'error') {
     return (
       <div className="screen">
@@ -90,6 +95,7 @@ export function Review({ size, category, material }: { size: number; category?: 
   if (load.cards.length === 0) {
     return (
       <div className="screen done">
+        <Mascot mood="sleep" size={96} />
         <p className="big">오늘 복습할 카드가 없어요</p>
         <p className="muted">다 했거나, 아직 저장한 카드가 없어요.</p>
         <HomeButton primary />
@@ -133,6 +139,13 @@ function Session({ initial, offline }: { initial: QueueCard[]; offline: boolean 
   const answeredAt = useRef(0);
 
   const card = cards[index];
+  /** 지금 보이는 카드 자리. 사라지는 중인 카드의 버튼은 예전 렌더의 함수라 이 값과 달라서 무시한다 */
+  const stageKey = card ? `${card.id}-${index}` : 'end';
+  const liveKey = useRef(stageKey);
+  useLayoutEffect(() => {
+    liveKey.current = stageKey;
+  });
+  const stale = () => liveKey.current !== stageKey;
   const choices = useMemo(() => (card ? choicesOf(card) : []), [card]);
   /** 답을 본 카드 수. 지금 카드도 답을 봤으면 센다 */
   const done = index + (picked ? 1 : 0);
@@ -169,13 +182,14 @@ function Session({ initial, offline }: { initial: QueueCard[]; offline: boolean 
 
   /** 보기를 고른다. 확신도를 물을 때는 정답을 보여 주기 전에 확신도를 먼저 받는다 (연습은 묻지 않는다) */
   const pick = (choice: Choice) => {
+    if (stale()) return;
     answeredAt.current = Date.now();
     if (asking && !practice) setChosen(choice);
     else reveal(choice, null);
   };
 
   const rate = (level: Confidence) => {
-    if (chosen) reveal(chosen, level);
+    if (chosen && !stale()) reveal(chosen, level);
   };
 
   /** 답 하나를 outbox에 넣고 다음 카드로 간다 */
@@ -201,14 +215,14 @@ function Session({ initial, offline }: { initial: QueueCard[]; offline: boolean 
   };
 
   const next = async (easy = false) => {
-    if (!card || !picked || moving.current) return;
+    if (!card || !picked || moving.current || stale()) return;
     moving.current = true;
     const elapsed = answeredAt.current - shownAt.current;
     await record(card, gradeAnswer({ correct: picked.correct, elapsedMs: elapsed, easy, confidence: confidence ?? undefined }), picked.value, picked.correct, confidence);
   };
 
   const gradeExplain = async (grade: ReviewGrade, text: string) => {
-    if (!card || moving.current) return;
+    if (!card || moving.current || stale()) return;
     moving.current = true;
     answeredAt.current = Date.now();
     await record(card, grade, text.trim(), grade >= 2);
@@ -279,6 +293,7 @@ function Session({ initial, offline }: { initial: QueueCard[]; offline: boolean 
   if (!card) return <Summary results={results} practice={practice} onRetry={retry} onUndo={last ? () => void undo() : null} notice={notice} />;
 
   const report = async (reason: ReportReason) => {
+    if (stale()) return;
     setBusy(true);
     try {
       await request(`/cards/${card.id}/report`, { method: 'POST', json: { reason } });
@@ -329,69 +344,89 @@ function Session({ initial, offline }: { initial: QueueCard[]; offline: boolean 
           ↶ 방금 답 되돌리기
         </button>
       ) : null}
-      {card.type === 'explain' ? (
-        <>
-          <ExplainCard
-            key={`${card.id}-${index}`}
-            card={card}
-            onGrade={(grade, text) => void gradeExplain(grade, text)}
-            aiPanel={practice || offline ? undefined : (text, suggest) => <AiGrade cardId={card.id} text={text} onSuggest={suggest} />}
-          />
-          {notice ? <p className="notice bad">{notice}</p> : null}
-          {reportArea}
-        </>
-      ) : (
-        <>
-          <QuestionCard key={`${card.id}-${index}`} card={card} choices={choices} picked={picked} chosen={chosen} onPick={pick} />
-          {chosen ? (
-            <div className="confidence" role="group" aria-label="확신도">
-              <div className="confidence-head">
-                <Mascot mood="think" size={32} />
-                <p className="small muted">정답을 보기 전에, 얼마나 확신해요?</p>
-              </div>
-              <div className="actions">
-                {(['sure', 'unsure', 'guess'] as const).map((level) => (
-                  <button key={level} type="button" className={`button confidence-${level}`} onClick={() => rate(level)}>
-                    {CONFIDENCE_LABEL[level]}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : null}
-          {!picked && notice ? <p className="notice bad">{notice}</p> : null}
-          {picked ? (
-            <div className="answer-panel" aria-live="polite">
-              <div className="answer-head">
-                <Mascot mood={picked.correct ? 'happy' : 'oops'} size={48} />
-                <div>
-                  <p className={picked.correct ? 'verdict right' : 'verdict wrong'}>{picked.correct ? '맞았어요' : '틀렸어요'}</p>
-                  {picked.correct && confidence === 'guess' ? <p className="small muted">찍어서 맞혔으니 조금 일찍 다시 볼게요.</p> : null}
-                  {/* 확신했는데 틀린 답은 따로 짚는다. 바로잡은 기억이 오래 남는다 */}
-                  {!picked.correct && confidence === 'sure' ? <p className="small muted">확신했던 문제예요. 왜 그렇게 생각했는지 떠올려 보고 해설과 비교해 봐요.</p> : null}
-                </div>
-              </div>
-              {card.explain ? <p className="explain">{card.explain}</p> : null}
+      {/* 다음 카드로 넘어갈 때 앞 카드가 왼쪽으로 빠지고 새 카드가 오른쪽에서 들어온다 */}
+      <AnimatePresence mode="wait" initial={false}>
+        <Presence
+          key={stageKey}
+          className="card-stage"
+          initial={{ opacity: 0, x: 28 }}
+          animate={{ opacity: 1, x: 0, transition: SOFT }}
+          exit={{ opacity: 0, x: -28, transition: LEAVE }}
+        >
+          {card.type === 'explain' ? (
+            <>
+              <ExplainCard
+                card={card}
+                onGrade={(grade, text) => void gradeExplain(grade, text)}
+                aiPanel={practice || offline ? undefined : (text, suggest) => <AiGrade cardId={card.id} text={text} onSuggest={suggest} />}
+              />
               {notice ? <p className="notice bad">{notice}</p> : null}
-              <div className="actions">
-                {picked.correct && !practice ? (
-                  <button type="button" className="button" onClick={() => void next(true)}>
-                    너무 쉬웠어요
-                  </button>
-                ) : null}
-                <button type="button" className="button primary" onClick={() => void next(false)}>
-                  다음
-                </button>
-              </div>
               {reportArea}
-            </div>
-          ) : null}
-          <p className="kbd-hint muted small">
-            {chosen
-              ? '키보드: 1 확실 · 2 반반 · 3 찍음'
-              : `키보드: ${card.type === 'ox' ? 'O·X' : `1~${choices.length}`} 고르기 · Enter 다음${picked?.correct && !practice ? ' · E 너무 쉬웠어요' : ''} · Esc 그만하기`}
-          </p>
-        </>
-      )}
+            </>
+          ) : (
+            <>
+              <QuestionCard card={card} choices={choices} picked={picked} chosen={chosen} onPick={pick} />
+              <AnimatePresence mode="popLayout">
+                {chosen ? (
+                  <Presence
+                    key="confidence"
+                    className="confidence"
+                    role="group"
+                    aria-label="확신도"
+                    initial={{ opacity: 0, y: 14 }}
+                    animate={{ opacity: 1, y: 0, transition: SOFT }}
+                    exit={{ opacity: 0, y: 8, transition: LEAVE }}
+                  >
+                    <div className="confidence-head">
+                      <Mascot mood="think" size={32} />
+                      <p className="small muted">정답을 보기 전에, 얼마나 확신해요?</p>
+                    </div>
+                    <div className="actions">
+                      {(['sure', 'unsure', 'guess'] as const).map((level) => (
+                        <button key={level} type="button" className={`button confidence-${level}`} onClick={() => rate(level)}>
+                          {CONFIDENCE_LABEL[level]}
+                        </button>
+                      ))}
+                    </div>
+                  </Presence>
+                ) : null}
+              </AnimatePresence>
+              {!picked && notice ? <p className="notice bad">{notice}</p> : null}
+              {picked ? (
+                <m.div className="answer-panel" aria-live="polite" initial={{ opacity: 0, y: 56 }} animate={{ opacity: 1, y: 0, transition: SOFT }}>
+                  <div className="answer-head">
+                    <Mascot mood={picked.correct ? 'cheer' : 'oops'} size={48} />
+                    <div>
+                      <p className={picked.correct ? 'verdict right' : 'verdict wrong'}>{picked.correct ? '맞았어요' : '틀렸어요'}</p>
+                      {picked.correct && confidence === 'guess' ? <p className="small muted">찍어서 맞혔으니 조금 일찍 다시 볼게요.</p> : null}
+                      {/* 확신했는데 틀린 답은 따로 짚는다. 바로잡은 기억이 오래 남는다 */}
+                      {!picked.correct && confidence === 'sure' ? <p className="small muted">확신했던 문제예요. 왜 그렇게 생각했는지 떠올려 보고 해설과 비교해 봐요.</p> : null}
+                    </div>
+                  </div>
+                  {card.explain ? <p className="explain">{card.explain}</p> : null}
+                  {notice ? <p className="notice bad">{notice}</p> : null}
+                  <div className="actions">
+                    {picked.correct && !practice ? (
+                      <button type="button" className="button" onClick={() => void next(true)}>
+                        너무 쉬웠어요
+                      </button>
+                    ) : null}
+                    <button type="button" className="button primary" onClick={() => void next(false)}>
+                      다음
+                    </button>
+                  </div>
+                  {reportArea}
+                </m.div>
+              ) : null}
+              <p className="kbd-hint muted small">
+                {chosen
+                  ? '키보드: 1 확실 · 2 반반 · 3 찍음'
+                  : `키보드: ${card.type === 'ox' ? 'O·X' : `1~${choices.length}`} 고르기 · Enter 다음${picked?.correct && !practice ? ' · E 너무 쉬웠어요' : ''} · Esc 그만하기`}
+              </p>
+            </>
+          )}
+        </Presence>
+      </AnimatePresence>
     </div>
   );
 }
@@ -431,12 +466,16 @@ function Summary({
     };
   }, [practice]);
   const goalMet = stats !== null && stats.today.reviewed >= stats.goal;
+  // 이번 복습으로 오늘 목표를 처음 채웠으면 연속 학습이 하루 늘었다
+  const streakUp = goalMet && !practice && stats.today.reviewed - results.length < stats.goal;
+  const xp = useCountUp(practice ? 0 : sessionXp(results));
   const toGoal = stats && !goalMet ? stats.goal - stats.today.reviewed : 0;
   const title = practice ? '다시 보기를 마쳤어요' : goalMet ? '오늘 목표 달성!' : wrong.length === 0 ? '다 맞혔어요!' : `${results.length}장을 끝냈어요`;
   return (
     <div className="summary">
       <div className="summary-head">
-        <Mascot mood={goalMet ? 'cheer' : wrong.length === 0 ? 'happy' : 'think'} size={goalMet ? 132 : 96} />
+        {goalMet && !practice ? <Confetti /> : null}
+        <Mascot mood={goalMet ? 'cheer' : wrong.length === 0 ? 'happy' : 'think'} size={goalMet ? 112 : 96} />
         <h1>{title}</h1>
         <p className="muted">
           {results.length}장 중 {right}장 맞혔어요{toGoal > 0 ? ` · 오늘 목표까지 ${toGoal}장` : ''}
@@ -445,7 +484,7 @@ function Summary({
       {practice ? null : (
         <div className="summary-stats">
           <div className="summary-stat">
-            <strong className="xp">+{sessionXp(results)}</strong>
+            <strong className="xp">+{xp}</strong>
             <span>얻은 XP</span>
           </div>
           <div className="summary-stat">
@@ -454,6 +493,11 @@ function Summary({
               {stats ? `${stats.streak}일` : '–'}
             </strong>
             <span>연속 학습</span>
+            {streakUp ? (
+              <span className="plus-one" aria-hidden="true">
+                +1
+              </span>
+            ) : null}
           </div>
           <div className="summary-stat">
             <strong>{stats ? `${Math.min(stats.today.reviewed, stats.goal)}/${stats.goal}` : '–'}</strong>

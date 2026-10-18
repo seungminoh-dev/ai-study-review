@@ -1,6 +1,7 @@
 import type { Me, PendingJoin } from '@moai/shared';
 import { useEffect, useState, type FormEvent } from 'react';
 import { RequestError, errorMessage, request } from '../api';
+import { Splash } from '../Loading';
 
 // 초대 코드로 가입 (설계서 §8.4). GitHub 확인을 마치고 서버가 이 화면으로 보낸다.
 
@@ -37,7 +38,7 @@ export function Join({ onDone }: { onDone: (me: Me) => void }) {
     }
   };
 
-  if (load.state === 'loading') return <div className="center muted">모아이</div>;
+  if (load.state === 'loading') return <Splash />;
   if (load.state === 'expired') {
     return (
       <div className="screen">

@@ -2,6 +2,7 @@ import type { MapResponse, MaterialSummary, McpTokenStatus, StatsResponse, Today
 import { useEffect, useState } from 'react';
 import { request } from '../api';
 import { IconArrow, IconBook, IconCheck, IconFlame, IconSettings } from '../icons';
+import { Loading } from '../Loading';
 import { Mascot } from '../Mascot';
 import { cachedQueue } from '../offline/store';
 import { CategoryProgress, Heatmap, Ring, WeekDays, conceptCounts, todayLabel } from '../progress';
@@ -260,13 +261,14 @@ export function Today({ name }: { name: string }) {
       </div>
     );
   }
-  if (!data) return <div className="center muted">불러오는 중…</div>;
+  if (!data) return <Loading />;
 
   const studied = stats ? stats.history.filter((day) => day.reviewed > 0).length : 0;
   return (
     <div className="today">
       <header className="today-head">
-        <Mascot size={40} />
+        {/* 할 카드가 있으면 휴대폰을 흔들고, 오늘 다 했으면 쉰다 (사용자 시트의 복습 알림·휴식) */}
+        <Mascot mood={data.remaining > 0 ? 'alarm' : data.reviewed_today > 0 ? 'sleep' : 'happy'} size={40} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <p>
             {todayLabel()} · {name}님
@@ -296,7 +298,10 @@ export function Today({ name }: { name: string }) {
           {materials ? <ContinueMaterial materials={materials.materials} /> : null}
           {data.followups.length > 0 ? (
             <section className="card o-followups" aria-labelledby="followups-title">
-              <h2 id="followups-title">다음에 볼 질문</h2>
+              <div className="card-head">
+                <Mascot mood="claude" size={32} />
+                <h2 id="followups-title">다음에 볼 질문</h2>
+              </div>
               <ul className="question-list">
                 {data.followups.slice(0, 5).map((followup) => (
                   <li key={followup.id}>

@@ -1,5 +1,6 @@
 import type { ConceptStateKey, MapResponse } from '@moai/shared';
 import { useMemo, useState } from 'react';
+import { Loading } from '../Loading';
 import { labelWidth, layoutGraph } from '../map/layout';
 import { Link, navigate } from '../router';
 import { useApi } from '../useApi';
@@ -41,7 +42,7 @@ export function MapScreen() {
   const positions = layout?.positions ?? new Map<string, { x: number; y: number }>();
   const materialCount = raw?.nodes.filter((node) => node.state === 'material').length ?? 0;
   if (error) return <div className="screen"><p className="notice bad">{error}</p></div>;
-  if (!data || !raw || !layout) return <div className="center muted">불러오는 중…</div>;
+  if (!data || !raw || !layout) return <Loading />;
   if (raw && raw.nodes.length === 0) {
     return (
       <div className="screen">
