@@ -1084,3 +1084,24 @@ a.chip {
   border-radius: 12px;
   background: var(--surface);
 }
+
+/* 확신도 */
+.choice.chosen {
+  border-color: var(--pen);
+  background: var(--pen-soft);
+}
+
+.confidence {
+  margin-top: 12px;
+}
+
+.confidence p {
+  margin: 0;
+}
+
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+}

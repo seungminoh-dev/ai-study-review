@@ -1,4 +1,5 @@
 import type { QueueCard, QueueResponse, ReportReason, ReviewGrade } from '@moai/shared';
+import type { Confidence } from '@moai/shared/client';
 import { MAX_ELAPSED_MS, gradeAnswer } from '@moai/shared/client';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { OfflineError, errorMessage, request } from '../api';
@@ -13,7 +14,30 @@ import { Link, navigate } from '../router';
 interface Result {
   card: QueueCard;
   correct: boolean;
+  /** 확신했는데 틀렸다 */
+  confidentMiss?: boolean;
 }
+
+const ASK_CONFIDENCE = 'moai:ask-confidence';
+
+/** 답을 고른 뒤 확신도를 물을지. 기기마다 설정에서 끌 수 있다 (기본 켬) */
+export function askConfidence(): boolean {
+  try {
+    return localStorage.getItem(ASK_CONFIDENCE) !== 'off';
+  } catch {
+    return true;
+  }
+}
+
+export function setAskConfidence(on: boolean): void {
+  try {
+    localStorage.setItem(ASK_CONFIDENCE, on ? 'on' : 'off');
+  } catch {
+    // 저장소를 못 쓰면 기본값(켬)으로 둔다
+  }
+}
+
+const CONFIDENCE_LABEL: Record<Confidence, string> = { sure: '확실해요', unsure: '반반이에요', guess: '찍었어요' };
 
 /** 큐는 한 번에 20장까지 받는다 */
 const MAX_QUEUE = 20;
@@ -87,6 +111,10 @@ function Session({ initial, offline }: { initial: QueueCard[]; offline: boolean 
   const [cards, setCards] = useState(initial);
   const [index, setIndex] = useState(0);
   const [picked, setPicked] = useState<Choice | null>(null);
+  /** 골랐지만 확신도를 기다리는 답 (확신도를 물을 때만) */
+  const [chosen, setChosen] = useState<Choice | null>(null);
+  const [confidence, setConfidence] = useState<Confidence | null>(null);
+  const [asking] = useState(askConfidence);
   const [results, setResults] = useState<Result[]>([]);
   const [busy, setBusy] = useState(false);
   /** "틀린 카드 다시 보기"는 연습이라 기록하지 않는다. 방금 정답을 봤으니 기록하면 재학습 단계를 건너뛰게 된다 */
@@ -109,6 +137,8 @@ function Session({ initial, offline }: { initial: QueueCard[]; offline: boolean 
 
   const advance = () => {
     setPicked(null);
+    setChosen(null);
+    setConfidence(null);
     setNotice(null);
     setReporting(false);
     setIndex((value) => value + 1);
@@ -124,14 +154,26 @@ function Session({ initial, offline }: { initial: QueueCard[]; offline: boolean 
     setIndex(0);
   };
 
-  const pick = (choice: Choice) => {
-    answeredAt.current = Date.now();
+  const reveal = (choice: Choice, level: Confidence | null) => {
+    setConfidence(level);
+    setChosen(null);
     setPicked(choice);
     navigator.vibrate?.(choice.correct ? 10 : [30, 40, 30]);
   };
 
+  /** 보기를 고른다. 확신도를 물을 때는 정답을 보여 주기 전에 확신도를 먼저 받는다 (연습은 묻지 않는다) */
+  const pick = (choice: Choice) => {
+    answeredAt.current = Date.now();
+    if (asking && !practice) setChosen(choice);
+    else reveal(choice, null);
+  };
+
+  const rate = (level: Confidence) => {
+    if (chosen) reveal(chosen, level);
+  };
+
   /** 답 하나를 outbox에 넣고 다음 카드로 간다 */
-  const record = async (current: QueueCard, grade: ReviewGrade, response: string, correct: boolean) => {
+  const record = async (current: QueueCard, grade: ReviewGrade, response: string, correct: boolean, level: Confidence | null = null) => {
     // 앱을 켜 둔 채 자리를 비운 시간까지 세지 않도록 자른다
     const elapsed = Math.min(Math.max(0, Math.round(answeredAt.current - shownAt.current)), MAX_ELAPSED_MS);
     if (!practice) {
@@ -141,13 +183,14 @@ function Session({ initial, offline }: { initial: QueueCard[]; offline: boolean 
         card_id: current.id,
         grade,
         ...(response ? { response } : {}),
+        ...(level ? { confidence: level } : {}),
         elapsed_ms: elapsed,
         reviewed_at: answeredAt.current,
       });
       await forgetAnswered([current.id]);
       setLast({ reviewId: id, card: current });
     }
-    setResults((list) => [...list, { card: current, correct }]);
+    setResults((list) => [...list, { card: current, correct, confidentMiss: !correct && level === 'sure' }]);
     advance();
   };
 
@@ -155,7 +198,7 @@ function Session({ initial, offline }: { initial: QueueCard[]; offline: boolean 
     if (!card || !picked || moving.current) return;
     moving.current = true;
     const elapsed = answeredAt.current - shownAt.current;
-    await record(card, gradeAnswer({ correct: picked.correct, elapsedMs: elapsed, easy }), picked.value, picked.correct);
+    await record(card, gradeAnswer({ correct: picked.correct, elapsedMs: elapsed, easy, confidence: confidence ?? undefined }), picked.value, picked.correct, confidence);
   };
 
   const gradeExplain = async (grade: ReviewGrade, text: string) => {
@@ -195,6 +238,13 @@ function Session({ initial, offline }: { initial: QueueCard[]; offline: boolean 
         navigate('/');
       } else if (card.type === 'explain') {
         // 설명하기는 카드가 직접 키를 받는다
+      } else if (chosen) {
+        // 고른 뒤에는 1 확실 · 2 반반 · 3 찍음
+        const level = ({ '1': 'sure', '2': 'unsure', '3': 'guess' } as Record<string, Confidence>)[key];
+        if (level) {
+          event.preventDefault();
+          rate(level);
+        }
       } else if (!picked) {
         const index = /^[1-9]$/.test(key) ? Number(key) - 1 : card.type === 'ox' ? ['o', 'x'].indexOf(key) : -1;
         const choice = choices[index];
@@ -282,11 +332,28 @@ function Session({ initial, offline }: { initial: QueueCard[]; offline: boolean 
         </>
       ) : (
         <>
-          <QuestionCard key={`${card.id}-${index}`} card={card} choices={choices} picked={picked} onPick={pick} />
+          <QuestionCard key={`${card.id}-${index}`} card={card} choices={choices} picked={picked} chosen={chosen} onPick={pick} />
+          {chosen ? (
+            <div className="confidence" role="group" aria-label="확신도">
+              <p className="small muted">정답을 보기 전에, 얼마나 확신해요?</p>
+              <div className="actions">
+                {(['sure', 'unsure', 'guess'] as const).map((level) => (
+                  <button key={level} type="button" className={`button confidence-${level}`} onClick={() => rate(level)}>
+                    {CONFIDENCE_LABEL[level]}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
           {!picked && notice ? <p className="notice bad">{notice}</p> : null}
           {picked ? (
             <div className="answer-panel" aria-live="polite">
-              <p className={picked.correct ? 'verdict right' : 'verdict wrong'}>{picked.correct ? '맞았어요' : '틀렸어요'}</p>
+              <p className={picked.correct ? 'verdict right' : 'verdict wrong'}>
+            {picked.correct ? (confidence === 'guess' ? '맞았지만 찍었으니 곧 다시 볼게요' : '맞았어요') : '틀렸어요'}
+          </p>
+          {!picked.correct && confidence === 'sure' ? (
+            <p className="notice">확신했는데 틀린 문제예요. 왜 그렇게 생각했는지 떠올려 보고 해설과 비교해 보세요. 이렇게 바로잡은 기억이 오래 남아요.</p>
+          ) : null}
               {!picked.correct && card.type !== 'ox' ? <p className="correct">정답: {choices.find((choice) => choice.correct)?.label}</p> : null}
               {card.explain ? <p className="explain">{card.explain}</p> : null}
               {notice ? <p className="notice bad">{notice}</p> : null}
@@ -304,7 +371,9 @@ function Session({ initial, offline }: { initial: QueueCard[]; offline: boolean 
             </div>
           ) : null}
           <p className="kbd-hint muted small">
-            키보드: {card.type === 'ox' ? 'O·X' : `1~${choices.length}`} 고르기 · Enter 다음{picked?.correct && !practice ? ' · E 너무 쉬웠어요' : ''} · Esc 그만하기
+            {chosen
+              ? '키보드: 1 확실 · 2 반반 · 3 찍음'
+              : `키보드: ${card.type === 'ox' ? 'O·X' : `1~${choices.length}`} 고르기 · Enter 다음${picked?.correct && !practice ? ' · E 너무 쉬웠어요' : ''} · Esc 그만하기`}
           </p>
         </>
       )}
@@ -327,6 +396,7 @@ function Summary({
 }) {
   const wrong = results.filter((result) => !result.correct).map((result) => result.card);
   const right = results.length - wrong.length;
+  const misses = results.filter((result) => result.confidentMiss).map((result) => result.card.id);
   return (
     <div className="screen done">
       <p className="big">
@@ -335,9 +405,10 @@ function Summary({
       {wrong.length > 0 ? (
         <>
           <ul className="list">
-            {wrong.map((card) => (
+            {[...wrong].sort((a, b) => Number(misses.includes(b.id)) - Number(misses.includes(a.id))).map((card) => (
               <li key={card.id}>
                 <span className="chip">{card.concept_name}</span> {card.prompt}
+                {misses.includes(card.id) ? <span className="mine">확신했는데 틀림</span> : null}
               </li>
             ))}
           </ul>

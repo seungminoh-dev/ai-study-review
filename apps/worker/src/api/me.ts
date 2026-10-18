@@ -29,7 +29,7 @@ me.get('/export', async (c) => {
       `SELECT id, concept_id, session_id, rung, type, prompt, code, answer, options, explain, checklist, status, due, stability, difficulty,
               reps, lapses, state, last_review, created_at, edited_at FROM cards WHERE user_id = ?1 ORDER BY created_at`,
     ),
-    query('SELECT id, card_id, grade, response, elapsed_ms, reviewed_at FROM review_logs WHERE user_id = ?1 ORDER BY reviewed_at'),
+    query('SELECT id, card_id, grade, response, confidence, elapsed_ms, reviewed_at FROM review_logs WHERE user_id = ?1 ORDER BY reviewed_at'),
     query('SELECT local_time, enabled FROM reminder_slots WHERE user_id = ?1'),
     query('SELECT day FROM streak_freezes WHERE user_id = ?1 ORDER BY day'),
     query('SELECT card_id, reason, note, created_at FROM card_reports WHERE user_id = ?1 ORDER BY created_at'),

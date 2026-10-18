@@ -1,4 +1,4 @@
-import type { McqOption, QueueCard, ReviewGrade } from '@moai/shared';
+import { gradeAnswer, type Confidence, type McqOption, type QueueCard, type ReviewGrade } from '@moai/shared';
 import type { Env } from '../env';
 import { describeKstMoment, studyDayIndex } from '../lib/kst';
 import { loadTodayQueue } from './queue';
@@ -84,6 +84,8 @@ export type ChatSubmitResult =
   | {
       kind: 'recorded';
       correct: boolean | null;
+      /** 확신했는데 틀렸다. 바로잡으면 특히 오래 남는다 */
+      confident_miss: boolean;
       grade: ReviewGrade;
       correct_answer: string | null;
       explain: string | null;
@@ -110,7 +112,7 @@ function resolveChoice(answer: string, choices: readonly string[]): string | nul
 export async function chatSubmit(
   env: Env,
   userId: string,
-  input: { card_id: string; answer: string; grade?: ReviewGrade | undefined; easy?: boolean | undefined },
+  input: { card_id: string; answer: string; grade?: ReviewGrade | undefined; easy?: boolean | undefined; confidence?: Confidence | undefined },
   now: number,
 ): Promise<ChatSubmitResult> {
   const card = await env.DB.prepare(
@@ -135,7 +137,7 @@ export async function chatSubmit(
     correct = picked === card.answer;
     response = picked;
     correctAnswer = card.answer;
-    grade = !correct ? 1 : input.easy ? 4 : 3;
+    grade = gradeAnswer({ correct, elapsedMs: 0, easy: input.easy, confidence: input.confidence });
   } else {
     const options = card.type === 'mcq' ? (JSON.parse(card.options ?? '[]') as McqOption[]) : null;
     const choices = choicesOf({ id: card.id, type: card.type, options, choices: card.type === 'cloze' ? (JSON.parse(card.options ?? '[]') as string[]) : null }, now) ?? [];
@@ -145,7 +147,7 @@ export async function chatSubmit(
     correct = picked === correctAnswer;
     fromMyAnswer = card.type === 'mcq' && options!.some((option) => option.text === picked && option.from_my_answer === true);
     response = picked;
-    grade = !correct ? 1 : input.easy ? 4 : 3;
+    grade = gradeAnswer({ correct, elapsedMs: 0, easy: input.easy, confidence: input.confidence });
   }
 
   const recent = await env.DB.prepare('SELECT 1 FROM review_logs WHERE card_id = ?1 AND user_id = ?2 AND reviewed_at > ?3 LIMIT 1')
@@ -153,7 +155,8 @@ export async function chatSubmit(
     .first();
   if (recent) return { kind: 'duplicate' };
 
-  const recorded = await recordReviews(env, userId, [{ id: crypto.randomUUID(), card_id: card.id, grade, response: response.slice(0, 2000), reviewed_at: now }], now);
+  const review = { id: crypto.randomUUID(), card_id: card.id, grade, response: response.slice(0, 2000), reviewed_at: now };
+  const recorded = await recordReviews(env, userId, [card.type !== 'explain' && input.confidence ? { ...review, confidence: input.confidence } : review], now);
   if (recorded.conflicted) return { kind: 'duplicate' };
   const [due, queue] = await Promise.all([
     env.DB.prepare('SELECT due FROM cards WHERE id = ?1').bind(card.id).first<number>('due'),
@@ -162,6 +165,7 @@ export async function chatSubmit(
   return {
     kind: 'recorded',
     correct,
+    confident_miss: correct === false && input.confidence === 'sure',
     grade,
     correct_answer: correctAnswer,
     explain: card.explain,

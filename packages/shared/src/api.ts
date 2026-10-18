@@ -81,6 +81,8 @@ export const ReviewItem = z.object({
   grade: ReviewGrade,
   /** 고른 보기 글자 그대로 (ox는 'O'·'X'). 설명하기는 사용자가 쓴 설명 */
   response: z.string().max(2000).optional(),
+  /** 답을 보기 전에 스스로 매긴 확신도 */
+  confidence: z.enum(['sure', 'unsure', 'guess']).optional(),
   /** 너무 크면 버리지 않고 MAX_ELAPSED_MS로 자른다 */
   elapsed_ms: z
     .number()

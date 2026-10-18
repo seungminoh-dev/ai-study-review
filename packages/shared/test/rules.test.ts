@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { PushSubscriptionBody, RemindersBody, ReviewItem, ReviewsBody, estimateMinutes, gradeAnswer, normalizeSearch, searchTerms, searchText } from '../src';
 
+describe('gradeAnswer with confidence', () => {
+  it('treats a lucky guess as not recalled and an unsure hit as hard', () => {
+    expect(gradeAnswer({ correct: true, elapsedMs: 2_000, confidence: 'guess' })).toBe(1);
+    expect(gradeAnswer({ correct: true, elapsedMs: 2_000, confidence: 'unsure', easy: true })).toBe(2);
+    expect(gradeAnswer({ correct: true, elapsedMs: 2_000, confidence: 'sure' })).toBe(3);
+    expect(gradeAnswer({ correct: false, elapsedMs: 2_000, confidence: 'sure' })).toBe(1);
+  });
+});
+
 describe('gradeAnswer (설계서 §9.3)', () => {
   it('maps on-device results to FSRS grades', () => {
     expect(gradeAnswer({ correct: false, elapsedMs: 2_000 })).toBe(1);

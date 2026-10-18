@@ -69,6 +69,7 @@ const SubmitReviewInput = z.object({
   answer: z.string().min(1).max(2000).describe('ox는 O/X, mcq·cloze는 보기 글자, explain은 사용자 설명 원문'),
   grade: ReviewGrade.optional().describe('explain만: 1 다시, 2 어려움, 3 좋음, 4 쉬움'),
   easy: z.boolean().optional().describe('맞혔고 사용자가 너무 쉬웠다고 할 때'),
+  confidence: z.enum(['sure', 'unsure', 'guess']).optional().describe('ox·mcq·cloze: 답하기 전에 물어본 확신도 (확실, 반반, 찍음)'),
 });
 
 // 요청마다 CPU를 쓰는 준비 작업은 모듈 범위(isolate 시작)에서 미리 해 둔다. 이 시간은 요청 CPU에 들어가지 않는다.
@@ -215,6 +216,7 @@ function buildServer(deps: McpDeps): McpServer {
           const verdict = result.correct === null ? `등급 ${result.grade}로 기록했어요.` : result.correct ? '맞았어요.' : `틀렸어요. 정답: ${result.correct_answer}`;
           const lines = [verdict];
           if (result.from_my_answer) lines.push('고른 보기는 예전에 사용자가 직접 했던 설명이에요. 그 점을 짚어 주세요.');
+          if (result.confident_miss) lines.push('확신했는데 틀렸어요. 왜 그렇게 생각했는지 묻고 바로잡아 주세요. 이렇게 고친 기억이 오래 남아요.');
           if (result.explain) lines.push(`해설: ${result.explain}`);
           lines.push(`다음 복습: ${result.next} · 오늘 남은 ${result.remaining}장`);
           const { kind: _kind, ...rest } = result;

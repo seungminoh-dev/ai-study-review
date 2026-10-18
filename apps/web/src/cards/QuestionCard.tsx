@@ -56,11 +56,15 @@ export function QuestionCard({
   card,
   choices,
   picked,
+  chosen = null,
   onPick,
 }: {
   card: QueueCard;
   choices: Choice[];
+  /** 정답을 보여 줄 답. 있으면 보기를 잠근다 */
   picked: Choice | null;
+  /** 골랐지만 아직 확신도를 기다리는 답 */
+  chosen?: Choice | null;
   onPick: (choice: Choice) => void;
 }) {
   const answered = picked !== null;
@@ -81,7 +85,7 @@ export function QuestionCard({
       {card.code ? <CodeBlock code={card.code} /> : null}
       <div className={card.type === 'ox' ? 'choices ox' : 'choices'} role="group" aria-label="보기">
         {choices.map((choice) => {
-          const state = !answered ? '' : choice.correct ? 'right' : choice === picked ? 'wrong' : 'dim';
+          const state = !answered ? (choice === chosen ? 'chosen' : '') : choice.correct ? 'right' : choice === picked ? 'wrong' : 'dim';
           return (
             <button key={choice.value} type="button" className={`choice ${state}`} disabled={answered} onClick={() => onPick(choice)}>
               <span>{choice.label}</span>

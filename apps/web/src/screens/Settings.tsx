@@ -9,6 +9,7 @@ import { clearDeviceData, flushReviews, pendingCount } from '../offline/store';
 import { disablePush, dropLocalPush, enablePush, isStandalone, pushState, type PushState } from '../push';
 import { useLocation } from '../router';
 import { formatDate, formatDateTime, useApi } from '../useApi';
+import { askConfidence, setAskConfidence } from './Review';
 
 // 설정 (설계서 §12.1): 알림 시간, 알림 켜기·테스트, 커넥터 URL, 계정과 다른 기기 로그인, 초대(오너), 코치 지침 복사(선택)
 
@@ -19,6 +20,7 @@ export function Settings({ me, onLogout }: { me: Me; onLogout: () => void }) {
       <PushSection />
       <ReminderSection />
       <GoalSection initial={me.daily_goal} />
+      <ConfidenceSection />
       <ConnectorSection />
       <AccountSection me={me} onLogout={onLogout} />
       {me.role === 'owner' ? (
@@ -563,6 +565,28 @@ function DataSection({ me, onDeleted }: { me: Me; onDeleted: () => void }) {
           계정 지우기
         </button>
       )}
+    </section>
+  );
+}
+
+/** 확신도 묻기 (설계서 §9.3): 이 기기에만 저장한다 */
+function ConfidenceSection() {
+  const [on, setOn] = useState(askConfidence);
+  return (
+    <section>
+      <h2>복습 방식</h2>
+      <label className="toggle">
+        <input
+          type="checkbox"
+          checked={on}
+          onChange={(event) => {
+            setOn(event.target.checked);
+            setAskConfidence(event.target.checked);
+          }}
+        />{' '}
+        답을 고른 뒤 확신도 묻기 (권장)
+      </label>
+      <p className="muted small">찍어서 맞힌 카드는 곧 다시 나오고, 확신했는데 틀린 카드는 따로 짚어 줘요. 한 번 더 누르는 대신 기억이 정확해져요.</p>
     </section>
   );
 }

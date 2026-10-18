@@ -69,6 +69,7 @@ export const GET_REVIEW_QUEUE_DESCRIPTION = `사용자의 오늘 복습 문제�
 export const SUBMIT_REVIEW_DESCRIPTION = `get_review_queue로 낸 문제에 대한 사용자의 답을 채점하고 복습 기록에 남긴다.
 - ox: answer에 "O"나 "X". mcq·cloze: answer에 사용자가 고른 보기 글자.
   사용자가 너무 쉬웠다고 하면 easy를 true로 한다.
+  답을 받을 때 확신도(확실/반반/찍음)를 함께 물었으면 confidence(sure/unsure/guess)에 넣는다. 찍어서 맞힌 것은 다시 보게 된다.
 - explain: 먼저 grade 없이 사용자의 설명을 answer에 넣어 부르면, 사용자가 예전에 확정한 최종 버전과 체크리스트가 온다(기록하지 않는다).
   그것과 비교해 맞은 점, 빠진 점, 틀린 점을 짧게 알려 주고 모범답안을 길게 읊지 않는다.
   그다음 사용자와 등급을 정해 grade(1 다시, 2 어려움, 3 좋음, 4 쉬움)를 넣어 다시 부르면 기록된다.
