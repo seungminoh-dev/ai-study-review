@@ -32,10 +32,10 @@ describe('MCP endpoint, raw 2025-era requests', () => {
     expect(result.instructions).toContain('find_concepts로 기존 개념을 찾은 뒤 save_learning으로 저장한다');
   });
 
-  it('lists the three tools with the schema zod produces, and cards have no rung field', async () => {
+  it('lists the tools with the schema zod produces, and cards have no rung field', async () => {
     const message = await readRpc(await rpc(url, 'tools/list', {}, { 'mcp-protocol-version': '2025-06-18' }));
     const tools = message.result.tools as { name: string; inputSchema: Record<string, any> }[];
-    expect(tools.map((tool) => tool.name).sort()).toEqual(['find_concepts', 'get_learner_context', 'save_learning']);
+    expect(tools.map((tool) => tool.name).sort()).toEqual(['find_concepts', 'get_learner_context', 'get_review_queue', 'save_learning', 'submit_review']);
     const save = tools.find((tool) => tool.name === 'save_learning')!;
     expect(save.inputSchema).toEqual({ type: 'object', ...json(SaveLearningInput['~standard'].jsonSchema.input({ target: 'draft-2020-12' })) });
     expect(JSON.stringify(save.inputSchema)).not.toContain('"rung"');
@@ -242,11 +242,37 @@ describe('MCP endpoint, official SDK client', () => {
       const transport = new StreamableHTTPClientTransport(new URL(url), { fetch: (input, init) => workerFetch(input, init) });
       await client.connect(transport);
       const { tools } = await client.listTools();
-      expect(tools.map((tool) => tool.name).sort()).toEqual(['find_concepts', 'get_learner_context', 'save_learning']);
+      expect(tools.map((tool) => tool.name).sort()).toEqual(['find_concepts', 'get_learner_context', 'get_review_queue', 'save_learning', 'submit_review']);
       expect((await client.callTool({ name: 'find_concepts', arguments: { query: '불변 객체' } })).isError).toBeFalsy();
       const result = await client.callTool({ name: 'save_learning', arguments: example });
       expect(result.isError).toBeFalsy();
       await client.close();
     });
   }
+});
+
+describe('chat review tools', () => {
+  it('quizzes without answers and grades the letter the user picked', async () => {
+    const user = await newUser();
+    const url = await mcpUrl(user);
+    await callTool(url, 'save_learning', example);
+    const queue = await callTool(url, 'get_review_queue', { size: 10 });
+    const questions = queue.structuredContent.questions as { card_id: string; type: string; choices: { label: string; text: string }[] | null }[];
+    expect(questions.length).toBeGreaterThan(0);
+    expect(JSON.stringify(queue)).not.toMatch(/"correct"|"answer"|from_my_answer/);
+
+    const mcq = questions.find((question) => question.type === 'mcq')!;
+    const options = JSON.parse((await env.DB.prepare('SELECT options FROM cards WHERE id = ?1').bind(mcq.card_id).first<string>('options'))!) as { text: string; correct: boolean }[];
+    const right = mcq.choices!.find((choice) => options.find((option) => option.text === choice.text)!.correct)!;
+    const graded = await callTool(url, 'submit_review', { card_id: mcq.card_id, answer: right.label });
+    expect(graded.structuredContent).toMatchObject({ recorded: true, correct: true, grade: 3 });
+    // 같은 답을 곧바로 다시 보내면 두 번 기록하지 않는다
+    expect((await callTool(url, 'submit_review', { card_id: mcq.card_id, answer: right.label })).structuredContent).toEqual({ duplicate: true });
+    expect(await env.DB.prepare('SELECT count(*) AS n FROM review_logs WHERE card_id = ?1').bind(mcq.card_id).first('n')).toBe(1);
+
+    const ox = questions.find((question) => question.type === 'ox')!;
+    expect((await callTool(url, 'submit_review', { card_id: ox.card_id, answer: '모르겠어요' })).isError).toBe(true);
+    // 남의 카드는 채점하지 않는다
+    expect((await callTool(await mcpUrl(await newUser()), 'submit_review', { card_id: ox.card_id, answer: 'O' })).isError).toBe(true);
+  });
 });
