@@ -1,4 +1,4 @@
-import type { AuthOptions, InviteSummary, LoginCode, McpTokenStatus, Me, MemberSummary, Reminder, UsageReport } from '@moai/shared';
+import type { AuthOptions, BetaMetrics, InviteSummary, LoginCode, McpTokenStatus, Me, MemberSummary, Reminder, UsageReport } from '@moai/shared';
 import { MAX_REMINDERS } from '@moai/shared/client';
 import { useEffect, useState, type FormEvent } from 'react';
 import { errorMessage, request } from '../api';
@@ -26,6 +26,7 @@ export function Settings({ me, onLogout }: { me: Me; onLogout: () => void }) {
       {me.role === 'owner' ? (
         <>
           <InviteSection />
+          <MetricsSection />
           <UsageSection />
         </>
       ) : null}
@@ -587,6 +588,41 @@ function ConfidenceSection() {
         답을 고른 뒤 확신도 묻기 (권장)
       </label>
       <p className="muted small">찍어서 맞힌 카드는 곧 다시 나오고, 확신했는데 틀린 카드는 따로 짚어 줘요. 한 번 더 누르는 대신 기억이 정확해져요.</p>
+    </section>
+  );
+}
+
+const percent = (value: number) => `${Math.round(value * 100)}%`;
+
+/** 베타 지표 (설계서 §2.3 끝났다는 기준): 주간 복습자 60% 이상, 카드 신고율 5% 미만, AI 지출 월 $100 미만 */
+function MetricsSection() {
+  const { data } = useApi<BetaMetrics>('/admin/metrics');
+  if (!data) return null;
+  const checks = [
+    { label: '주간 복습자', value: percent(data.weekly_reviewers), ok: data.weekly_reviewers >= 0.6, goal: '60% 이상' },
+    { label: '카드 신고율 (30일)', value: `${percent(data.report_rate)} (${data.reports_30d}/${data.reviewed_cards_30d})`, ok: data.report_rate < 0.05, goal: '5% 미만' },
+    { label: '이번 달 AI 비용', value: `$${data.ai_usd_month.toFixed(2)}`, ok: data.ai_usd_month < 100, goal: '$100 미만' },
+  ];
+  return (
+    <section>
+      <h2>베타 지표 ({data.users}명)</h2>
+      <ul className="list">
+        {checks.map((check) => (
+          <li key={check.label} className="metric">
+            <span>{check.ok ? '✓' : '✗'} {check.label}</span>
+            <span className={check.ok ? 'good-text' : 'bad-text'}>
+              {check.value} <span className="muted small">목표 {check.goal}</span>
+            </span>
+          </li>
+        ))}
+      </ul>
+      <ul className="list">
+        {data.people.map((person) => (
+          <li key={`${person.name}-${person.joined_at}`} className="small">
+            {person.name} · 7일 {person.reviews_7d}장 · 마지막 {person.last_review_at ? formatDate(person.last_review_at) : '없음'}
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }

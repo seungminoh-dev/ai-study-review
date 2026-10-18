@@ -218,6 +218,20 @@ export interface LoginCode {
   expires_at: number;
 }
 
+/** 베타 지표 (설계서 §2.3 끝났다는 기준) */
+export interface BetaMetrics {
+  users: number;
+  /** 최근 7일에 한 장이라도 복습한 사람 / 전체 (목표 60% 이상) */
+  weekly_reviewers: number;
+  /** 최근 30일 카드 신고 / 그 기간에 복습한 카드 수 (목표 5% 미만) */
+  report_rate: number;
+  reports_30d: number;
+  reviewed_cards_30d: number;
+  /** 이번 달 서버 AI 비용 (목표 월 $100 미만) */
+  ai_usd_month: number;
+  people: { name: string; reviews_7d: number; last_review_at: number | null; joined_at: number }[];
+}
+
 export interface MemberSummary {
   id: string;
   display_name: string;

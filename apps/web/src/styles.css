@@ -1105,3 +1105,18 @@ a.chip {
   gap: 8px;
   min-height: 44px;
 }
+
+.metric {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.good-text {
+  color: var(--good);
+}
+
+.bad-text {
+  color: var(--bad);
+}

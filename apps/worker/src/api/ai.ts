@@ -1,8 +1,9 @@
-import { GradeAiBody, ImportBody, type AiStatus, type JobView, type UsageReport } from '@moai/shared';
+import { GradeAiBody, ImportBody, type AiStatus, type BetaMetrics, type JobView, type UsageReport } from '@moai/shared';
 import { Hono } from 'hono';
 import type { AppEnv } from '../context';
 import { sha256Hex } from '../lib/crypto';
 import { errorJson, readJson } from '../lib/http';
+import { DAY_MS } from '../lib/kst';
 import { llmConfigured } from '../llm/anthropic';
 import { caps, monthStart, overBudget } from '../llm/budget';
 import { createJob, runJob } from '../llm/jobs';
@@ -110,6 +111,37 @@ ai.get('/admin/usage', async (c) => {
       output_tokens: row.output_tokens,
     })),
     jobs: jobs!.results as UsageReport['jobs'],
+  };
+  return c.json(body);
+});
+
+/** 베타 지표 (설계서 §2.3): 주간 복습자 비율, 카드 신고율, 이번 달 AI 비용 */
+ai.get('/admin/metrics', async (c) => {
+  const now = Date.now();
+  const week = now - 7 * DAY_MS;
+  const month = now - 30 * DAY_MS;
+  const [people, reports, reviewed, cost] = await c.env.DB.batch([
+    c.env.DB.prepare(
+      `SELECT u.display_name AS name, u.created_at AS joined_at,
+              (SELECT count(*) FROM review_logs r WHERE r.user_id = u.id AND r.reviewed_at >= ?1) AS reviews_7d,
+              (SELECT max(reviewed_at) FROM review_logs r WHERE r.user_id = u.id) AS last_review_at
+         FROM users u ORDER BY u.created_at`,
+    ).bind(week),
+    c.env.DB.prepare('SELECT count(*) AS n FROM card_reports WHERE created_at >= ?1').bind(month),
+    c.env.DB.prepare('SELECT count(DISTINCT card_id) AS n FROM review_logs WHERE reviewed_at >= ?1').bind(month),
+    c.env.DB.prepare('SELECT coalesce(sum(cost_micro_usd), 0) AS n FROM llm_usage WHERE created_at >= ?1').bind(monthStart(now)),
+  ]);
+  const rows = people!.results as BetaMetrics['people'];
+  const reportCount = (reports!.results[0] as { n: number }).n;
+  const reviewedCount = (reviewed!.results[0] as { n: number }).n;
+  const body: BetaMetrics = {
+    users: rows.length,
+    weekly_reviewers: rows.length === 0 ? 0 : rows.filter((row) => row.reviews_7d > 0).length / rows.length,
+    report_rate: reviewedCount === 0 ? 0 : reportCount / reviewedCount,
+    reports_30d: reportCount,
+    reviewed_cards_30d: reviewedCount,
+    ai_usd_month: Math.round((cost!.results[0] as { n: number }).n) / 1e6,
+    people: rows,
   };
   return c.json(body);
 });

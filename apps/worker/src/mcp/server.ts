@@ -10,12 +10,14 @@ import saveLearningExample from '@moai/shared/fixtures/immutable-object.json';
 import { z } from 'zod';
 import { chatQueue, chatSubmit } from '../domain/chat-review';
 import { findConcepts, type FoundConcept } from '../domain/concepts';
+import { interviewChain } from '../domain/interview';
 import { learnerContext } from '../domain/learner-context';
 import { saveLearning } from '../domain/save-learning';
 import type { Env } from '../env';
 import { formatKstDate } from '../lib/kst';
 import {
   FIND_CONCEPTS_DESCRIPTION,
+  GET_INTERVIEW_CHAIN_DESCRIPTION,
   GET_LEARNER_CONTEXT_DESCRIPTION,
   GET_REVIEW_QUEUE_DESCRIPTION,
   SAVE_LEARNING_DESCRIPTION,
@@ -72,6 +74,12 @@ const SubmitReviewInput = z.object({
   confidence: z.enum(['sure', 'unsure', 'guess']).optional().describe('ox·mcq·cloze: 답하기 전에 물어본 확신도 (확실, 반반, 찍음)'),
 });
 
+const InterviewChainInput = z.object({
+  topic: z.string().min(1).max(200).optional(),
+  concept_key: ConceptKey.optional(),
+  length: z.int().min(2).max(5).optional().describe('이어서 물을 개념 수 (기본 3)'),
+});
+
 // 요청마다 CPU를 쓰는 준비 작업은 모듈 범위(isolate 시작)에서 미리 해 둔다. 이 시간은 요청 CPU에 들어가지 않는다.
 // SDK도 엣지 런타임에서 preloadSchemas()를 모듈 범위에서 부르라고 안내한다.
 preloadSchemas();
@@ -80,8 +88,9 @@ const FindConceptsSchema = memoJsonSchema(FindConceptsInput);
 const LearnerContextSchema = memoJsonSchema(LearnerContextInput);
 const ReviewQueueSchema = memoJsonSchema(ReviewQueueInput);
 const SubmitReviewSchema = memoJsonSchema(SubmitReviewInput);
+const InterviewChainSchema = memoJsonSchema(InterviewChainInput);
 // SDK가 쓰는 target과 같다. 달라져도 isolate마다 첫 요청에서 한 번 더 변환할 뿐이다.
-for (const schema of [SaveLearningSchema, FindConceptsSchema, LearnerContextSchema, ReviewQueueSchema, SubmitReviewSchema]) {
+for (const schema of [SaveLearningSchema, FindConceptsSchema, LearnerContextSchema, ReviewQueueSchema, SubmitReviewSchema, InterviewChainSchema]) {
   schema['~standard'].jsonSchema.input({ target: 'draft-2020-12' });
 }
 // 처음 실행하는 함수는 V8이 그때 컴파일한다. 첫 tools/call이 그 비용을 내지 않도록 기획서 예시를 한 번 검사해 둔다.
@@ -223,6 +232,24 @@ function buildServer(deps: McpDeps): McpServer {
           return { content: text(lines.join('\n')), structuredContent: { recorded: true, ...rest } };
         }
       }
+    },
+  );
+
+  server.registerTool(
+    'get_interview_chain',
+    {
+      title: '꼬리물기 모의면접',
+      description: GET_INTERVIEW_CHAIN_DESCRIPTION,
+      inputSchema: InterviewChainSchema,
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    async (input) => {
+      const now = Date.now();
+      const chain = await interviewChain(deps.env, deps.userId, input, now);
+      if (!chain) return { content: text('아직 저장한 개념이 없어요. 공부한 내용을 먼저 저장해 주세요.'), structuredContent: { concepts: [] } };
+      const context = await learnerContext(deps.env, deps.userId, { concept_keys: chain.keys }, now);
+      const header = `물을 순서: ${chain.names.join(' → ')}\n첫 개념부터 한 질문씩 묻고, 답의 약한 곳을 파고드는 꼬리질문으로 다음 개념으로 넘어가세요. 정답은 먼저 말하지 마세요.`;
+      return { content: text(`${header}\n\n${context.text}`), structuredContent: { order: chain.keys, concepts: context.concepts } };
     },
   );
 

@@ -35,7 +35,7 @@ describe('MCP endpoint, raw 2025-era requests', () => {
   it('lists the tools with the schema zod produces, and cards have no rung field', async () => {
     const message = await readRpc(await rpc(url, 'tools/list', {}, { 'mcp-protocol-version': '2025-06-18' }));
     const tools = message.result.tools as { name: string; inputSchema: Record<string, any> }[];
-    expect(tools.map((tool) => tool.name).sort()).toEqual(['find_concepts', 'get_learner_context', 'get_review_queue', 'save_learning', 'submit_review']);
+    expect(tools.map((tool) => tool.name).sort()).toEqual(['find_concepts', 'get_interview_chain', 'get_learner_context', 'get_review_queue', 'save_learning', 'submit_review']);
     const save = tools.find((tool) => tool.name === 'save_learning')!;
     expect(save.inputSchema).toEqual({ type: 'object', ...json(SaveLearningInput['~standard'].jsonSchema.input({ target: 'draft-2020-12' })) });
     expect(JSON.stringify(save.inputSchema)).not.toContain('"rung"');
@@ -242,7 +242,7 @@ describe('MCP endpoint, official SDK client', () => {
       const transport = new StreamableHTTPClientTransport(new URL(url), { fetch: (input, init) => workerFetch(input, init) });
       await client.connect(transport);
       const { tools } = await client.listTools();
-      expect(tools.map((tool) => tool.name).sort()).toEqual(['find_concepts', 'get_learner_context', 'get_review_queue', 'save_learning', 'submit_review']);
+      expect(tools.map((tool) => tool.name).sort()).toEqual(['find_concepts', 'get_interview_chain', 'get_learner_context', 'get_review_queue', 'save_learning', 'submit_review']);
       expect((await client.callTool({ name: 'find_concepts', arguments: { query: '불변 객체' } })).isError).toBeFalsy();
       const result = await client.callTool({ name: 'save_learning', arguments: example });
       expect(result.isError).toBeFalsy();
@@ -274,5 +274,10 @@ describe('chat review tools', () => {
     expect((await callTool(url, 'submit_review', { card_id: ox.card_id, answer: '모르겠어요' })).isError).toBe(true);
     // 남의 카드는 채점하지 않는다
     expect((await callTool(await mcpUrl(await newUser()), 'submit_review', { card_id: ox.card_id, answer: 'O' })).isError).toBe(true);
+
+    // 모의면접: 연결선을 따라 개념을 고른다
+    const chain = await callTool(url, 'get_interview_chain', { concept_key: 'immutable-object', length: 3 });
+    expect(chain.structuredContent.order[0]).toBe('immutable-object');
+    expect(chain.structuredContent.order.length).toBeGreaterThan(1);
   });
 });

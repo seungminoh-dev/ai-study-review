@@ -237,6 +237,9 @@ describe('recovery invites', () => {
   it('are for the owner only', async () => {
     const member = await newUser();
     expect((await api(member, '/members')).status).toBe(403);
+    expect((await api(member, '/admin/metrics')).status).toBe(403);
+    expect((await api(member, '/admin/usage')).status).toBe(403);
+    expect(await (await api(owner, '/admin/metrics')).json()).toMatchObject({ users: expect.any(Number), weekly_reviewers: expect.any(Number) });
   });
 });
 
