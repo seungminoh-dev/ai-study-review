@@ -57,7 +57,7 @@ Android는 브라우저에서 만든 로그인이 설치한 앱에도 이어진�
 
 1. Customize → Connectors에서 **MVP 0의 모아이 커넥터(SPIKE_TOKEN URL)를 지운다.**
 2. **Add custom connector** → 이름 `모아이`, URL은 1-4에서 복사한 주소, 인증은 **No sign in**.
-3. 도구 3개(`find_concepts`, `save_learning`, `get_learner_context`)를 **Always allow**로 바꾼다. 그래야 폰에서 승인 버튼을 누르지 않는다.
+3. 도구를 모두 **Always allow**로 바꾼다 (`find_concepts`, `save_learning`, `get_learner_context`, `get_review_queue`, `submit_review`, `get_interview_chain`). 그래야 폰에서 승인 버튼을 누르지 않는다.
 
 ### 1-6. 코치 지침 바꾸기 (🙋 직접, 선택)
 
@@ -147,6 +147,21 @@ AI 채점과 대화 붙여넣기 가져오기만 서버 AI를 쓴다. 넣지 않
 - 설명하기 카드는 그 개념의 1·2단계 카드가 7일 넘게 안정되면 열린다. 바로 보고 싶으면 기록 탭에서 그 개념의 1단계 카드를 끄면 된다.
 - 설명을 쓰고 **AI에게 채점 받기** → 5~20초 뒤 문장별 판정과 질문이 나온다. 등급은 직접 누른다.
 - 기록 탭 → **대화를 붙여 넣어 카드로 만들기** → 1~3분 뒤 알림이 온다.
+
+### 2-3. Claude Code 플러그인 (🙋 직접, 선택)
+
+터미널(Claude Code)에서 공부할 때도 같은 커넥터로 저장·복습한다. 순서는 [플러그인 README](../plugins/moai/README.md).
+
+```
+/plugin marketplace add seungminoh-dev/ai-study-review
+/plugin install moai@ai-study-review
+```
+
+claude.ai 계정으로 로그인한 Claude Code면 claude.ai의 모아이 커넥터가 그대로 보인다. 아니면 `claude mcp add --transport http --scope user moai "<커넥터 URL>"`. 커넥터 URL은 레포에 넣지 않는다.
+
+### 2-4. 채팅으로 복습·모의면접 (설정 없음)
+
+커넥터를 켠 claude.ai 채팅에서 "오늘 복습 퀴즈 내줘", "꼬리질문으로 모의면접 해줘"라고 하면 된다. 도구가 3개에서 6개로 늘었으니 claude.ai 커넥터 설정에서 새 도구(`get_review_queue`, `submit_review`, `get_interview_chain`)도 **Always allow**로 바꾼다.
 
 ---
 

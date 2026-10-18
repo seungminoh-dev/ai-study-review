@@ -8,9 +8,10 @@ claude.ai에서 공부하다 "정리해줘"라고 하면, 대화 중인 Claude�
 
 **MVP 2 (친구 베타)**: 코드 완료. 켜는 순서와 평소 운영은 [운영 가이드](docs/runbook.md).
 
-- MCP 도구: `find_concepts`, `save_learning`, `get_learner_context`. 코치 지침 없이 어느 채팅에서나 "모아이에 저장해줘"로 저장한다
+- MCP 도구: `find_concepts`, `save_learning`, `get_learner_context`, `get_review_queue`, `submit_review`, `get_interview_chain`. 코치 지침 없이 어느 채팅에서나 "모아이에 저장해줘"로 저장하고, "복습 퀴즈 내줘", "모의면접 해줘"도 채팅에서 한다
+- Claude Code 플러그인: [`plugins/moai`](plugins/moai) (`/moai:coach`, `/moai:capture`, `/moai:review`)
 - 가입·로그인: GitHub + 초대 코드, 다른 기기 로그인 코드, 기기 복구 초대
-- PWA: 오늘(스트릭·하루 목표), 복습(OX·객관식·빈칸·설명하기, 키보드), 지식 지도와 개념 상세, 리그, 저장 기록(카드 고치기·끄기), 대화 붙여넣기, 설정
+- PWA: 오늘(스트릭·하루 목표), 복습(OX·객관식·빈칸·설명하기, 확신도, 키보드), 지식 지도와 개념 상세, 리그, 저장 기록(카드 고치기·끄기), 질문 은행, 대화 붙여넣기, 설정(오너는 베타 지표)
 - 서버 AI(선택): 설명하기 AI 채점, 대화 가져오기, 월 예산 가드
 - 매분 Cron 알림과 AI 작업, 오프라인 답안 큐, 내 데이터 내보내기와 계정 지우기
 
