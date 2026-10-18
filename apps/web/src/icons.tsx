@@ -1,0 +1,111 @@
+import type { ReactNode } from 'react';
+
+// 화면에 쓰는 선 아이콘. 글자색(currentColor)을 따른다. 옆에 글자가 있는 장식이라 스크린 리더는 건너뛴다.
+
+function Icon({ size = 22, strokeWidth = 2, children }: { size?: number; strokeWidth?: number; children: ReactNode }) {
+  return (
+    <svg
+      className="icon"
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={strokeWidth}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      {children}
+    </svg>
+  );
+}
+
+interface Props {
+  size?: number;
+}
+
+export const IconHome = ({ size }: Props) => (
+  <Icon size={size}>
+    <path d="M3 10.5 12 3l9 7.5" />
+    <path d="M5 9.5V20h5v-6h4v6h5V9.5" />
+  </Icon>
+);
+
+export const IconMap = ({ size }: Props) => (
+  <Icon size={size}>
+    <circle cx="6" cy="6" r="2.5" />
+    <circle cx="18" cy="8" r="2.5" />
+    <circle cx="11" cy="18" r="2.5" />
+    <path d="M8.4 6.5 15.6 7.6" />
+    <path d="M7.2 8.3l2.7 7.5" />
+    <path d="M16.6 10.1l-4.2 5.9" />
+  </Icon>
+);
+
+export const IconGrowth = ({ size }: Props) => (
+  <Icon size={size}>
+    <path d="M4 20h16" />
+    <path d="M7 16v-4" />
+    <path d="M12 16V8" />
+    <path d="M17 16V5" />
+  </Icon>
+);
+
+export const IconRecords = ({ size }: Props) => (
+  <Icon size={size}>
+    <path d="M6 4h10a2 2 0 0 1 2 2v14H8a2 2 0 0 1-2-2z" />
+    <path d="M6 16a2 2 0 0 1 2-2h10" />
+    <path d="M10 8h4" />
+  </Icon>
+);
+
+export const IconBook = ({ size }: Props) => (
+  <Icon size={size}>
+    <path d="M5 5a2 2 0 0 1 2-2h12v15H7a2 2 0 0 0-2 2z" />
+    <path d="M5 20a2 2 0 0 1 2-2h12" />
+  </Icon>
+);
+
+export const IconSettings = ({ size }: Props) => (
+  <Icon size={size}>
+    <path d="M4 7h9" />
+    <path d="M17 7h3" />
+    <circle cx="15" cy="7" r="2" />
+    <path d="M4 17h3" />
+    <path d="M11 17h9" />
+    <circle cx="9" cy="17" r="2" />
+  </Icon>
+);
+
+export const IconArrow = ({ size = 18 }: Props) => (
+  <Icon size={size} strokeWidth={2.4}>
+    <path d="M5 12h14" />
+    <path d="M13 6l6 6-6 6" />
+  </Icon>
+);
+
+export const IconCheck = ({ size = 18 }: Props) => (
+  <Icon size={size} strokeWidth={2.8}>
+    <path d="M5 12.5 10 17l9-10" />
+  </Icon>
+);
+
+/** 프리즈로 지킨 날 */
+export const IconSnow = ({ size = 16 }: Props) => (
+  <Icon size={size} strokeWidth={2.2}>
+    <path d="M12 3v18" />
+    <path d="M4.2 7.5l15.6 9" />
+    <path d="M4.2 16.5l15.6-9" />
+  </Icon>
+);
+
+/** 연속 학습 불꽃. 색이 정해진 그림이라 글자색을 따르지 않는다 */
+export const IconFlame = ({ size = 20 }: Props) => (
+  <svg className="icon" width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
+    <path
+      d="M12 2.5c.8 3.2 4.8 5.2 4.8 10a4.8 4.8 0 0 1-9.6 0c0-2.4 1.3-3.9 2.3-4.9.3 1.5 1.1 2.4 2.3 2.8.6-2.9-.8-5.4.2-7.9z"
+      fill="#ff914d"
+    />
+  </svg>
+);

@@ -1,4 +1,4 @@
-import type { QueueCard, QueueResponse, ReportReason, ReviewGrade } from '@moai/shared';
+import type { QueueCard, QueueResponse, ReportReason, ReviewGrade, StatsResponse } from '@moai/shared';
 import type { Confidence } from '@moai/shared/client';
 import { MAX_ELAPSED_MS, gradeAnswer } from '@moai/shared/client';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -6,6 +6,8 @@ import { OfflineError, errorMessage, request } from '../api';
 import { AiGrade } from '../cards/AiGrade';
 import { ExplainCard } from '../cards/ExplainCard';
 import { QuestionCard, choicesOf, type Choice } from '../cards/QuestionCard';
+import { IconFlame } from '../icons';
+import { Mascot } from '../Mascot';
 import { cacheQueue, cachedQueue, enqueueReview, flushReviews, forgetAnswered, pendingCardIds, removeFromOutbox } from '../offline/store';
 import { goTab, leave } from '../router';
 
@@ -343,7 +345,10 @@ function Session({ initial, offline }: { initial: QueueCard[]; offline: boolean 
           <QuestionCard key={`${card.id}-${index}`} card={card} choices={choices} picked={picked} chosen={chosen} onPick={pick} />
           {chosen ? (
             <div className="confidence" role="group" aria-label="확신도">
-              <p className="small muted">정답을 보기 전에, 얼마나 확신해요?</p>
+              <div className="confidence-head">
+                <Mascot mood="think" size={32} />
+                <p className="small muted">정답을 보기 전에, 얼마나 확신해요?</p>
+              </div>
               <div className="actions">
                 {(['sure', 'unsure', 'guess'] as const).map((level) => (
                   <button key={level} type="button" className={`button confidence-${level}`} onClick={() => rate(level)}>
@@ -356,12 +361,15 @@ function Session({ initial, offline }: { initial: QueueCard[]; offline: boolean 
           {!picked && notice ? <p className="notice bad">{notice}</p> : null}
           {picked ? (
             <div className="answer-panel" aria-live="polite">
-              <p className={picked.correct ? 'verdict right' : 'verdict wrong'}>
-            {picked.correct ? (confidence === 'guess' ? '맞았지만 찍었으니 조금 일찍 다시 볼게요' : '맞았어요') : '틀렸어요'}
-          </p>
-          {!picked.correct && confidence === 'sure' ? (
-            <p className="notice">확신했는데 틀린 문제예요. 왜 그렇게 생각했는지 떠올려 보고 해설과 비교해 보세요. 이렇게 바로잡은 기억이 오래 남아요.</p>
-          ) : null}
+              <div className="answer-head">
+                <Mascot mood={picked.correct ? 'happy' : 'oops'} size={48} />
+                <div>
+                  <p className={picked.correct ? 'verdict right' : 'verdict wrong'}>{picked.correct ? '맞았어요' : '틀렸어요'}</p>
+                  {picked.correct && confidence === 'guess' ? <p className="small muted">찍어서 맞혔으니 조금 일찍 다시 볼게요.</p> : null}
+                  {/* 확신했는데 틀린 답은 따로 짚는다. 바로잡은 기억이 오래 남는다 */}
+                  {!picked.correct && confidence === 'sure' ? <p className="small muted">확신했던 문제예요. 왜 그렇게 생각했는지 떠올려 보고 해설과 비교해 봐요.</p> : null}
+                </div>
+              </div>
               {card.explain ? <p className="explain">{card.explain}</p> : null}
               {notice ? <p className="notice bad">{notice}</p> : null}
               <div className="actions">
@@ -404,27 +412,71 @@ function Summary({
   const wrong = results.filter((result) => !result.correct).map((result) => result.card);
   const right = results.length - wrong.length;
   const misses = results.filter((result) => result.confidentMiss).map((result) => result.card.id);
+  const [stats, setStats] = useState<StatsResponse | null>(null);
+  useEffect(() => {
+    if (practice) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        // 밀린 답을 먼저 보내야 오늘 목표와 연속이 맞게 나온다
+        await flushReviews();
+        const next = await request<StatsResponse>('/stats');
+        if (!cancelled) setStats(next);
+      } catch {
+        // 오프라인이면 숫자 없이 보여 준다
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [practice]);
+  const goalMet = stats !== null && stats.today.reviewed >= stats.goal;
+  const toGoal = stats && !goalMet ? stats.goal - stats.today.reviewed : 0;
+  const title = practice ? '다시 보기를 마쳤어요' : goalMet ? '오늘 목표 달성!' : wrong.length === 0 ? '다 맞혔어요!' : `${results.length}장을 끝냈어요`;
   return (
-    <div className="screen done">
-      <p className="big">
-        {results.length}장 중 {right}장 맞혔어요
-      </p>
+    <div className="summary">
+      <div className="summary-head">
+        <Mascot mood={goalMet ? 'cheer' : wrong.length === 0 ? 'happy' : 'think'} size={goalMet ? 132 : 96} />
+        <h1>{title}</h1>
+        <p className="muted">
+          {results.length}장 중 {right}장 맞혔어요{toGoal > 0 ? ` · 오늘 목표까지 ${toGoal}장` : ''}
+        </p>
+      </div>
+      {practice ? null : (
+        <div className="summary-stats">
+          <div className="summary-stat">
+            <strong className="xp">+{sessionXp(results)}</strong>
+            <span>얻은 XP</span>
+          </div>
+          <div className="summary-stat">
+            <strong>
+              <IconFlame size={18} />
+              {stats ? `${stats.streak}일` : '–'}
+            </strong>
+            <span>연속 학습</span>
+          </div>
+          <div className="summary-stat">
+            <strong>{stats ? `${Math.min(stats.today.reviewed, stats.goal)}/${stats.goal}` : '–'}</strong>
+            <span>오늘 목표</span>
+          </div>
+        </div>
+      )}
       {wrong.length > 0 ? (
-        <>
+        <section aria-labelledby="miss-title">
+          <h2 id="miss-title">다시 볼 카드 {wrong.length}장</h2>
           <ul className="list">
             {[...wrong].sort((a, b) => Number(misses.includes(b.id)) - Number(misses.includes(a.id))).map((card) => (
               <li key={card.id}>
-                <span className="chip">{card.concept_name}</span> {card.prompt}
-                {misses.includes(card.id) ? <span className="mine">확신했는데 틀림</span> : null}
+                <span className="chip">{card.concept_name}</span> {misses.includes(card.id) ? <span className="miss-tag">확신했는데 틀림</span> : null}
+                <p style={{ margin: '6px 0 0' }}>{card.prompt}</p>
               </li>
             ))}
           </ul>
-          <button type="button" className="button primary" onClick={() => onRetry(wrong)}>
-            틀린 카드 다시 보기
-          </button>
-        </>
+        </section>
       ) : (
-        <p className="muted">{practice ? '다시 보기에서 다 맞혔어요.' : '다 맞혔어요. 다음 복습은 알림으로 알려 드릴게요.'}</p>
+        <p className="muted" style={{ textAlign: 'center', margin: 0 }}>
+          {practice ? '다시 보기에서 다 맞혔어요.' : '다음 복습은 알림으로 알려 드릴게요.'}
+        </p>
       )}
       {onUndo ? (
         <button type="button" className="text-button" onClick={onUndo}>
@@ -432,9 +484,21 @@ function Summary({
         </button>
       ) : null}
       {notice ? <p className="notice bad">{notice}</p> : null}
-      <HomeButton />
+      <div className="summary-actions">
+        {wrong.length > 0 ? (
+          <button type="button" className="button" onClick={() => onRetry(wrong)}>
+            틀린 {wrong.length}장 다시 보기
+          </button>
+        ) : null}
+        <HomeButton primary />
+      </div>
     </div>
   );
+}
+
+/** 이번 복습으로 얻은 XP. 서버 규칙(worker의 domain/stats.ts REVIEW_XP)과 같다: 설명하기 20, 정답 10, 오답 2 */
+function sessionXp(results: Result[]): number {
+  return results.reduce((sum, result) => sum + (result.card.type === 'explain' ? 20 : result.correct ? 10 : 2), 0);
 }
 
 /** 쌓인 기록 없이 오늘 화면으로 간다. 그다음 뒤로가기는 앱을 닫는다 */

@@ -31,8 +31,8 @@ export default defineConfig({
         // Android Chrome에 설치한 앱은 3버튼 내비게이션 바를 이 색으로 칠한다 (2026-10 실측. 페이지의 theme-color는 따르지 않았다).
         // 매니페스트에는 다크 모드용 색이 없어서 다크 모드의 아래 탭 색에 맞춘다. 라이트 모드에서는 어두운 바가 된다.
         // 이미 설치한 앱은 Chrome이 매니페스트를 다시 읽어야(재설치 또는 앱 업데이트) 바뀐다.
-        background_color: '#1A1F2A',
-        theme_color: '#2445B8',
+        background_color: '#182238',
+        theme_color: '#192849',
         icons: [
           { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
           { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' },

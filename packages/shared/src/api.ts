@@ -161,6 +161,12 @@ export interface StatsResponse {
   freeze_available: boolean;
   /** 이번 주 (월요일부터) */
   week: { xp: number; days: StatsDay[] };
+  /** 가장 길었던 연속 일수 (1년 안에서) */
+  best_streak: number;
+  /** 지난주(월~일) XP. "지난주의 나"와 비교한다 */
+  last_week_xp: number;
+  /** 최근 12주. 11주 전 월요일부터 이번 주 일요일까지 84일 */
+  history: StatsDay[];
 }
 
 export interface LeagueEntry {

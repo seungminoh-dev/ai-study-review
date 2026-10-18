@@ -64,20 +64,33 @@ export async function loadStats(env: Env, userId: string, now: number): Promise<
       .run();
   }
 
-  const monday = weekOf(today);
-  const days = Array.from({ length: 7 }, (_, i) => monday + i).map((day) => ({
+  // 가장 긴 연속: 스트릭과 같은 규칙으로 센다. 프리즈한 날은 끊지도 늘리지도 않고, 아직 안 채운 오늘은 끊지 않는다
+  let best = 0;
+  let run = 0;
+  for (let day = today - LOOKBACK_DAYS + 1; day <= today; day += 1) {
+    if (met(day)) best = Math.max(best, (run += 1));
+    else if (!frozen.has(studyDayKey(day)) && day !== today) run = 0;
+  }
+
+  const dayOf = (day: number) => ({
     day: studyDayKey(day),
     reviewed: reviewed.get(day)?.n ?? 0,
     met: met(day),
     frozen: frozen.has(studyDayKey(day)),
     future: day > today,
-  }));
+  });
+  const monday = weekOf(today);
+  const days = Array.from({ length: 7 }, (_, i) => dayOf(monday + i));
+  const weekXp = (start: number) => Array.from({ length: 7 }, (_, i) => xpOf(start + i)).reduce((sum, xp) => sum + xp, 0);
   return {
     goal,
     today: { reviewed: reviewed.get(today)?.n ?? 0, xp: xpOf(today) },
     streak,
     freeze_available: !usedFreezeWeeks.has(monday),
-    week: { xp: days.reduce((sum, _, i) => sum + xpOf(monday + i), 0), days },
+    week: { xp: weekXp(monday), days },
+    best_streak: Math.max(best, streak),
+    last_week_xp: weekXp(monday - 7),
+    history: Array.from({ length: 84 }, (_, i) => dayOf(monday - 77 + i)),
   };
 }
 

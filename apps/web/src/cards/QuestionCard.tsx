@@ -84,15 +84,23 @@ export function QuestionCard({
       )}
       {card.code ? <CodeBlock code={card.code} /> : null}
       <div className={card.type === 'ox' ? 'choices ox' : 'choices'} role="group" aria-label="보기">
-        {choices.map((choice) => {
+        {choices.map((choice, index) => {
           const state = !answered ? (choice === chosen ? 'chosen' : '') : choice.correct ? 'right' : choice === picked ? 'wrong' : 'dim';
           return (
             <button key={choice.value} type="button" className={`choice ${state}`} disabled={answered} onClick={() => onPick(choice)}>
-              <span>{choice.label}</span>
-              {/* 색만으로 구분하지 않도록 글자로도 알려 준다 */}
-              {answered && choice.correct ? <span className="tag">정답</span> : null}
-              {answered && choice === picked && !choice.correct ? <span className="tag">내 답</span> : null}
-              {answered && choice.mine ? <span className="mine">예전에 내가 한 설명</span> : null}
+              {/* 컴퓨터에서는 단축키 번호를 보여 준다. OX는 O·X 키라 번호가 없다 */}
+              {card.type === 'ox' ? null : (
+                <span className="key" aria-hidden="true">
+                  {index + 1}
+                </span>
+              )}
+              <span className="choice-body">
+                <span>{choice.label}</span>
+                {/* 색만으로 구분하지 않도록 글자로도 알려 준다 */}
+                {answered && choice.correct ? <span className="tag">정답</span> : null}
+                {answered && choice === picked && !choice.correct ? <span className="tag">내 답</span> : null}
+                {answered && choice.mine ? <span className="mine">예전에 내가 한 설명</span> : null}
+              </span>
             </button>
           );
         })}
