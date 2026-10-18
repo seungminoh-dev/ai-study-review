@@ -1,0 +1,16 @@
+{
+  "name": "ai-study-review",
+  "owner": {
+    "name": "seungminoh-dev"
+  },
+  "metadata": {
+    "description": "모아이 복습 앱의 Claude Code 플러그인"
+  },
+  "plugins": [
+    {
+      "name": "moai",
+      "source": "./plugins/moai",
+      "description": "모아이: Claude Code에서 공부한 내용을 복습 카드로 저장하고, 과거 기록으로 코칭·복습한다"
+    }
+  ]
+}

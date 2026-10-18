@@ -1,0 +1,8 @@
+{
+  "name": "moai",
+  "version": "0.1.0",
+  "description": "모아이 복습 앱과 연결: 코칭(/moai:coach), 학습 저장(/moai:capture), 채팅 복습(/moai:review)",
+  "author": { "name": "seungminoh-dev" },
+  "repository": "https://github.com/seungminoh-dev/ai-study-review",
+  "keywords": ["study", "spaced-repetition", "interview", "mcp"]
+}
