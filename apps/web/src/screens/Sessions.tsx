@@ -2,7 +2,7 @@ import type { CardEditBody, SessionCard, SessionDetail as Detail, SessionSummary
 import { useState, type FormEvent } from 'react';
 import { errorMessage, request } from '../api';
 import { CodeBlock } from '../cards/CodeBlock';
-import { Link } from '../router';
+import { BackLink, Link } from '../router';
 import { formatDate, formatDateTime, useApi } from '../useApi';
 
 // 저장 기록 (설계서 §12.1): 세션별 개념·판정·카드, 카드 고치기·끄기
@@ -259,9 +259,9 @@ export function SessionDetail({ id }: { id: string }) {
   if (!data) return <div className="center muted">불러오는 중…</div>;
   return (
     <div className="screen">
-      <Link href="/sessions" className="back">
+      <BackLink href="/sessions" className="back">
         ← 저장 기록
-      </Link>
+      </BackLink>
       <h1>{data.topic}</h1>
       <p className="muted small">
         {formatDateTime(data.created_at)} · {data.source}

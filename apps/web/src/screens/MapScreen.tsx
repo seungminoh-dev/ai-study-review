@@ -1,6 +1,6 @@
 import type { ConceptStateKey, MapResponse } from '@moai/shared';
 import { useMemo, useState } from 'react';
-import { layoutGraph } from '../map/layout';
+import { labelWidth, layoutGraph } from '../map/layout';
 import { Link, navigate } from '../router';
 import { useApi } from '../useApi';
 
@@ -28,14 +28,20 @@ export function MapScreen() {
     const keys = new Set(nodes.map((node) => node.key));
     return { nodes, edges: raw.edges.filter((edge) => keys.has(edge.from) && keys.has(edge.to)) };
   }, [raw, top, withMaterials]);
-  const size = data ? Math.max(340, Math.round(Math.sqrt(data.nodes.length) * 80)) : 340;
-  const positions = useMemo(
-    () => (data ? layoutGraph(data.nodes.map((node) => node.key), data.edges.map((edge) => [edge.from, edge.to] as const), size) : new Map()),
-    [data, size],
-  );
+  const layout = useMemo(() => {
+    if (!data) return null;
+    const names = new Map(data.nodes.map((node) => [node.key, shortName(node.name)]));
+    return layoutGraph(
+      data.nodes.map((node) => node.key),
+      data.edges.map((edge) => [edge.from, edge.to] as const),
+      (key) => labelWidth(names.get(key) ?? key),
+      window.innerWidth / window.innerHeight,
+    );
+  }, [data]);
+  const positions = layout?.positions ?? new Map<string, { x: number; y: number }>();
   const materialCount = raw?.nodes.filter((node) => node.state === 'material').length ?? 0;
   if (error) return <div className="screen"><p className="notice bad">{error}</p></div>;
-  if (!data || !raw) return <div className="center muted">불러오는 중…</div>;
+  if (!data || !raw || !layout) return <div className="center muted">불러오는 중…</div>;
   if (raw && raw.nodes.length === 0) {
     return (
       <div className="screen">
@@ -48,9 +54,6 @@ export function MapScreen() {
   return (
     <div className="screen">
       <h1>지식 지도</h1>
-      <Link href="/questions" className="notice link">
-        친구들이 공유한 질문 은행 →
-      </Link>
       {tops.length > 0 ? (
         <div className="segmented" role="group" aria-label="분류">
           <button type="button" className={top === null ? 'current' : ''} aria-pressed={top === null} onClick={() => setTop(null)}>
@@ -75,7 +78,7 @@ export function MapScreen() {
       ) : null}
       {data.nodes.length === 0 ? <p className="muted">이 분류에는 아직 내 지식이 없어요.</p> : null}
       <div className="map-scroll">
-        <svg className="map" width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-label="개념 지도">
+        <svg className="map" width={layout.width} height={layout.height} viewBox={`0 0 ${layout.width} ${layout.height}`} role="img" aria-label="개념 지도">
           {data.edges.map((edge) => {
             const a = positions.get(edge.from);
             const b = positions.get(edge.to);
@@ -98,6 +101,7 @@ export function MapScreen() {
                   if (event.key === 'Enter') navigate(`/concepts/${node.key}`);
                 }}
               >
+                <rect className="hit" x={-24} y={-14} width={48} height={44} />
                 <circle r={9} />
                 <text y={22} textAnchor="middle">
                   {shortName(node.name)}

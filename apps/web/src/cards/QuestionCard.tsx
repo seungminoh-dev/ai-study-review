@@ -89,6 +89,9 @@ export function QuestionCard({
           return (
             <button key={choice.value} type="button" className={`choice ${state}`} disabled={answered} onClick={() => onPick(choice)}>
               <span>{choice.label}</span>
+              {/* 색만으로 구분하지 않도록 글자로도 알려 준다 */}
+              {answered && choice.correct ? <span className="tag">정답</span> : null}
+              {answered && choice === picked && !choice.correct ? <span className="tag">내 답</span> : null}
               {answered && choice.mine ? <span className="mine">예전에 내가 한 설명</span> : null}
             </button>
           );

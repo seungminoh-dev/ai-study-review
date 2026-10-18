@@ -7,7 +7,7 @@ import { AiGrade } from '../cards/AiGrade';
 import { ExplainCard } from '../cards/ExplainCard';
 import { QuestionCard, choicesOf, type Choice } from '../cards/QuestionCard';
 import { cacheQueue, cachedQueue, enqueueReview, flushReviews, forgetAnswered, pendingCardIds, removeFromOutbox } from '../offline/store';
-import { Link, navigate } from '../router';
+import { goTab, leave } from '../router';
 
 // 복습 세션 (설계서 §12.1, §12.2). 카드 한 장씩: 답 고르기 → 맞음·틀림과 해설 → 다음.
 
@@ -81,9 +81,7 @@ export function Review({ size, category, material }: { size: number; category?: 
     return (
       <div className="screen">
         <p className="notice bad">{load.message}</p>
-        <Link className="button" href="/">
-          오늘 화면으로
-        </Link>
+        <HomeButton />
       </div>
     );
   }
@@ -92,9 +90,7 @@ export function Review({ size, category, material }: { size: number; category?: 
       <div className="screen done">
         <p className="big">오늘 복습할 카드가 없어요</p>
         <p className="muted">다 했거나, 아직 저장한 카드가 없어요.</p>
-        <Link className="button primary" href="/">
-          오늘 화면으로
-        </Link>
+        <HomeButton primary />
       </div>
     );
   }
@@ -136,6 +132,8 @@ function Session({ initial, offline }: { initial: QueueCard[]; offline: boolean 
 
   const card = cards[index];
   const choices = useMemo(() => (card ? choicesOf(card) : []), [card]);
+  /** 답을 본 카드 수. 지금 카드도 답을 봤으면 센다 */
+  const done = index + (picked ? 1 : 0);
 
   useEffect(() => {
     shownAt.current = Date.now();
@@ -245,7 +243,7 @@ function Session({ initial, offline }: { initial: QueueCard[]; offline: boolean 
       if (target?.closest('input, textarea, select')) return;
       const key = event.key.toLowerCase();
       if (key === 'escape') {
-        navigate('/');
+        leave();
       } else if (card.type === 'explain') {
         // 설명하기는 카드가 직접 키를 받는다
       } else if (chosen) {
@@ -312,11 +310,11 @@ function Session({ initial, offline }: { initial: QueueCard[]; offline: boolean 
   return (
     <div className="review">
       <header className="review-top">
-        <button type="button" className="icon-button" aria-label="그만하기" onClick={() => navigate('/')}>
+        <button type="button" className="icon-button" aria-label="그만하기" onClick={leave}>
           ✕
         </button>
-        <div className="progress" role="progressbar" aria-valuemin={0} aria-valuemax={cards.length} aria-valuenow={index}>
-          <div style={{ width: `${(index / cards.length) * 100}%` }} />
+        <div className="progress" role="progressbar" aria-label="진행" aria-valuemin={0} aria-valuemax={cards.length} aria-valuenow={done}>
+          <div style={{ width: `${(done / cards.length) * 100}%` }} />
         </div>
         <span className="muted count">
           {index + 1}/{cards.length}
@@ -364,7 +362,6 @@ function Session({ initial, offline }: { initial: QueueCard[]; offline: boolean 
           {!picked.correct && confidence === 'sure' ? (
             <p className="notice">확신했는데 틀린 문제예요. 왜 그렇게 생각했는지 떠올려 보고 해설과 비교해 보세요. 이렇게 바로잡은 기억이 오래 남아요.</p>
           ) : null}
-              {!picked.correct && card.type !== 'ox' ? <p className="correct">정답: {choices.find((choice) => choice.correct)?.label}</p> : null}
               {card.explain ? <p className="explain">{card.explain}</p> : null}
               {notice ? <p className="notice bad">{notice}</p> : null}
               <div className="actions">
@@ -435,9 +432,16 @@ function Summary({
         </button>
       ) : null}
       {notice ? <p className="notice bad">{notice}</p> : null}
-      <Link className="button" href="/">
-        오늘 화면으로
-      </Link>
+      <HomeButton />
     </div>
+  );
+}
+
+/** 쌓인 기록 없이 오늘 화면으로 간다. 그다음 뒤로가기는 앱을 닫는다 */
+function HomeButton({ primary = false }: { primary?: boolean }) {
+  return (
+    <button type="button" className={primary ? 'button primary' : 'button'} onClick={() => void goTab('/')}>
+      오늘 화면으로
+    </button>
   );
 }

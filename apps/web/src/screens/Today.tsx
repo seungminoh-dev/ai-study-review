@@ -112,9 +112,7 @@ function StreakCard({ stats }: { stats: StatsResponse }) {
         <p>
           <strong className="streak-count">{stats.streak}일</strong> 연속
         </p>
-        <Link href="/league" className="small">
-          이번 주 {stats.week.xp} XP · 리그 →
-        </Link>
+        <span className="muted small">이번 주 {stats.week.xp} XP</span>
       </div>
       <div className="goal" role="progressbar" aria-valuemin={0} aria-valuemax={stats.goal} aria-valuenow={stats.today.reviewed} aria-label="오늘 목표">
         <div style={{ width: `${progress * 100}%` }} />

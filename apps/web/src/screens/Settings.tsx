@@ -23,20 +23,22 @@ export function Settings({ me, onLogout }: { me: Me; onLogout: () => void }) {
       <ConfidenceSection />
       <ConnectorSection />
       <AccountSection me={me} onLogout={onLogout} />
+      <CoachSection />
+      <DataSection me={me} onDeleted={onLogout} />
+      {/* 오너만 쓰는 것은 내 설정과 섞이지 않게 맨 아래에 모은다 */}
       {me.role === 'owner' ? (
-        <>
+        <div className="admin">
+          <h2 className="admin-title">관리</h2>
           <InviteSection />
           <MetricsSection />
           <UsageSection />
-        </>
+        </div>
       ) : null}
-      <CoachSection />
-      <DataSection me={me} onDeleted={onLogout} />
     </div>
   );
 }
 
-function Status({ text, tone }: { text: string; tone: 'good' | 'bad' | 'muted' }) {
+function Status({ text, tone }: { text: string; tone: 'good' | 'bad' | 'warn' | 'muted' }) {
   return <p className={`notice ${tone}`}>{text}</p>;
 }
 
@@ -65,7 +67,8 @@ function PushSection() {
   return (
     <section>
       <h2>알림</h2>
-      {state ? <Status text={PUSH_TEXT[state]} tone={state === 'on' ? 'good' : state === 'off' ? 'muted' : 'bad'} /> : null}
+      {/* 차단·미지원은 오류가 아니라 기기 상태라 주의 색으로 보여 준다 */}
+      {state ? <Status text={PUSH_TEXT[state]} tone={state === 'on' ? 'good' : state === 'off' ? 'muted' : 'warn'} /> : null}
       {!isStandalone() && state !== 'needs-install' ? <p className="muted small">홈 화면에 추가해 두면 앱처럼 열리고 알림도 잘 와요.</p> : null}
       <div className="actions">
         {state === 'off' ? (
@@ -244,7 +247,8 @@ function AccountSection({ me, onLogout }: { me: Me; onLogout: () => void }) {
 
   useEffect(() => {
     // 새로 고침해도 같은 안내가 다시 나오지 않게 주소에서 뺀다
-    if (query.has('github')) history.replaceState(null, '', '/settings');
+    // 기록 깊이(history.state)는 그대로 둔다. 지우면 뒤로가기 규칙이 깨진다
+    if (query.has('github')) history.replaceState(history.state, '', '/settings');
   }, [query]);
 
   const issue = async () => {

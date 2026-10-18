@@ -1,7 +1,7 @@
 import type { MaterialSummary } from '@moai/shared';
 import { useState } from 'react';
 import { errorMessage, request } from '../api';
-import { Link } from '../router';
+import { BackLink, Link } from '../router';
 import { formatDate, useApi } from '../useApi';
 
 // 자료 (설계서 §5.6): PDF 같은 자료에서 만든 카드. 풀기 전에는 내 지식이 아니다.
@@ -26,9 +26,9 @@ export function Materials() {
 
   return (
     <div className="screen">
-      <Link href="/sessions" className="back">
+      <BackLink href="/sessions" className="back">
         ← 저장 기록
-      </Link>
+      </BackLink>
       <h1>자료</h1>
       <p className="muted small">
         PDF나 문서로 만든 카드예요. 아직은 내 지식이 아니에요. 풀어 본 카드는 평소 복습에 들어가고, 그 개념은 지식 지도에 생겨요.
@@ -51,7 +51,7 @@ export function Materials() {
               <div className="goal" role="progressbar" aria-valuemin={0} aria-valuemax={material.cards} aria-valuenow={material.solved}>
                 <div style={{ width: `${progress * 100}%` }} />
               </div>
-              <div className="row-actions">
+              <div className="material-actions">
                 {material.unsolved_open > 0 ? (
                   <Link className="button primary" href={`/review?material=${encodeURIComponent(material.title)}&size=10`}>
                     이 자료 풀기 ({material.unsolved_open}장 남음)

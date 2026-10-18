@@ -16,6 +16,7 @@
   --bad: #b3261e;
   --bad-soft: #fbe9e7;
   --warn: #8a5a00;
+  --warn-soft: #fdf3e1;
   --code-bg: #f0f2f6;
   --radius: 14px;
   --tap: 52px;
@@ -40,6 +41,7 @@
     --bad: #ff8a80;
     --bad-soft: #3a1a18;
     --warn: #f0c060;
+    --warn-soft: #33270f;
     --code-bg: #10141b;
   }
 }
@@ -232,6 +234,12 @@ textarea {
 
 .notice.muted {
   color: var(--muted);
+}
+
+/* 오류는 아니지만 알아야 하는 상태 (알림 차단, 서버 AI 없음) */
+.notice.warn {
+  background: var(--warn-soft);
+  color: var(--warn);
 }
 
 .notice.link {
@@ -498,12 +506,30 @@ blockquote {
   opacity: 0.55;
 }
 
+.choice .tag {
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.choice .mine {
+  margin-left: 0;
+}
+
 .answer-panel {
   margin-top: 16px;
   padding: 16px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
+}
+
+/* 해설이 길어도 "다음" 버튼은 화면 아래에 붙어 있다 */
+.answer-panel .actions {
+  position: sticky;
+  bottom: 0;
+  margin: 12px -16px 0;
+  padding: 12px 16px max(12px, env(safe-area-inset-bottom));
+  background: linear-gradient(to bottom, transparent, var(--surface) 12px);
 }
 
 .verdict {
@@ -939,7 +965,12 @@ blockquote {
 
 .map .node text {
   fill: var(--text);
-  font-size: 11px;
+  font-size: 12px;
+}
+
+/* 점이 작아서 누르는 영역은 이름표까지 넓힌다 */
+.map .node .hit {
+  fill: transparent;
 }
 
 .chip.state-familiar {
@@ -960,34 +991,10 @@ blockquote {
 
 a.chip {
   text-decoration: none;
-  padding: 6px 12px;
-}
-
-/* 리그 */
-.league > li {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 12px;
-}
-
-.league .rank {
-  width: 1.5em;
-  font-weight: 800;
-  color: var(--muted);
-}
-
-.league .name {
-  flex: 1;
-}
-
-.league .xp {
-  font-variant-numeric: tabular-nums;
-  font-weight: 700;
-}
-
-.league .me {
-  border-color: var(--pen);
-  background: var(--pen-soft);
+  min-height: 40px;
+  padding: 0 14px;
 }
 
 .segmented {
@@ -1099,6 +1106,11 @@ a.chip {
   margin: 0;
 }
 
+.confidence .button {
+  padding: 0 8px;
+  white-space: nowrap;
+}
+
 .toggle {
   display: flex;
   align-items: center;
@@ -1137,4 +1149,27 @@ a.chip {
 
 .row-actions .button {
   flex: 0 1 auto;
+}
+
+.material-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.material-actions .text-button {
+  align-self: center;
+}
+
+/* 설정의 관리(오너) 묶음 */
+.admin {
+  margin-top: 32px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.admin-title {
+  color: var(--text);
+  font-size: 1.15rem;
 }

@@ -1,15 +1,13 @@
 import type { AuthOptions, Me } from '@moai/shared';
 import { useEffect, useState, type ReactNode } from 'react';
 import { OfflineError, RequestError, errorMessage, request } from './api';
-import { Link, navigate, useLocation } from './router';
+import { TabLink, navigate, useLocation } from './router';
 import { Concept } from './screens/Concept';
 import { Import } from './screens/Import';
 import { Join } from './screens/Join';
-import { League } from './screens/League';
 import { Login } from './screens/Login';
 import { Materials } from './screens/Materials';
 import { MapScreen } from './screens/MapScreen';
-import { QuestionBank } from './screens/QuestionBank';
 import { Review } from './screens/Review';
 import { SessionDetail, Sessions } from './screens/Sessions';
 import { Settings } from './screens/Settings';
@@ -113,9 +111,7 @@ export function App() {
   else if (sessionMatch) screen = <SessionDetail id={sessionMatch[1]!} />;
   else if (path === '/map') screen = <MapScreen />;
   else if (conceptMatch) screen = <Concept key={conceptMatch[1]} conceptKey={conceptMatch[1]!} />;
-  else if (path === '/league') screen = <League />;
   else if (path === '/import') screen = <Import />;
-  else if (path === '/questions') screen = <QuestionBank />;
   else if (path === '/materials') screen = <Materials />;
   else if (path === '/settings') {
     screen = (
@@ -136,11 +132,11 @@ export function App() {
       {path === '/review' ? null : (
         <nav className="tabs" aria-label="화면">
           {TABS.map((tab) => {
-            const current = tab.href === '/' ? path === '/' || path === '/league' : tab.href === '/map' ? path === '/map' || path === '/questions' || path.startsWith('/concepts/') : path.startsWith(tab.href) || (tab.href === '/sessions' && (path === '/import' || path === '/materials'));
+            const current = tab.href === '/' ? path === '/' : tab.href === '/map' ? path === '/map' || path.startsWith('/concepts/') : path.startsWith(tab.href) || (tab.href === '/sessions' && (path === '/import' || path === '/materials'));
             return (
-              <Link key={tab.href} href={tab.href} className={current ? 'tab current' : 'tab'} aria-current={current ? 'page' : undefined}>
+              <TabLink key={tab.href} href={tab.href} className={current ? 'tab current' : 'tab'} aria-current={current ? 'page' : undefined}>
                 {tab.label}
-              </Link>
+              </TabLink>
             );
           })}
         </nav>

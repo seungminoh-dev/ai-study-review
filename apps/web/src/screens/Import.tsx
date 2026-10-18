@@ -3,7 +3,7 @@ import { MAX_IMPORT_CHARS } from '@moai/shared/client';
 import { useEffect, useState, type FormEvent } from 'react';
 import { JOB_ERROR, aiStatus } from '../ai';
 import { errorMessage, request } from '../api';
-import { Link } from '../router';
+import { BackLink, Link } from '../router';
 import { formatDateTime, useApi } from '../useApi';
 
 // 붙여넣기 가져오기 (설계서 §11.4): 커넥터 없이 한 대화를 통째로 붙여 넣으면 서버가 카드로 만든다.
@@ -47,14 +47,14 @@ export function Import() {
 
   return (
     <div className="screen">
-      <Link href="/sessions" className="back">
+      <BackLink href="/sessions" className="back">
         ← 저장 기록
-      </Link>
+      </BackLink>
       <h1>대화 붙여넣기</h1>
       <p className="muted small">
         커넥터를 못 쓰는 곳에서 공부한 대화를 통째로 붙여 넣으면 카드로 만들어요. 대화에 있는 내용만 쓰고, 원문은 카드를 만든 뒤 지워요.
       </p>
-      {available === false ? <p className="notice bad">지금은 서버 AI를 쓸 수 없어요 (설정이 없거나 이번 달 한도에 닿았어요).</p> : null}
+      {available === false ? <p className="notice warn">지금은 서버 AI를 쓸 수 없어요 (설정이 없거나 이번 달 한도에 닿았어요).</p> : null}
       <form onSubmit={(event) => void submit(event)}>
         <textarea
           className="answer-input"
