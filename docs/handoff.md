@@ -23,7 +23,7 @@
 
 ```bash
 git pull origin main
-npm ci                                   # Node 22 이상
+npm ci                                   # Node 22.12 이상 (Vite 8이 요구한다)
 cp apps/worker/.dev.vars.example apps/worker/.dev.vars
 npm run gen:token                        # 두 번 실행 → TOKEN_PEPPER, BOOTSTRAP_CODE
 npm run gen:vapid                        # VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY

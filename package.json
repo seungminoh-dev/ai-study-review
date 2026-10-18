@@ -8,7 +8,7 @@
     "packages/shared"
   ],
   "engines": {
-    "node": ">=22"
+    "node": ">=22.12"
   },
   "scripts": {
     "typecheck": "npm run typecheck --workspaces --if-present",

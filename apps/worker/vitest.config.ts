@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { cloudflareTest, readD1Migrations } from '@cloudflare/vitest-plugin';
 import { defineConfig } from 'vitest/config';
 
@@ -10,7 +11,8 @@ async function testVapidKeys() {
 }
 
 export default defineConfig(async () => {
-  const migrations = await readD1Migrations(new URL('./migrations', import.meta.url).pathname);
+  // URL.pathname은 Windows에서 /D:/...가 되므로 fileURLToPath로 바꾼다.
+  const migrations = await readD1Migrations(fileURLToPath(new URL('./migrations', import.meta.url)));
   const vapid = await testVapidKeys();
   return {
     plugins: [
