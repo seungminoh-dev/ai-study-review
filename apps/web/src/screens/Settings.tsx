@@ -7,7 +7,7 @@ import { forgetAiStatus } from '../ai';
 import { copyText } from '../copy';
 import { clearDeviceData, flushReviews, pendingCount } from '../offline/store';
 import { disablePush, dropLocalPush, enablePush, isStandalone, pushState, type PushState } from '../push';
-import { useLocation } from '../router';
+import { Link, useLocation } from '../router';
 import { formatDate, formatDateTime, useApi } from '../useApi';
 import { askConfidence, setAskConfidence } from './Review';
 
@@ -17,6 +17,9 @@ export function Settings({ me, onLogout }: { me: Me; onLogout: () => void }) {
   return (
     <div className="screen">
       <h1>설정</h1>
+      <Link className="notice link" href="/welcome">
+        설치, claude.ai 연결, 알림을 차례로 안내하는 시작 가이드 다시 보기 →
+      </Link>
       <PushSection />
       <ReminderSection />
       <GoalSection initial={me.daily_goal} />

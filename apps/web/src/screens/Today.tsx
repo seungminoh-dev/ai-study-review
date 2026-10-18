@@ -52,11 +52,12 @@ function Onboarding({ saved }: { saved: boolean }) {
     if (done) hide();
   }, [done]);
   if (hidden || !steps || done) return null;
+  // 누르면 시작 가이드의 그 단계로 간다
   const items: { key: keyof Steps; label: string; href: string }[] = [
-    { key: 'installed', label: '홈 화면에 추가하기 (브라우저 메뉴 → 앱 설치)', href: '/settings' },
-    { key: 'push', label: '이 기기에서 알림 켜기', href: '/settings' },
-    { key: 'connector', label: '커넥터 URL을 만들어 claude.ai에 추가하기', href: '/settings' },
-    { key: 'saved', label: 'claude.ai에서 공부하고 "모아이에 저장해줘"', href: '/sessions' },
+    { key: 'installed', label: '홈 화면에 추가하기', href: '/welcome?step=1' },
+    { key: 'connector', label: 'claude.ai에 모아이 연결하기', href: '/welcome?step=2' },
+    { key: 'saved', label: 'claude.ai에서 공부하고 "모아이에 저장해줘"', href: '/welcome?step=3' },
+    { key: 'push', label: '이 기기에서 알림 켜기', href: '/welcome?step=4' },
   ];
   const count = Object.values(steps).filter(Boolean).length;
   return (

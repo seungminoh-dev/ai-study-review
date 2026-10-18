@@ -1,11 +1,35 @@
 import type { Me, PendingJoin } from '@moai/shared';
 import { useEffect, useState, type FormEvent } from 'react';
 import { RequestError, errorMessage, request } from '../api';
+import { IconCheck, IconGithub } from '../icons';
 import { Splash } from '../Loading';
+import { Mascot } from '../Mascot';
 
-// 초대 코드로 가입 (설계서 §8.4). GitHub 확인을 마치고 서버가 이 화면으로 보낸다.
+// 초대 코드로 가입 (설계서 §8.4, 3단계 시안). GitHub 확인을 마치고 서버가 이 화면으로 보낸다. 가입하면 시작 가이드로 간다.
 
 type Load = { state: 'loading' } | { state: 'ready'; pending: PendingJoin } | { state: 'expired'; message: string };
+
+/** GitHub 확인 → 초대 코드 → 시작 */
+function Steps() {
+  return (
+    <ol className="join-steps" aria-label="가입 단계">
+      <li className="done">
+        <span className="join-mark">
+          <IconCheck size={14} />
+        </span>
+        GitHub 확인
+      </li>
+      <li className="current" aria-current="step">
+        <span className="join-mark">2</span>
+        초대 코드
+      </li>
+      <li>
+        <span className="join-mark">3</span>
+        시작
+      </li>
+    </ol>
+  );
+}
 
 export function Join({ onDone }: { onDone: (me: Me) => void }) {
   const [load, setLoad] = useState<Load>({ state: 'loading' });
@@ -41,11 +65,15 @@ export function Join({ onDone }: { onDone: (me: Me) => void }) {
   if (load.state === 'loading') return <Splash />;
   if (load.state === 'expired') {
     return (
-      <div className="screen">
-        <h1>모아이 가입</h1>
-        <p className="notice bad">{load.message}</p>
-        <div className="actions">
+      <div className="auth">
+        <div className="auth-hero">
+          <Mascot mood="oops" size={96} />
+          <h1>가입을 다시 시작해요</h1>
+          <p className="notice bad">{load.message}</p>
+        </div>
+        <div className="bottom-actions">
           <a className="button primary" href="/api/auth/github/start">
+            <IconGithub />
             GitHub로 다시 하기
           </a>
         </div>
@@ -53,14 +81,20 @@ export function Join({ onDone }: { onDone: (me: Me) => void }) {
     );
   }
   return (
-    <form className="screen" onSubmit={(event) => void submit(event)}>
-      <h1>모아이 가입</h1>
-      <p className="muted">GitHub 계정(@{load.pending.github_login})으로 가입해요. 받은 초대 코드와 앱에서 쓸 이름을 넣어 주세요.</p>
+    <form className="auth" onSubmit={(event) => void submit(event)}>
+      <Steps />
+      <div className="auth-hero">
+        <Mascot mood="happy" size={104} />
+        <p className="auth-chip">@{load.pending.github_login}님, 반가워요!</p>
+        <h1>초대 코드를 넣어 주세요</h1>
+        <p className="muted small">받은 초대 코드와 앱에서 불릴 이름이면 끝나요.</p>
+      </div>
       <label className="field">
         <span>초대 코드</span>
         <input
+          className="mono"
           value={code}
-          onChange={(event) => setCode(event.target.value)}
+          onChange={(event) => setCode(event.target.value.toUpperCase())}
           placeholder="ABCDE-FGHJK"
           autoComplete="off"
           autoCapitalize="characters"
@@ -70,12 +104,13 @@ export function Join({ onDone }: { onDone: (me: Me) => void }) {
       </label>
       <label className="field">
         <span>이름</span>
-        <input value={name} onChange={(event) => setName(event.target.value)} maxLength={30} required />
+        <input value={name} onChange={(event) => setName(event.target.value)} placeholder="앱에서 불릴 이름" maxLength={30} required />
       </label>
       {error ? <p className="notice bad">{error}</p> : null}
+      <p className="muted small">초대 코드는 모아이를 쓰는 친구나 운영자에게 받아요.</p>
       <div className="bottom-actions">
         <button type="submit" className="button primary" disabled={busy}>
-          {busy ? '가입하는 중…' : '가입하기'}
+          {busy ? '가입하는 중…' : '가입하고 시작하기'}
         </button>
       </div>
     </form>

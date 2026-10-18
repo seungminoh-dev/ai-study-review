@@ -1,11 +1,13 @@
 import type { Me } from '@moai/shared';
 import { useState, type FormEvent } from 'react';
 import { errorMessage, request } from '../api';
+import { IconGithub } from '../icons';
+import { Mascot } from '../Mascot';
 import { isIos, isStandalone } from '../push';
-import { useLocation } from '../router';
+import { BackLink, useLocation } from '../router';
 
-// 로그인 (설계서 §8.4, §8.5): GitHub로 계속하기, 또는 로그인된 기기에서 받은 코드.
-// 처음 보는 GitHub 계정이면 서버가 초대 코드 화면(/join)으로 보낸다.
+// 로그인 (설계서 §8.4, §8.5, 3단계 시안): GitHub로 계속하기, 또는 로그인된 기기에서 받은 코드.
+// 처음 보는 GitHub 계정이면 서버가 초대 코드 화면(/join)으로 보낸다. GitHub 로그인이 실패하면 서버가 ?auth=로 돌려보낸다.
 
 const AUTH_TEXT: Record<string, string> = {
   denied: 'GitHub 로그인을 취소했어요.',
@@ -35,45 +37,58 @@ export function Login({ github, onDone }: { github: boolean; onDone: (me: Me) =>
   };
 
   return (
-    <div className="screen">
-      <h1>모아이</h1>
-      <p className="muted">AI와 공부한 내용을 2~3분씩 되새기는 복습 앱이에요. 초대받은 사람만 가입할 수 있어요.</p>
+    <div className="auth">
+      <BackLink href="/" className="back">
+        ← 처음으로
+      </BackLink>
+      <div className="auth-head">
+        <Mascot mood={reason || error ? 'oops' : 'wave'} size={88} />
+        <div>
+          <h1>
+            다시 만나서
+            <br />
+            반가워요
+          </h1>
+          <p className="muted small">로그인 방법을 골라 주세요.</p>
+        </div>
+      </div>
       {reason ? <p className="notice bad">{reason}</p> : null}
       {github ? (
         <>
-          <div className="actions">
+          <div className="auth-block">
             <a className="button primary" href="/api/auth/github/start">
+              <IconGithub />
               GitHub로 계속하기
             </a>
+            <p className="muted small">GitHub에서는 아이디와 이름만 받아요. 처음이면 확인 뒤 초대 코드를 넣어요.</p>
           </div>
-          <p className="muted small">처음이면 GitHub 확인 뒤 초대 코드를 넣어요. GitHub에서는 아이디와 이름만 받아요.</p>
-          {isIos() && isStandalone() ? (
-            <p className="muted small">iPhone 홈 화면 앱에서는 GitHub 로그인이 Safari로 넘어가 로그인이 앱에 남지 않을 수 있어요. 그럴 땐 아래 로그인 코드를 쓰세요.</p>
-          ) : null}
+          <p className="auth-or">또는</p>
         </>
       ) : null}
-      <form onSubmit={(event) => void submit(event)}>
-        <h2>로그인 코드로</h2>
-        <p className="muted small">이미 로그인된 기기의 설정 → "다른 기기에서 로그인"에서 코드를 만들어요. 10분 동안 한 번 쓸 수 있어요.</p>
-        <label className="field">
-          <span>로그인 코드</span>
-          <input
-            value={code}
-            onChange={(event) => setCode(event.target.value)}
-            placeholder="ABCD-EFGH"
-            autoComplete="one-time-code"
-            autoCapitalize="characters"
-            spellCheck={false}
-            required
-          />
+      <form className="auth-card" onSubmit={(event) => void submit(event)}>
+        <label htmlFor="login-code" className="auth-label">
+          로그인 코드
         </label>
+        <input
+          id="login-code"
+          className="code-input"
+          value={code}
+          onChange={(event) => setCode(event.target.value.toUpperCase())}
+          placeholder="ABCD-EFGH"
+          autoComplete="one-time-code"
+          autoCapitalize="characters"
+          spellCheck={false}
+          required
+        />
+        <p className="muted small">이미 로그인된 기기의 설정 → "다른 기기에서 로그인"에서 만들어요. 10분 동안 한 번 쓸 수 있어요.</p>
         {error ? <p className="notice bad">{error}</p> : null}
-        <div className="actions">
-          <button type="submit" className="button" disabled={busy}>
-            {busy ? '확인 중…' : '코드로 로그인'}
-          </button>
-        </div>
+        <button type="submit" className="button" disabled={busy}>
+          {busy ? '확인 중…' : '코드로 로그인'}
+        </button>
       </form>
+      {github && isIos() && isStandalone() ? (
+        <p className="auth-tip">iPhone 홈 화면 앱에서는 GitHub 로그인이 Safari로 넘어가 로그인이 앱에 남지 않을 수 있어요. 그럴 땐 위 로그인 코드를 쓰세요.</p>
+      ) : null}
     </div>
   );
 }

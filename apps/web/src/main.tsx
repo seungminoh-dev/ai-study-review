@@ -1,6 +1,8 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
+// 설치 이벤트는 앱이 뜰 때 한 번만 와서 가장 먼저 잡아 둔다
+import './install';
 import { MotionProvider } from './motion';
 import { flushReviews } from './offline/store';
 import { onNavigate } from './router';

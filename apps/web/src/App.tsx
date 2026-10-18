@@ -1,24 +1,49 @@
 import type { AuthOptions, Me } from '@moai/shared';
 import * as m from 'motion/react-m';
-import { useEffect, useState, type ReactNode } from 'react';
+import { Suspense, lazy, useEffect, useState, type ComponentType, type ReactNode } from 'react';
 import { OfflineError, RequestError, errorMessage, request } from './api';
 import { IconBook, IconGrowth, IconHome, IconMap, IconRecords, IconSettings } from './icons';
-import { Splash } from './Loading';
+import { Loading, Splash } from './Loading';
 import { Mascot } from './Mascot';
 import { SNAPPY } from './motion';
 import { TabLink, navigate, useLocation } from './router';
-import { Concept } from './screens/Concept';
-import { Growth } from './screens/Growth';
-import { Import } from './screens/Import';
 import { Join } from './screens/Join';
+import { Landing } from './screens/Landing';
 import { Login } from './screens/Login';
-import { Materials } from './screens/Materials';
-import { MapScreen } from './screens/MapScreen';
-import { Review } from './screens/Review';
-import { SessionDetail, Sessions } from './screens/Sessions';
-import { Settings } from './screens/Settings';
 import { Setup } from './screens/Setup';
 import { Today } from './screens/Today';
+
+/**
+ * 로그인한 뒤에만 쓰는 큰 화면은 따로 받는다. 처음 오는 사람의 랜딩과 매일 여는 오늘 화면을 가볍게 하려고.
+ * 로그인하면 쉬는 틈에 미리 받아 두어 화면을 옮길 때 기다리지 않게 한다.
+ */
+function lazyScreen<P extends object>(load: () => Promise<ComponentType<P>>) {
+  let loaded: ComponentType<P> | null = null;
+  const preload = () =>
+    load().then((component) => {
+      loaded = component;
+      return component;
+    });
+  const Lazy = lazy(() => preload().then((component) => ({ default: component })));
+  function Screen(props: P) {
+    // 처음 그릴 때 정한 것을 끝까지 쓴다. 도중에 바꾸면 화면을 새로 그려 복습하던 상태를 잃는다
+    const [Component] = useState<ComponentType<P>>(() => loaded ?? (Lazy as unknown as ComponentType<P>));
+    return <Component {...props} />;
+  }
+  return Object.assign(Screen, { preload });
+}
+
+const Review = lazyScreen(() => import('./screens/Review').then((module) => module.Review));
+const Sessions = lazyScreen(() => import('./screens/Sessions').then((module) => module.Sessions));
+const SessionDetail = lazyScreen(() => import('./screens/Sessions').then((module) => module.SessionDetail));
+const MapScreen = lazyScreen(() => import('./screens/MapScreen').then((module) => module.MapScreen));
+const Concept = lazyScreen(() => import('./screens/Concept').then((module) => module.Concept));
+const Growth = lazyScreen(() => import('./screens/Growth').then((module) => module.Growth));
+const Import = lazyScreen(() => import('./screens/Import').then((module) => module.Import));
+const Materials = lazyScreen(() => import('./screens/Materials').then((module) => module.Materials));
+const Settings = lazyScreen(() => import('./screens/Settings').then((module) => module.Settings));
+const Welcome = lazyScreen(() => import('./screens/Welcome').then((module) => module.Welcome));
+const LATER = [Review, Sessions, SessionDetail, MapScreen, Concept, Growth, Import, Materials, Settings, Welcome];
 
 type Auth = { state: 'loading' } | { state: 'in'; me: Me } | { state: 'setup' } | { state: 'out'; github: boolean } | { state: 'error'; message: string };
 
@@ -143,6 +168,18 @@ export function App() {
     })();
   }, []);
 
+  useEffect(() => {
+    if (auth.state !== 'in') return;
+    // 로그인하면 쉬는 틈에 나머지 화면을 받아 둔다 (오프라인이면 다음 기회에)
+    const run = () => LATER.forEach((screen) => void screen.preload().catch(() => undefined));
+    if ('requestIdleCallback' in window) {
+      const id = requestIdleCallback(run, { timeout: 3000 });
+      return () => cancelIdleCallback(id);
+    }
+    const timer = setTimeout(run, 1200);
+    return () => clearTimeout(timer);
+  }, [auth.state]);
+
   if (auth.state === 'loading') return <Splash />;
   if (auth.state === 'error') {
     return (
@@ -159,7 +196,27 @@ export function App() {
     );
   }
   if (auth.state === 'out') {
-    return <Bare>{path === '/join' ? <Join onDone={(me) => signedIn(me, '/')} /> : <Login github={auth.github} onDone={(me) => signedIn(me)} />}</Bare>;
+    // 가입하면 시작 가이드로 간다
+    if (path === '/join') {
+      return (
+        <Bare>
+          <Join onDone={(me) => signedIn(me, '/welcome')} />
+        </Bare>
+      );
+    }
+    // 서버는 GitHub 로그인이 실패하면 첫 화면(?auth=)으로 돌려보낸다. 그때는 이유와 함께 로그인 화면을 보여 준다
+    if (path === '/' && !query.has('auth')) {
+      return (
+        <main className="app landing-main">
+          <Landing github={auth.github} />
+        </main>
+      );
+    }
+    return (
+      <Bare>
+        <Login github={auth.github} onDone={(me) => signedIn(me)} />
+      </Bare>
+    );
   }
 
   const sessionMatch = /^\/sessions\/([\w-]+)$/.exec(path);
@@ -176,6 +233,7 @@ export function App() {
   else if (path === '/growth') screen = <Growth />;
   else if (path === '/import') screen = <Import />;
   else if (path === '/materials') screen = <Materials />;
+  else if (path === '/welcome') screen = <Welcome name={auth.me.display_name} />;
   else if (path === '/settings') {
     screen = (
       <Settings
@@ -189,8 +247,8 @@ export function App() {
   }
   else screen = <Today name={auth.me.display_name} />;
 
-  // 복습은 메뉴 없이 집중한다. 오늘·성장·지도는 컴퓨터에서 넓게 쓴다
-  const focus = path === '/review';
+  // 복습과 시작 가이드는 메뉴 없이 집중한다. 오늘·성장·지도는 컴퓨터에서 넓게 쓴다
+  const focus = path === '/review' || path === '/welcome';
   const wide = path === '/' || path === '/growth' || path === '/map';
   const section = sectionOf(path);
   // 휴대폰 탭에는 자료가 없어서 자료 화면에서는 기록 탭을 밝힌다
@@ -198,7 +256,9 @@ export function App() {
   return (
     <div className={focus ? 'shell focus' : 'shell'}>
       {focus ? null : <Sidebar current={section} />}
-      <main className={focus ? 'app review-mode' : wide ? 'app wide' : 'app'}>{screen}</main>
+      <main className={focus ? 'app review-mode' : wide ? 'app wide' : 'app'}>
+        <Suspense fallback={<Loading />}>{screen}</Suspense>
+      </main>
       {focus ? null : (
         <nav className="tabs" aria-label="화면">
           {TABS.map((tab) => {
