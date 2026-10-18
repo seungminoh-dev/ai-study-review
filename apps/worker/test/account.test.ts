@@ -6,7 +6,9 @@ import { api, callTool, fakeSubscription, mcpUrl, newUser, type TestUser } from 
 // 계정 지우기는 되돌릴 수 없다. 그 사람의 행이 하나도 남지 않고, 다른 사람의 데이터는 그대로인지 확인한다.
 
 async function fillAccount(user: TestUser): Promise<void> {
-  await callTool(await mcpUrl(user), 'save_learning', example);
+  const url = await mcpUrl(user);
+  await callTool(url, 'save_learning', example);
+  await callTool(url, 'update_categories', { assign: [], rename: [{ from: '옛 분류', to: '새 분류' }] });
   const card = await env.DB.prepare('SELECT id FROM cards WHERE user_id = ?1 LIMIT 1').bind(user.id).first<string>('id');
   await api(user, '/reviews', { method: 'POST', json: { reviews: [{ id: crypto.randomUUID(), card_id: card, grade: 3, reviewed_at: Date.now() }] } });
   await api(user, '/push/subscriptions', { method: 'POST', json: await fakeSubscription() });

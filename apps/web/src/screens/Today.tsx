@@ -51,7 +51,7 @@ function Onboarding({ saved }: { saved: boolean }) {
   const items: { key: keyof Steps; label: string; href: string }[] = [
     { key: 'installed', label: '홈 화면에 추가 (브라우저 메뉴 → 앱 설치)', href: '/settings' },
     { key: 'push', label: '이 기기에서 알림 켜기', href: '/settings' },
-    { key: 'connector', label: '커넥터 URL 만들어 claude.ai에 추가 ("No sign in", 도구는 "Always allow")', href: '/settings' },
+    { key: 'connector', label: '커넥터 URL 만들어 claude.ai에 추가 ("No sign in", 분류 바꾸기 말고 도구는 "Always allow")', href: '/settings' },
     { key: 'saved', label: 'claude.ai에서 공부하고 "모아이에 저장해줘"', href: '/sessions' },
   ];
   return (

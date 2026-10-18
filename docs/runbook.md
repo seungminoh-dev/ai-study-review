@@ -57,7 +57,8 @@ Android는 브라우저에서 만든 로그인이 설치한 앱에도 이어진�
 
 1. Customize → Connectors에서 **MVP 0의 모아이 커넥터(SPIKE_TOKEN URL)를 지운다.**
 2. **Add custom connector** → 이름 `모아이`, URL은 1-4에서 복사한 주소, 인증은 **No sign in**.
-3. 도구를 모두 **Always allow**로 바꾼다 (`find_concepts`, `save_learning`, `get_learner_context`, `get_review_queue`, `submit_review`, `get_interview_chain`, `get_categories`, `update_categories`). 그래야 폰에서 승인 버튼을 누르지 않는다.
+3. 도구 7개를 **Always allow**로 바꾼다 (`find_concepts`, `save_learning`, `get_learner_context`, `get_review_queue`, `submit_review`, `get_interview_chain`, `get_categories`). 그래야 폰에서 승인 버튼을 누르지 않는다.
+   `update_categories`는 여러 개념의 분류를 한꺼번에 바꾸니 **Needs approval**로 둔다. 자료(PDF) 안에 숨은 지시가 있어도 묻지 않고 바뀌지 않는다.
 
 ### 1-6. 코치 지침 바꾸기 (🙋 직접, 선택)
 

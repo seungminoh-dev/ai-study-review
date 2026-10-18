@@ -1,6 +1,7 @@
 import type { MapResponse, MaterialSummary, QueueResponse } from '@moai/shared';
 import { env } from 'cloudflare:workers';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { repairLibrary } from '../src/domain/categories';
 import { loadTodayQueue } from '../src/domain/queue';
 import { api, callTool, mcpUrl, newUser, type TestUser } from './helpers';
 
@@ -116,11 +117,55 @@ describe('category tools', () => {
       assign: [{ concept_key: 'jvm', category: '백엔드 / java' }],
       rename: [{ from: 'Kubernetes', to: '인프라/Kubernetes' }],
     });
-    expect(updated.structuredContent).toEqual({ assigned: 1, renamed: 1 });
+    expect(updated.structuredContent).toEqual({ assigned: 1, renamed: 1, moves: [{ from: 'Kubernetes/기본', to: '인프라/Kubernetes/기본' }] });
     expect((await concept('jvm'))!.domain).toBe('백엔드/Java');
     expect((await concept('pod'))!.domain).toBe('인프라/Kubernetes/기본');
     // 옛 이름으로 저장해도 새 분류로 간다
     await save('service', 'k8s/네트워크');
     expect((await concept('service'))!.domain).toBe('인프라/Kubernetes/네트워크');
   });
+
+  it('does not keep stale old names after renames', async () => {
+    const save = (key: string, domain: string) =>
+      callTool(url, 'save_learning', {
+        topic: key,
+        concepts: [{ key, name: key, domain }],
+        cards: [{ type: 'ox', concept: key, prompt: `${key} 문제`, answer: 'O', explain: '해설' }],
+      });
+    await save('pod', 'Kubernetes');
+    // 한 단계 아래로 옮겨도 새 이름으로 저장한 것이 두 번 옮겨지지 않는다
+    await callTool(url, 'update_categories', { assign: [], rename: [{ from: 'Kubernetes', to: 'Kubernetes/기본' }] });
+    await save('service', 'Kubernetes/기본');
+    expect((await concept('service'))!.domain).toBe('Kubernetes/기본');
+    // 되돌리면 그 이름을 다른 곳으로 보내던 옛 이름은 지운다
+    await callTool(url, 'update_categories', { assign: [], rename: [{ from: 'Kubernetes/기본', to: 'Kubernetes' }] });
+    expect((await concept('pod'))!.domain).toBe('Kubernetes');
+    await save('ingress', 'Kubernetes');
+    expect((await concept('ingress'))!.domain).toBe('Kubernetes');
+    const aliases = await env.DB.prepare('SELECT alias, path FROM category_aliases WHERE user_id = ?1').bind(user.id).all();
+    expect(aliases.results).toEqual([{ alias: 'kubernetes/기본', path: 'Kubernetes' }]);
+  });
+
+  it('repairs categories saved before normalization and concepts saved during the deploy gap', async () => {
+    const now = Date.now();
+    await env.DB.batch([
+      env.DB.prepare("INSERT INTO concepts (id, user_id, key, name, aliases, search_text, domain, created_at, updated_at, adopted_at) VALUES (?1, ?2, 'old', 'old', '[]', 'old', 'infra > k8s', ?3, ?3, ?3)").bind(crypto.randomUUID(), user.id, now),
+    ]);
+    await save2('gap', 'Kubernetes');
+    await env.DB.prepare("UPDATE concepts SET adopted_at = NULL WHERE user_id = ?1 AND key = 'gap'").bind(user.id).run();
+    await callTool(url, 'save_learning', pdf('1장', 'pdfonly'));
+    await repairLibrary(env);
+    expect(await concept('old')).toMatchObject({ domain: '인프라/Kubernetes' });
+    expect((await concept('gap'))!.adopted_at).not.toBeNull();
+    expect((await concept('pdfonly'))!.adopted_at).toBeNull();
+    expect(await repairLibrary(env)).toEqual({ normalized: 0, adopted: 0 });
+  });
 });
+
+function save2(key: string, domain: string) {
+  return callTool(url, 'save_learning', {
+    topic: key,
+    concepts: [{ key, name: key, domain }],
+    cards: [{ type: 'ox', concept: key, prompt: `${key} 문제`, answer: 'O', explain: '해설' }],
+  });
+}

@@ -34,8 +34,11 @@ me.get('/export', async (c) => {
     query('SELECT day FROM streak_freezes WHERE user_id = ?1 ORDER BY day'),
     query('SELECT card_id, reason, note, created_at FROM card_reports WHERE user_id = ?1 ORDER BY created_at'),
     query('SELECT concept_name, question, created_at FROM shared_questions WHERE user_id = ?1 ORDER BY created_at'),
+    query('SELECT alias, path, created_at FROM category_aliases WHERE user_id = ?1 ORDER BY created_at'),
   ]);
-  const [user, identity, sessions, concepts, edges, judgments, followups, cards, reviews, reminders, freezes, reports, shared] = results.map((result) => result.results);
+  const [user, identity, sessions, concepts, edges, judgments, followups, cards, reviews, reminders, freezes, reports, shared, categoryAliases] = results.map(
+    (result) => result.results,
+  );
   const body = {
     format: 'moai-export-v1',
     exported_at: new Date().toISOString(),
@@ -52,6 +55,7 @@ me.get('/export', async (c) => {
     streak_freezes: freezes,
     card_reports: reports,
     shared_questions: shared,
+    category_aliases: categoryAliases,
   };
   const day = new Date().toISOString().slice(0, 10);
   return new Response(JSON.stringify(body, null, 2), {

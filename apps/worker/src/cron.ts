@@ -1,3 +1,4 @@
+import { repairLibrary } from './domain/categories';
 import { deliverDueReminders } from './domain/reminders';
 import { runPendingJobs } from './llm/jobs';
 import type { Env } from './env';
@@ -26,5 +27,11 @@ export async function runCron(env: Env, now: number): Promise<void> {
       env.DB.prepare("DELETE FROM llm_jobs WHERE created_at <= ?1 AND status IN ('done', 'failed')").bind(now - 30 * DAY_MS),
     ]);
     if (sessions!.meta.changes > 0) console.log(JSON.stringify({ event: 'sessions_expired', removed: sessions!.meta.changes }));
+    try {
+      const repaired = await repairLibrary(env);
+      if (repaired.normalized + repaired.adopted > 0) console.log(JSON.stringify({ event: 'library_repaired', ...repaired }));
+    } catch (error) {
+      console.error(JSON.stringify({ event: 'cron_repair_failed', message: (error as Error).message }));
+    }
   }
 }

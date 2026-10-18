@@ -49,8 +49,7 @@ review.get('/queue', async (c) => {
   const now = Date.now();
   const material = c.req.query('material')?.slice(0, 120);
   if (material) {
-    const cards = await loadMaterialQueue(c.env, c.var.userId, material, now, size);
-    return c.json({ cards, remaining: cards.length } satisfies QueueResponse);
+    return c.json((await loadMaterialQueue(c.env, c.var.userId, material, now, size)) satisfies QueueResponse);
   }
   const queue = await loadTodayQueue(c.env, c.var.userId, now, { category: normalizeCategory(c.req.query('category')) });
   const body: QueueResponse = { cards: queue.slice(0, size), remaining: queue.length };

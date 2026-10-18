@@ -72,6 +72,14 @@ interface CandidateRow extends QueueCandidate, FsrsFields {
   final_answer: string | null;
 }
 
+/**
+ * 분류 필터: 그 분류와 그 아래 분류. 대소문자는 가리지 않는다 (0006 전에 저장한 분류는 정규화 전 표기일 수 있다).
+ * param이 NULL이면 거르지 않는다.
+ */
+export function categoryClause(column: string, param: string): string {
+  return `(${param} IS NULL OR lower(${column}) = lower(${param}) OR substr(lower(${column}), 1, length(${param}) + 1) = lower(${param}) || '/')`;
+}
+
 /** 후보는 넉넉히 읽되 끝없이 읽지는 않는다. 종류마다 따로 읽어서, 밀린 새 카드가 복습 카드를 밀어내지 않게 한다 */
 const CANDIDATE_LIMIT = 200;
 
@@ -85,7 +93,7 @@ const CANDIDATES = `SELECT c.id, c.concept_id, c.state, c.due, c.created_at, c.t
                      FROM cards c JOIN concepts k ON k.id = c.concept_id
                     WHERE c.user_id = ?1 AND c.status = 'active' AND c.due <= ?2
                       AND NOT (c.origin = 'material' AND c.state = 0)
-                      AND (?3 IS NULL OR k.domain = ?3 OR substr(k.domain, 1, length(?3) + 1) = ?3 || '/')`;
+                      AND ${categoryClause('k.domain', '?3')}`;
 
 export interface QueueFilter {
   /** 이 분류(와 그 아래)만 */
@@ -101,7 +109,7 @@ export async function loadTodayQueue(env: Env, userId: string, now: number, filt
     env.DB.prepare(`${CANDIDATES} AND c.state = 2 ORDER BY c.due LIMIT ${CANDIDATE_LIMIT}`).bind(userId, now, category),
     env.DB.prepare(`${CANDIDATES} AND c.state = 0 ORDER BY c.created_at LIMIT ${CANDIDATE_LIMIT}`).bind(userId, now, category),
     env.DB.prepare(
-      `SELECT r.card_id, c.concept_id, json_extract(r.prev_card, '$.state') AS prev_state
+      `SELECT r.card_id, c.concept_id, c.origin, json_extract(r.prev_card, '$.state') AS prev_state
          FROM review_logs r JOIN cards c ON c.id = r.card_id
         WHERE r.user_id = ?1 AND r.reviewed_at >= ?2`,
     ).bind(userId, dayStart),
@@ -109,9 +117,10 @@ export async function loadTodayQueue(env: Env, userId: string, now: number, filt
   ]);
   const candidates = [...learning!.results, ...review!.results, ...fresh!.results] as unknown as CandidateRow[];
 
-  const logs = today!.results as { card_id: string; concept_id: string; prev_state: number }[];
+  const logs = today!.results as { card_id: string; concept_id: string; origin: string; prev_state: number }[];
   const limitsRow = user!.results[0] as { daily_new_limit: number; daily_review_limit: number } | undefined;
-  const newCards = new Set(logs.filter((log) => log.prev_state === 0).map((log) => log.card_id));
+  // 자료를 처음 푼 카드는 하루 새 카드 상한에 넣지 않는다. 자료 풀기는 상한과 따로 간다
+  const newCards = new Set(logs.filter((log) => log.prev_state === 0 && log.origin !== 'material').map((log) => log.card_id));
   const reviewCards = new Set(logs.filter((log) => log.prev_state === 2).map((log) => log.card_id));
   const picked = selectQueue(candidates, {
     newLimit: limitsRow?.daily_new_limit ?? 10,
@@ -128,19 +137,30 @@ export async function loadTodayQueue(env: Env, userId: string, now: number, filt
  * 자료 하나를 푼다 ("이 자료 풀기"). 그 자료에서 만든 카드 중 지금 풀 수 있는 것을, 이미 푼 것(복습할 때가 된 것) → 아직 안 푼 것 순으로 준다.
  * 사용자가 직접 고른 학습이라 하루 새 카드 상한과 "같은 개념 하루 1장"은 적용하지 않는다. 사다리(잠긴 단계)는 그대로다.
  */
-export async function loadMaterialQueue(env: Env, userId: string, material: string, now: number, size: number): Promise<QueueCard[]> {
-  const { results } = await env.DB.prepare(
-    `SELECT c.id, c.concept_id, c.state, c.due, c.created_at, c.type, c.rung, c.prompt, c.code, c.answer, c.options, c.explain,
-            c.checklist, c.stability, c.difficulty, c.elapsed_days, c.scheduled_days, c.learning_steps, c.reps, c.lapses,
-            c.last_review, k.key AS concept_key, k.name AS concept_name, k.final_answer
-       FROM cards c JOIN concepts k ON k.id = c.concept_id JOIN learning_sessions s ON s.id = c.session_id
-      WHERE c.user_id = ?1 AND s.user_id = ?1 AND s.material = ?2 AND c.status = 'active' AND c.due <= ?3
-      ORDER BY (c.state = 0), c.due, s.created_at, c.created_at
-      LIMIT ?4`,
-  )
-    .bind(userId, material, now, size)
-    .all<CandidateRow>();
-  return results.map((row) => toQueueCard(row, now));
+export async function loadMaterialQueue(
+  env: Env,
+  userId: string,
+  material: string,
+  now: number,
+  size: number,
+): Promise<{ cards: QueueCard[]; remaining: number }> {
+  const from = `FROM cards c JOIN concepts k ON k.id = c.concept_id JOIN learning_sessions s ON s.id = c.session_id
+      WHERE c.user_id = ?1 AND s.user_id = ?1 AND s.material = ?2 AND c.status = 'active' AND c.due <= ?3`;
+  const [rows, count] = await env.DB.batch([
+    env.DB.prepare(
+      `SELECT c.id, c.concept_id, c.state, c.due, c.created_at, c.type, c.rung, c.prompt, c.code, c.answer, c.options, c.explain,
+              c.checklist, c.stability, c.difficulty, c.elapsed_days, c.scheduled_days, c.learning_steps, c.reps, c.lapses,
+              c.last_review, k.key AS concept_key, k.name AS concept_name, k.final_answer
+         ${from}
+        ORDER BY (c.state = 0), c.due, s.created_at, c.created_at
+        LIMIT ?4`,
+    ).bind(userId, material, now, size),
+    env.DB.prepare(`SELECT count(*) AS n ${from}`).bind(userId, material, now),
+  ]);
+  return {
+    cards: (rows!.results as unknown as CandidateRow[]).map((row) => toQueueCard(row, now)),
+    remaining: (count!.results[0] as { n: number } | undefined)?.n ?? 0,
+  };
 }
 
 function toQueueCard(row: CandidateRow, now: number): QueueCard {

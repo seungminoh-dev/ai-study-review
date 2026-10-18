@@ -57,12 +57,12 @@ export async function chatQueue(
   now: number,
   filter: { category?: string | null | undefined; material?: string | undefined } = {},
 ): Promise<{ questions: ChatQuestion[]; remaining: number }> {
-  const queue = filter.material
+  const { cards, remaining } = filter.material
     ? await loadMaterialQueue(env, userId, filter.material, now, size)
-    : await loadTodayQueue(env, userId, now, { category: normalizeCategory(filter.category) });
+    : await loadTodayQueue(env, userId, now, { category: normalizeCategory(filter.category) }).then((queue) => ({ cards: queue, remaining: queue.length }));
   return {
-    remaining: queue.length,
-    questions: queue.slice(0, size).map((card) => ({
+    remaining,
+    questions: cards.slice(0, size).map((card) => ({
       card_id: card.id,
       concept: card.concept_name,
       type: card.type,
@@ -145,10 +145,10 @@ export async function chatSubmit(
     .first();
   if (recent) return { kind: 'duplicate' };
   // 오늘 복습할 카드만 받는다. 앱에서 이미 푼 카드, 어제 목록의 카드, 아직 때가 안 된 카드를 다시 채점하지 않는다
-  // 아직 안 푼 자료 카드는 오늘 큐에 없다. "이 자료 풀기"로 낸 문제라 따로 받는다
+  // 자료 카드는 "이 자료 풀기"로도 낸다. 그 큐는 하루 상한을 안 따르니, 때가 된 자료 카드면 오늘 큐에 없어도 받는다
   const queue = await loadTodayQueue(env, userId, now);
-  const unsolvedMaterial = card.origin === 'material' && card.state === 0 && card.due <= now;
-  if (!unsolvedMaterial && !queue.some((item) => item.id === card.id)) return { kind: 'not_due' };
+  const dueMaterial = card.origin === 'material' && card.due <= now;
+  if (!dueMaterial && !queue.some((item) => item.id === card.id)) return { kind: 'not_due' };
 
   let grade: ReviewGrade;
   let correct: boolean | null = null;
@@ -176,7 +176,6 @@ export async function chatSubmit(
     response = picked;
     grade = gradeAnswer({ correct, elapsedMs: 0, easy: input.easy, confidence: input.confidence });
   }
-
 
   const review = { id: crypto.randomUUID(), card_id: card.id, grade, response: response.slice(0, 2000), reviewed_at: now };
   const recorded = await recordReviews(env, userId, [card.type !== 'explain' && input.confidence ? { ...review, confidence: input.confidence } : review], now);

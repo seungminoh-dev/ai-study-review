@@ -60,12 +60,15 @@ interface StatsRow {
   adopted: number;
 }
 
+/** 아직 안 푼 자료 카드는 개념 상태에 넣지 않는다. 풀기 전에는 익숙함을 흔들림으로 바꾸지 않는다 */
+const SOLVABLE = "NOT (c.origin = 'material' AND c.state = 0)";
+
 export function statsQuery(env: Env, ids: readonly string[], now: number): D1PreparedStatement {
   return env.DB.prepare(
     `SELECT k.value AS id,
             (SELECT count(*) FROM cards c WHERE c.concept_id = k.value) AS cards,
-            (SELECT count(*) FROM cards c WHERE c.concept_id = k.value AND c.status = 'active') AS active,
-            (SELECT count(*) FROM cards c WHERE c.concept_id = k.value AND c.status = 'active' AND c.stability < ${LADDER_STABILITY_DAYS}) AS unstable,
+            (SELECT count(*) FROM cards c WHERE c.concept_id = k.value AND c.status = 'active' AND ${SOLVABLE}) AS active,
+            (SELECT count(*) FROM cards c WHERE c.concept_id = k.value AND c.status = 'active' AND ${SOLVABLE} AND c.stability < ${LADDER_STABILITY_DAYS}) AS unstable,
             (SELECT count(*) FROM cards c JOIN review_logs r ON r.card_id = c.id
               WHERE c.concept_id = k.value AND r.grade = 1 AND r.reviewed_at >= ?2) AS recent_fails,
             (SELECT adopted_at IS NOT NULL FROM concepts WHERE id = k.value) AS adopted

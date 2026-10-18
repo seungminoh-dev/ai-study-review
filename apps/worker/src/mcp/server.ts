@@ -326,11 +326,14 @@ function buildServer(deps: McpDeps): McpServer {
       title: '분류 바꾸기',
       description: UPDATE_CATEGORIES_DESCRIPTION,
       inputSchema: UpdateCategoriesSchema,
-      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+      // 기존 분류를 한꺼번에 바꾸므로 클라이언트가 부를 때마다 확인을 받게 한다
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
     },
     async (input) => {
       const result = await updateCategories(deps.env, deps.userId, input, Date.now());
-      return { content: text(`개념 ${result.assigned}개의 분류를 정하고, ${result.renamed}개를 새 분류로 옮겼어요.`), structuredContent: result };
+      const lines = [`개념 ${result.assigned}개의 분류를 정하고, ${result.renamed}개를 새 분류로 옮겼어요.`];
+      if (result.moves.length > 0) lines.push(...result.moves.slice(0, 50).map((move) => `- ${move.from} → ${move.to}`));
+      return { content: text(lines.join('\n')), structuredContent: { ...result } };
     },
   );
 

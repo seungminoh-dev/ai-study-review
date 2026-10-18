@@ -2,6 +2,7 @@ import { normalizeCategory } from '@moai/shared';
 import type { Env } from '../env';
 import { DAY_MS } from '../lib/kst';
 import { pickTopicConcepts } from './learner-context';
+import { categoryClause } from './queue';
 
 // 꼬리물기 모의면접 (설계서 §2.4): 연결된 개념을 이어서 묻는다. 흔들리는 개념에서 시작해 연결선을 따라간다.
 
@@ -34,7 +35,7 @@ export async function interviewChain(
     env.DB.prepare(
       `SELECT id, key, name, search_text FROM concepts
         WHERE user_id = ?1 AND adopted_at IS NOT NULL
-          AND (?2 IS NULL OR domain = ?2 OR substr(domain, 1, length(?2) + 1) = ?2 || '/') LIMIT 5000`,
+          AND ${categoryClause('domain', '?2')} LIMIT 5000`,
     ).bind(userId, category),
     env.DB.prepare('SELECT from_id, to_id, type FROM edges WHERE user_id = ?1 LIMIT 5000').bind(userId),
     // 최근에 틀린 횟수가 많은 개념이 먼저다

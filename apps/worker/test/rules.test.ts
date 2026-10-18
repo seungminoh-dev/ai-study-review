@@ -51,7 +51,7 @@ describe('selectQueue (설계서 §9.2)', () => {
   });
 });
 
-const ladder = (id: string, concept: string, rung: number, status: string, stability: number): LadderCard => ({ id, concept_id: concept, rung, status, stability });
+const ladder = (id: string, concept: string, rung: number, status: string, stability: number, origin = 'study', state = 2): LadderCard => ({ id, concept_id: concept, rung, status, stability, origin, state });
 
 describe('cardsToUnlock (설계서 §9.4)', () => {
   it('opens the lowest locked rung above the open one when every open card is stable', () => {
@@ -66,6 +66,12 @@ describe('cardsToUnlock (설계서 §9.4)', () => {
     const cards = [ladder('a', 'x', 1, 'active', 9), ladder('e', 'x', 3, 'locked', 0)];
     expect(cardsToUnlock(cards)).toEqual(['e']);
     expect(cardsToUnlock(cards, 2)).toEqual([]);
+  });
+
+  it('does not let unsolved material cards hold the ladder, but does not open a rung nobody has solved', () => {
+    expect(cardsToUnlock([ladder('a', 'x', 1, 'active', 8), ladder('m', 'x', 1, 'active', 0, 'material', 0), ladder('c', 'x', 2, 'locked', 0)])).toEqual(['c']);
+    expect(cardsToUnlock([ladder('m', 'x', 1, 'active', 0, 'material', 0), ladder('c', 'x', 2, 'locked', 0)])).toEqual([]);
+    expect(cardsToUnlock([ladder('a', 'x', 1, 'active', 8), ladder('m', 'x', 1, 'active', 2, 'material', 1), ladder('c', 'x', 2, 'locked', 0)])).toEqual([]);
   });
 
   it('opens the lowest locked rung when every card of a concept is turned off', () => {

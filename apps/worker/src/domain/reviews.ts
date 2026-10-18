@@ -33,7 +33,7 @@ export async function recordReviews(
     env.DB.prepare('SELECT id FROM review_logs WHERE user_id = ?1 AND id IN (SELECT value FROM json_each(?2))').bind(userId, ids),
     // 답한 카드와 같은 개념의 카드를 모두 읽는다. 사다리 검사에 필요하다
     env.DB.prepare(
-      `SELECT id, concept_id, rung, status, created_at, due, stability, difficulty, elapsed_days, scheduled_days,
+      `SELECT id, concept_id, rung, status, origin, created_at, due, stability, difficulty, elapsed_days, scheduled_days,
               learning_steps, reps, lapses, state, last_review
          FROM cards
         WHERE user_id = ?1 AND concept_id IN (SELECT concept_id FROM cards WHERE user_id = ?1 AND id IN (SELECT value FROM json_each(?2)))`,
@@ -135,7 +135,7 @@ export async function recordReviews(
  */
 export async function setCardSuspended(env: Env, userId: string, cardId: string, suspended: boolean, now: number): Promise<boolean> {
   const { results } = await env.DB.prepare(
-    'SELECT id, concept_id, rung, status, stability, type FROM cards WHERE user_id = ?2 AND concept_id = (SELECT concept_id FROM cards WHERE id = ?1 AND user_id = ?2)',
+    'SELECT id, concept_id, rung, status, stability, origin, state, type FROM cards WHERE user_id = ?2 AND concept_id = (SELECT concept_id FROM cards WHERE id = ?1 AND user_id = ?2)',
   )
     .bind(cardId, userId)
     .all<LadderCard & { type: string }>();

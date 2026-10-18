@@ -59,10 +59,13 @@ export function Review({ size, category, material }: { size: number; category?: 
         if (material) params.set('material', material);
         const queue = await request<QueueResponse>(`/queue?${params}`);
         const cards = queue.cards.filter((card) => !pending.has(card.id)).slice(0, size);
-        await cacheQueue(cards);
+        // 오프라인용으로는 오늘 큐 전체만 남긴다. 분류·자료로 거른 큐를 남기면 다음 오프라인 복습이 그 카드만 낸다
+        if (!category && !material) await cacheQueue(cards);
         if (!cancelled) setLoad({ state: 'ready', cards, offline: false });
       } catch (error) {
-        if (error instanceof OfflineError) {
+        if (error instanceof OfflineError && (category || material)) {
+          if (!cancelled) setLoad({ state: 'error', message: '인터넷에 연결되지 않았어요. 분류·자료별 복습은 연결된 뒤에 할 수 있어요.' });
+        } else if (error instanceof OfflineError) {
           const cards = (await cachedQueue()).slice(0, size);
           if (!cancelled) setLoad(cards.length > 0 ? { state: 'ready', cards, offline: true } : { state: 'error', message: '인터넷에 연결되지 않았고, 저장해 둔 카드도 없어요.' });
         } else if (!cancelled) setLoad({ state: 'error', message: errorMessage(error) });

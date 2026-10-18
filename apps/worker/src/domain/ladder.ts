@@ -11,11 +11,17 @@ export interface LadderCard {
   rung: number;
   status: string;
   stability: number;
+  origin: string;
+  state: number;
 }
+
+/** 자료에서 나와 아직 한 번도 안 푼 카드. 오늘 복습에 안 나오니 사다리를 막지 않는다 */
+const unsolvedMaterial = (card: LadderCard) => card.origin === 'material' && card.state === 0;
 
 /**
  * 개념마다, 지금 열린 가장 높은 단계 r의 활성 카드가 모두 익었으면
  * r보다 높은 잠긴 단계 중 가장 낮은 단계의 카드를 연다. 활성 카드가 하나도 없으면(모두 꺼짐) 가장 낮은 잠긴 단계를 연다.
+ * 아직 안 푼 자료 카드는 익었는지 따지지 않는다. 그 단계에 그런 카드만 있으면 아직 열지 않는다.
  */
 export function cardsToUnlock(cards: readonly LadderCard[], maxRung = MAX_OPEN_RUNG): string[] {
   const byConcept = new Map<string, LadderCard[]>();
@@ -28,8 +34,10 @@ export function cardsToUnlock(cards: readonly LadderCard[], maxRung = MAX_OPEN_R
   for (const list of byConcept.values()) {
     const active = list.filter((card) => card.status === 'active');
     const open = active.reduce((max, card) => Math.max(max, card.rung), 0);
-    const ripe = active.filter((card) => card.rung === open).every((card) => card.stability >= LADDER_STABILITY_DAYS);
-    if (!ripe) continue;
+    const atOpen = active.filter((card) => card.rung === open);
+    const solved = atOpen.filter((card) => !unsolvedMaterial(card));
+    if (atOpen.length > 0 && solved.length === 0) continue;
+    if (!solved.every((card) => card.stability >= LADDER_STABILITY_DAYS)) continue;
     const locked = list.filter((card) => card.status === 'locked' && card.rung > open && card.rung <= maxRung);
     if (locked.length === 0) continue;
     const next = Math.min(...locked.map((card) => card.rung));

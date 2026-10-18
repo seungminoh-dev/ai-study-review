@@ -10,7 +10,8 @@ export const library = new Hono<AppEnv>();
 
 interface MaterialRow {
   title: string;
-  parts: string | null;
+  /** JSON 배열. 범위 이름에 쉼표가 있어도 갈라지지 않게 group_concat 대신 쓴다 */
+  parts: string;
   cards: number;
   solved: number;
   unsolved_open: number;
@@ -21,7 +22,7 @@ interface MaterialRow {
 
 library.get('/materials', async (c) => {
   const { results } = await c.env.DB.prepare(
-    `SELECT s.material AS title, group_concat(DISTINCT s.material_part) AS parts, min(s.created_at) AS created_at,
+    `SELECT s.material AS title, json_group_array(DISTINCT s.material_part) AS parts, min(s.created_at) AS created_at,
             count(c.id) AS cards,
             sum(EXISTS (SELECT 1 FROM review_logs r WHERE r.card_id = c.id)) AS solved,
             sum(c.state = 0 AND c.status = 'active') AS unsolved_open,
@@ -33,7 +34,10 @@ library.get('/materials', async (c) => {
   )
     .bind(c.var.userId)
     .all<MaterialRow>();
-  const materials: MaterialSummary[] = results.map((row) => ({ ...row, parts: row.parts ? row.parts.split(',').filter(Boolean) : [] }));
+  const materials: MaterialSummary[] = results.map((row) => ({
+    ...row,
+    parts: (JSON.parse(row.parts) as (string | null)[]).filter((part): part is string => typeof part === 'string' && part !== ''),
+  }));
   return c.json({ materials });
 });
 
