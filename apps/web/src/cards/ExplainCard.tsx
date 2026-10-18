@@ -17,17 +17,25 @@ export function ExplainCard({
   card,
   onGrade,
   aiPanel,
+  onReveal,
 }: {
   card: QueueCard;
   onGrade: (grade: ReviewGrade, text: string) => void;
   /** 답을 본 뒤에 보여 줄 AI 채점 영역 (없으면 자가 채점만) */
   aiPanel?: (text: string, suggest: (grade: ReviewGrade) => void) => ReactNode;
+  /** 내 최종 버전을 펼쳤을 때. 컴퓨터의 개념 패널이 이때 열린다 */
+  onReveal?: () => void;
 }) {
   const [text, setText] = useState('');
   const [revealed, setRevealed] = useState(false);
   const [checked, setChecked] = useState<Set<number>>(new Set());
   const [suggested, setSuggested] = useState<ReviewGrade | null>(null);
   const area = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    // 펼친 순간에 한 번만 알린다
+    if (revealed) onReveal?.();
+  }, [revealed]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {

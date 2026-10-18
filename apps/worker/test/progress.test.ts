@@ -51,6 +51,40 @@ describe('streak', () => {
   });
 });
 
+// 배지는 처음 이룬 것만 DB에 넣는다 (되돌리지 않는다)
+describe('badges', () => {
+  const byId = (stats: StatsResponse) => new Map(stats.badges.map((badge) => [badge.id, badge]));
+  const firstCard = () => env.DB.prepare('SELECT id FROM cards WHERE user_id = ?1 LIMIT 1').bind(user.id).first<string>('id');
+
+  it('records a badge once at the moment it was reached, including ones reached before', async () => {
+    await callTool(await mcpUrl(user), 'save_learning', example);
+    const now = Date.now();
+    // 열흘 전의 첫 복습은 그날로 채운다
+    await reviewedOn((await firstCard())!, 10, 1, now);
+    const first = byId(await loadStats(env, user.id, now));
+    expect(first.get('first_save')).toMatchObject({ earned_at: expect.any(Number), value: 1, target: 1 });
+    expect(first.get('first_review')).toMatchObject({ earned_at: studyDayStart(now) - 10 * DAY_MS + 3_600_000 });
+    expect(first.get('reviews_100')).toEqual({ id: 'reviews_100', earned_at: null, value: 1, target: 100 });
+
+    const again = byId(await loadStats(env, user.id, now));
+    expect(again.get('first_save')!.earned_at).toBe(first.get('first_save')!.earned_at);
+    expect(await env.DB.prepare('SELECT count(*) AS n FROM badges WHERE user_id = ?1').bind(user.id).first('n')).toBe(2);
+  });
+
+  it('keeps a streak badge after the daily goal goes up', async () => {
+    await callTool(await mcpUrl(user), 'save_learning', example);
+    const card = (await firstCard())!;
+    await env.DB.prepare('UPDATE users SET daily_goal = 1 WHERE id = ?1').bind(user.id).run();
+    const now = Date.UTC(2026, 9, 14, 3, 0); // 12:00 KST
+    for (const daysAgo of [2, 1, 0]) await reviewedOn(card, daysAgo, 1, now);
+    expect(byId(await loadStats(env, user.id, now)).get('streak_3')).toMatchObject({ earned_at: studyDayStart(now), value: 3 });
+
+    await env.DB.prepare('UPDATE users SET daily_goal = 10 WHERE id = ?1').bind(user.id).run();
+    // 목표를 올리면 지난날은 목표를 못 채운 날이 되지만, 받은 배지는 남는다
+    expect(byId(await loadStats(env, user.id, now)).get('streak_3')).toMatchObject({ earned_at: studyDayStart(now), value: 0 });
+  });
+});
+
 describe('map', () => {
   it('shows my concepts with states and edges, and a continue prompt for each concept', async () => {
     await callTool(await mcpUrl(user), 'save_learning', example);

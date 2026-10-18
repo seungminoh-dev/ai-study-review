@@ -19,6 +19,8 @@ export default defineConfig({
         // 모든 브라우저에서 등록되도록 모듈이 아닌 일반 스크립트로 만든다
         rollupFormat: 'iife',
         globPatterns: ['**/*.{js,css,html,png,svg,webmanifest}'],
+        // 링크 미리보기 그림은 앱에서 쓰지 않는다. 글꼴(woff2)은 화면에 나온 글자 조각만 그때그때 받는다
+        globIgnores: ['og.png'],
       },
       manifest: {
         name: '모아이',

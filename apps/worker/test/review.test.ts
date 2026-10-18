@@ -54,9 +54,9 @@ describe('today and queue', () => {
     const { cards } = (await (await api(user, '/queue')).json()) as QueueResponse;
     const reviews = cards.map((card) => answer(card.id, 3));
     const first = await api(user, '/reviews', { method: 'POST', json: { reviews } });
-    expect(await first.json()).toEqual({ recorded: 3, skipped: 0, rejected: 0, unlocked: 0 });
+    expect(await first.json()).toEqual({ recorded: 3, skipped: 0, rejected: 0, unlocked: 0, level_ups: [] });
     const again = await api(user, '/reviews', { method: 'POST', json: { reviews } });
-    expect(await again.json()).toEqual({ recorded: 0, skipped: 3, rejected: 0, unlocked: 0 });
+    expect(await again.json()).toEqual({ recorded: 0, skipped: 3, rejected: 0, unlocked: 0, level_ups: [] });
 
     const today = (await (await api(user, '/today')).json()) as TodayResponse;
     expect(today).toMatchObject({ remaining: 0, reviewed_today: 3 });
@@ -109,7 +109,7 @@ describe('today and queue', () => {
     const mcq = await cardOf('deep-copy', 'mcq');
     const reviews = [{ ...answer(mcq.id, 3), elapsed_ms: 5 * 3_600_000 }, { ...answer(mcq.id, 3), grade: 9 }, 'not an answer'];
     const response = await api(user, '/reviews', { method: 'POST', json: { reviews } });
-    expect(await response.json()).toEqual({ recorded: 1, skipped: 0, rejected: 2, unlocked: 0 });
+    expect(await response.json()).toEqual({ recorded: 1, skipped: 0, rejected: 2, unlocked: 0, level_ups: [] });
     const log = await env.DB.prepare('SELECT elapsed_ms FROM review_logs WHERE card_id = ?1').bind(mcq.id).first('elapsed_ms');
     expect(log).toBe(3_600_000);
   });
@@ -163,7 +163,7 @@ describe('today and queue', () => {
     const card = await cardOf('deep-copy', 'mcq');
     const other = await newUser();
     const response = await api(other, '/reviews', { method: 'POST', json: { reviews: [answer(card.id, 3)] } });
-    expect(await response.json()).toEqual({ recorded: 0, skipped: 1, rejected: 0, unlocked: 0 });
+    expect(await response.json()).toEqual({ recorded: 0, skipped: 1, rejected: 0, unlocked: 0, level_ups: [] });
   });
 });
 
@@ -185,7 +185,12 @@ describe('card ladder', () => {
     await env.DB.prepare('UPDATE cards SET state = 2, stability = 30, difficulty = 5, reps = 3, last_review = ?2, due = ?2 WHERE id = ?1')
       .bind(mcq.id, now - 20 * 86_400_000)
       .run();
-    expect(await recordReviews(env, user.id, [answer(mcq.id, 3, now)], now)).toMatchObject({ recorded: 1, unlocked: 1 });
+    // 끝 화면의 LEVEL UP에 쓰는 개념 이름과 새로 열린 단계
+    expect(await recordReviews(env, user.id, [answer(mcq.id, 3, now)], now)).toMatchObject({
+      recorded: 1,
+      unlocked: 1,
+      level_ups: [{ concept_key: 'deep-copy', concept_name: '깊은 복사', rung: 2 }],
+    });
     expect(await cardOf('deep-copy', 'cloze')).toMatchObject({ status: 'active', due: now });
   });
 

@@ -28,6 +28,10 @@ export function Settings({ me, onLogout }: { me: Me; onLogout: () => void }) {
       <AccountSection me={me} onLogout={onLogout} />
       <CoachSection />
       <DataSection me={me} onDeleted={onLogout} />
+      <p className="legal-links small">
+        <Link href="/privacy">개인정보 처리방침</Link>
+        <Link href="/terms">이용약관</Link>
+      </p>
       {/* 오너만 쓰는 것은 내 설정과 섞이지 않게 맨 아래에 모은다 */}
       {me.role === 'owner' ? (
         <div className="admin">

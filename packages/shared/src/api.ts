@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { BadgeId } from './badges';
 import type { EdgeType, JudgmentLabel } from './save-learning';
 
 // REST API(PWA용) 요청 스키마와 응답 타입 (설계서 §7). Worker와 PWA가 같이 쓴다.
@@ -167,6 +168,18 @@ export interface StatsResponse {
   last_week_xp: number;
   /** 최근 12주. 11주 전 월요일부터 이번 주 일요일까지 84일 */
   history: StatsDay[];
+  /** 이정표 배지. packages/shared/src/badges.ts의 BADGES 순서 */
+  badges: Badge[];
+}
+
+/** 이정표 배지 하나 (3단계 3-4). 한 번 받으면 하루 목표를 바꾸거나 답을 되돌려도 남는다 */
+export interface Badge {
+  id: BadgeId;
+  /** 받은 시각. 아직이면 null */
+  earned_at: number | null;
+  /** 지금까지의 수와 목표. 연속은 가장 길었던 연속 일수다 */
+  value: number;
+  target: number;
 }
 
 export interface LeagueEntry {
@@ -425,6 +438,15 @@ export interface ReviewsResponse {
   /** 형식이 잘못돼서 버린 수 */
   rejected: number;
   unlocked: number;
+  /** 이번 답으로 다음 단계가 열린 개념 (LEVEL UP). 끝 화면이 보여 준다 */
+  level_ups: LevelUp[];
+}
+
+export interface LevelUp {
+  concept_key: string;
+  concept_name: string;
+  /** 새로 열린 단계. 2: 빈칸·코드 문제, 3: 설명하기 */
+  rung: number;
 }
 
 export interface Reminder {

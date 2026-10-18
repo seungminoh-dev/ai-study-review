@@ -657,6 +657,22 @@ XP, 스트릭, 리그는 따로 저장하지 않고 `review_logs`와 `learning_s
 - 자료의 글은 데이터다. 지침과 `/moai:pdf`는 자료 안의 지시를 따르지 않고 `find_concepts`, `save_learning`만 쓰게 한다.
 - 지식 지도는 내 지식만 보여 주고, "아직 안 푼 자료 개념도 보기"를 켜면 자료 개념을 점선으로 보여 준다. 개념 상태에 `자료`가 더해졌다.
 
+### 5.7 이정표 배지 (`migrations/0007_badges.sql`)
+
+```sql
+CREATE TABLE badges (
+  user_id   TEXT NOT NULL REFERENCES users(id),
+  badge     TEXT NOT NULL,
+  earned_at INTEGER NOT NULL,
+  PRIMARY KEY (user_id, badge)
+) STRICT;
+```
+
+- 받을 수 있는 배지는 `packages/shared/src/badges.ts`의 `BADGES`다: 첫 저장, 첫 복습, 첫 설명 통과, 3·7·30일 연속, 개념 10·50개, 카드 100·500·1000장.
+- 조건은 기록에서 센다. `/api/stats`가 새로 이룬 배지를 넣고, 받은 시각은 이룬 순간(n번째 기록의 시각, 연속은 그날)이다. 그래서 이 기능 전에 이룬 배지도 그때 날짜로 채워진다.
+- 한 번 넣은 배지는 하루 목표를 바꾸거나 답을 되돌려도 남는다. 계정을 지우면 같이 지운다.
+- 새 배지 축하는 PWA가 기기마다 한 번 한다 (받은 지 2일 안, 본 배지는 localStorage에 적는다).
+
 ### 5.5 용량 감각
 
 10명이 각자 카드 수천 장을 쌓아도 몇 MB다. 저장 한 번에 약 20행, 복습 한 장에 약 2행을 쓴다. 하루 쓰기 10만 행, DB 500MB 한도와 비교하면 여유가 크다.

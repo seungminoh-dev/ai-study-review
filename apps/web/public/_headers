@@ -7,3 +7,7 @@
 
 /sw.js
   Cache-Control: no-cache
+
+# Vite가 내용 해시를 이름에 넣은 파일(JS, CSS, 글꼴)이라 오래 둬도 된다. 바뀌면 이름이 바뀐다
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable

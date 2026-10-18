@@ -141,7 +141,11 @@ export function Landing({ github }: { github: boolean }) {
         {start('button accent')}
       </section>
 
-      <footer className="landing-footer">© 모아이</footer>
+      <footer className="landing-footer">
+        <span>© 모아이</span>
+        <Link href="/privacy">개인정보 처리방침</Link>
+        <Link href="/terms">이용약관</Link>
+      </footer>
     </div>
   );
 }

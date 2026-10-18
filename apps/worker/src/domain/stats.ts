@@ -1,5 +1,6 @@
 import type { LeagueEntry, StatsResponse } from '@moai/shared';
 import type { Env } from '../env';
+import { badgeReads, settleBadges } from './badges';
 import { DAY_MS, STUDY_DAY_SHIFT, studyDayIndex, studyDayKey, studyWeekStart, studyWeekday } from '../lib/kst';
 
 // 스트릭·XP·리그 (설계서 §9.6). 따로 저장하지 않고 review_logs와 learning_sessions에서 센다. 프리즈만 저장한다.
@@ -19,7 +20,7 @@ interface DayRow {
 export async function loadStats(env: Env, userId: string, now: number): Promise<StatsResponse> {
   const today = studyDayIndex(now);
   const since = (today - LOOKBACK_DAYS) * DAY_MS - STUDY_DAY_SHIFT;
-  const [reviews, sessions, freezes, user] = await env.DB.batch([
+  const [reviews, sessions, freezes, user, ...badgeRows] = await env.DB.batch([
     env.DB.prepare(
       `SELECT CAST((r.reviewed_at + ?3) / ${DAY_MS} AS INTEGER) AS d, count(*) AS n, sum(${REVIEW_XP}) AS xp
          FROM review_logs r JOIN cards c ON c.id = r.card_id
@@ -31,6 +32,7 @@ export async function loadStats(env: Env, userId: string, now: number): Promise<
     ).bind(userId, since, STUDY_DAY_SHIFT),
     env.DB.prepare('SELECT day FROM streak_freezes WHERE user_id = ?1').bind(userId),
     env.DB.prepare('SELECT daily_goal FROM users WHERE id = ?1').bind(userId),
+    ...badgeReads(env, userId),
   ]);
   const goal = (user!.results[0] as { daily_goal: number } | undefined)?.daily_goal ?? 5;
   const reviewed = new Map((reviews!.results as unknown as DayRow[]).map((row) => [row.d, row]));
@@ -58,19 +60,27 @@ export async function loadStats(env: Env, userId: string, now: number): Promise<
       break;
     }
   }
+  const writes: D1PreparedStatement[] = [];
   if (newFreezes.length > 0) {
-    await env.DB.prepare('INSERT OR IGNORE INTO streak_freezes (user_id, day) SELECT ?1, value FROM json_each(?2)')
-      .bind(userId, JSON.stringify(newFreezes))
-      .run();
+    writes.push(env.DB.prepare('INSERT OR IGNORE INTO streak_freezes (user_id, day) SELECT ?1, value FROM json_each(?2)').bind(userId, JSON.stringify(newFreezes)));
   }
 
-  // 가장 긴 연속: 스트릭과 같은 규칙으로 센다. 프리즈한 날은 끊지도 늘리지도 않고, 아직 안 채운 오늘은 끊지 않는다
+  // 가장 긴 연속: 스트릭과 같은 규칙으로 센다. 프리즈한 날은 끊지도 늘리지도 않고, 아직 안 채운 오늘은 끊지 않는다.
+  // 연속 배지를 위해 처음 n일 이어진 날도 적어 둔다
   let best = 0;
   let run = 0;
+  const reached = new Map<number, number>();
   for (let day = today - LOOKBACK_DAYS + 1; day <= today; day += 1) {
-    if (met(day)) best = Math.max(best, (run += 1));
-    else if (!frozen.has(studyDayKey(day)) && day !== today) run = 0;
+    if (met(day)) {
+      best = Math.max(best, (run += 1));
+      if (!reached.has(run)) reached.set(run, day * DAY_MS - STUDY_DAY_SHIFT);
+    } else if (!frozen.has(studyDayKey(day)) && day !== today) {
+      run = 0;
+    }
   }
+  const { badges, insert } = settleBadges(env, userId, now, badgeRows, { best: Math.max(best, streak), reached });
+  if (insert) writes.push(insert);
+  if (writes.length > 0) await env.DB.batch(writes);
 
   const dayOf = (day: number) => ({
     day: studyDayKey(day),
@@ -91,6 +101,7 @@ export async function loadStats(env: Env, userId: string, now: number): Promise<
     best_streak: Math.max(best, streak),
     last_week_xp: weekXp(monday - 7),
     history: Array.from({ length: 84 }, (_, i) => dayOf(monday - 77 + i)),
+    badges,
   };
 }
 

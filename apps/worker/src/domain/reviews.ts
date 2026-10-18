@@ -1,4 +1,4 @@
-import type { ReviewItem, ReviewsResponse } from '@moai/shared';
+import type { LevelUp, ReviewItem, ReviewsResponse } from '@moai/shared';
 import type { Env } from '../env';
 import { nextFsrsFields, pickFsrsFields, type FsrsFields } from './fsrs';
 import { cardsToUnlock, type LadderCard } from './ladder';
@@ -110,7 +110,7 @@ export async function recordReviews(
     }
     if (updated!.meta.changes < touched.size) {
       // 못 쓴 카드의 답은 기록도 안 됐으니, 다시 읽으면 새 답으로 보인다. 사다리도 새 상태로 다시 본다
-      if (attempt >= MAX_RETRIES) return { recorded, skipped: items.length - recorded, unlocked: 0, conflicted: true };
+      if (attempt >= MAX_RETRIES) return { recorded, skipped: items.length - recorded, unlocked: 0, level_ups: [], conflicted: true };
       const again = await recordReviews(env, userId, items, now, attempt + 1);
       return { ...again, recorded: recorded + again.recorded, skipped: items.length - recorded - again.recorded };
     }
@@ -118,14 +118,21 @@ export async function recordReviews(
 
   // 사다리는 기록이 모두 들어간 뒤의 상태로만 연다. 기록이 밀린 답을 근거로 카드를 열지 않는다
   const unlock = cardsToUnlock([...rows.values()]);
+  const levelUps: LevelUp[] = [];
   if (unlock.length > 0) {
-    await env.DB.prepare(
-      "UPDATE cards SET status = 'active', due = ?3 WHERE user_id = ?1 AND status = 'locked' AND id IN (SELECT value FROM json_each(?2))",
-    )
-      .bind(userId, JSON.stringify(unlock), now)
-      .run();
+    // 끝 화면의 LEVEL UP: 개념마다 새로 열린 단계 하나 (한 번에 한 단계만 열린다)
+    const opened = new Map(unlock.map((id) => [rows.get(id)!.concept_id, rows.get(id)!.rung]));
+    const [, names] = await env.DB.batch([
+      env.DB.prepare(
+        "UPDATE cards SET status = 'active', due = ?3 WHERE user_id = ?1 AND status = 'locked' AND id IN (SELECT value FROM json_each(?2))",
+      ).bind(userId, JSON.stringify(unlock), now),
+      env.DB.prepare('SELECT id, key, name FROM concepts WHERE user_id = ?1 AND id IN (SELECT value FROM json_each(?2))').bind(userId, JSON.stringify([...opened.keys()])),
+    ]);
+    for (const concept of names!.results as { id: string; key: string; name: string }[]) {
+      levelUps.push({ concept_key: concept.key, concept_name: concept.name, rung: opened.get(concept.id)! });
+    }
   }
-  return { recorded, skipped: items.length - recorded, unlocked: unlock.length, conflicted: false };
+  return { recorded, skipped: items.length - recorded, unlocked: unlock.length, level_ups: levelUps, conflicted: false };
 }
 
 /**

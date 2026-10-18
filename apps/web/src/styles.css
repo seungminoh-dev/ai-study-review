@@ -46,7 +46,7 @@
   --heat-4: #c9611f;
   --radius: 16px;
   --tap: 52px;
-  --font: 'Pretendard', 'Pretendard Variable', system-ui, -apple-system, 'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', sans-serif;
+  --font: 'Pretendard Variable', 'Pretendard', system-ui, -apple-system, 'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', sans-serif;
   --mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
 }
 
@@ -2383,6 +2383,11 @@ a.notice.link:active,
 }
 
 .o-hero {
+  order: 1;
+}
+
+/* 새 이정표 축하는 오늘 복습 카드 바로 아래 (같은 order면 놓인 순서를 따른다) */
+.o-badges {
   order: 1;
 }
 
@@ -5045,5 +5050,593 @@ a.notice.link:active,
 @keyframes grow-in {
   from {
     transform: scaleX(0);
+  }
+}
+
+/* 개인정보 처리방침·약관 (3-4). 휴대폰에서도 읽기 쉽게 표 대신 항목 카드를 쓴다 */
+.legal {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  max-width: 720px;
+  width: 100%;
+  margin: 0 auto;
+  padding-bottom: 32px;
+}
+
+.legal-back {
+  align-self: flex-start;
+}
+
+.legal-head {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.legal-head h1 {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.legal-head p {
+  margin: 0;
+}
+
+.legal-kicker {
+  color: var(--accent-ink);
+  font-size: 0.8125rem;
+  font-weight: 800;
+}
+
+.legal-switch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.legal-switch .filter-chip {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+
+.legal-lede {
+  margin: 0;
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  line-height: 1.7;
+}
+
+.legal-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.legal-section h2 {
+  margin: 10px 0 0;
+  font-size: 1.0625rem;
+}
+
+.legal-section p,
+.legal-section ul {
+  margin: 0;
+  line-height: 1.7;
+}
+
+.legal-section ul {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-left: 1.2em;
+}
+
+.legal-section .legal-items {
+  display: grid;
+  gap: 10px;
+  padding: 0;
+  list-style: none;
+}
+
+.legal-items > li {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+.legal-items dl {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.legal-items dl > div {
+  display: grid;
+  grid-template-columns: 5.5em 1fr;
+  gap: 10px;
+}
+
+.legal-items dt {
+  padding-top: 2px;
+  color: var(--muted);
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+.legal-items dd {
+  margin: 0;
+  font-size: 0.9375rem;
+  line-height: 1.6;
+}
+
+@media (min-width: 760px) {
+  .legal-section .legal-items {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.landing-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+}
+
+.landing-footer a,
+.legal-links a {
+  color: inherit;
+}
+
+.legal-links {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  margin: 8px 0 0;
+  color: var(--muted);
+}
+
+/* 복습 화면 몸통 (3-4). 휴대폰은 카드 한 칸, 컴퓨터는 오른쪽에 개념 패널(cards/ConceptPanel.tsx) */
+.review-body,
+.review-main {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.concept-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+@media (min-width: 1024px) {
+  /* 개념 패널이 있을 때만 넓힌다. 끝 화면과 빈 화면은 그대로 좁게 둔다 */
+  .app.review-mode:has(.concept-panel) {
+    max-width: 1160px;
+  }
+
+  .review-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 340px;
+    gap: 28px;
+    align-items: start;
+    margin-top: 16px;
+  }
+
+  .concept-panel {
+    position: sticky;
+    top: 24px;
+    max-height: calc(100dvh - 48px);
+    overflow-y: auto;
+  }
+}
+
+.panel-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--surface);
+}
+
+.panel-card h2,
+.panel-card h3,
+.panel-card p {
+  margin: 0;
+}
+
+.panel-card h2 {
+  font-size: 1.25rem;
+  line-height: 1.35;
+}
+
+.panel-card h3 {
+  font-size: 0.9375rem;
+}
+
+.panel-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.panel-label,
+.panel-sub {
+  color: var(--muted);
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+.panel-locked {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--surface-2);
+}
+
+.panel-locked p {
+  color: var(--muted);
+}
+
+.panel-open,
+.panel-more,
+.panel-block {
+  display: flex;
+  flex-direction: column;
+}
+
+.panel-open,
+.panel-more {
+  gap: 14px;
+}
+
+.panel-block {
+  gap: 6px;
+}
+
+.panel-quote {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.panel-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.panel-questions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding-left: 1.1em;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+}
+
+.panel-card .text-button {
+  align-self: flex-start;
+}
+
+/* 끝 화면의 LEVEL UP (3-4): 다음 단계가 열린 개념과 설명하기 통과 */
+.levelup {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border: 2px solid var(--good-fill);
+  border-radius: 20px;
+  background: var(--good-soft);
+}
+
+.summary > section.levelup {
+  animation-delay: 0.16s;
+}
+
+.levelup-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.levelup-head h2,
+.levelup-head p {
+  margin: 0;
+}
+
+.levelup-head h2 {
+  font-size: 1.0625rem;
+}
+
+.levelup-kicker {
+  color: var(--good);
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+}
+
+.levelup-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.levelup-list li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+.levelup-list .grow {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.4;
+}
+
+.levelup-step {
+  flex-shrink: 0;
+  padding: 3px 8px;
+  border-radius: 8px;
+  background: var(--good-fill);
+  color: #10301c;
+  font-size: 0.75rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.levelup-step.pass {
+  background: var(--pen-soft);
+  color: var(--accent-ink);
+}
+
+/* 이정표 배지 (3-4, badges.tsx). 메달 색은 단계별: 1 크림, 2 주황, 3 남색. 메달은 물건이라 다크 모드에서도 색을 그대로 둔다 */
+.badge-medal {
+  --disc: 64px;
+  --disc-fill: #fff0c7;
+  --disc-ring: #ffbd4a;
+  --ribbon-fill: #192849;
+  --ribbon-text: #fff6e3;
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.badge-medal.size-s {
+  --disc: 48px;
+}
+
+.badge-medal.size-l {
+  --disc: 84px;
+}
+
+.badge-medal[data-tier='2'] {
+  --disc-fill: #ffe7d6;
+  --disc-ring: #ff914d;
+}
+
+.badge-medal[data-tier='3'] {
+  --disc-fill: #192849;
+  --disc-ring: #ffbd4a;
+  --ribbon-fill: #ffbd4a;
+  --ribbon-text: #192849;
+}
+
+/* 남색 메달 위의 마스코트는 랜딩 띠처럼 먹색 테두리와 크림 표시를 쓴다 */
+.badge-medal[data-tier='3'] .mascot {
+  --mascot-line: #070b14;
+  --mascot-mark: #fff0c7;
+}
+
+.badge-disc {
+  display: grid;
+  place-items: center;
+  width: var(--disc);
+  height: var(--disc);
+  padding-top: 4px;
+  border: 3px solid var(--disc-ring);
+  border-radius: 50%;
+  background: var(--disc-fill);
+  box-shadow: 0 3px 0 var(--surface-edge);
+}
+
+.badge-medal:not([data-tier='3']) .mascot {
+  --mascot-line: #192849;
+  --mascot-mark: #192849;
+}
+
+.badge-ribbon {
+  position: relative;
+  margin-top: -12px;
+  padding: 2px 8px;
+  border-radius: 8px;
+  background: var(--ribbon-fill);
+  color: var(--ribbon-text);
+  font-size: 0.6875rem;
+  font-weight: 800;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.badge-medal.locked {
+  --disc-fill: var(--surface-2);
+  --disc-ring: var(--border-strong);
+  --ribbon-fill: var(--border-strong);
+  --ribbon-text: var(--muted);
+}
+
+.badge-medal.locked .badge-disc {
+  box-shadow: none;
+}
+
+.badge-medal.locked .mascot {
+  filter: grayscale(1);
+  opacity: 0.45;
+}
+
+.badge-shelf {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+  gap: 12px 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.badge-shelf li {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 4px 10px;
+  border-radius: 16px;
+  text-align: center;
+}
+
+.badge-shelf strong {
+  font-size: 0.875rem;
+  line-height: 1.3;
+}
+
+.badge-shelf li.locked strong {
+  color: var(--muted);
+}
+
+.badge-shelf li.fresh {
+  background: var(--pen-soft);
+}
+
+.badge-tag {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-family: var(--mono);
+  font-size: 0.625rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.badge-progress {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 72px;
+}
+
+.badge-progress .bar {
+  width: 100%;
+}
+
+/* 새 배지 축하 카드: 오늘 화면, 복습 끝 화면 */
+.badge-new {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px;
+  border: 2px solid var(--accent);
+  border-radius: 20px;
+  background: var(--surface);
+}
+
+.badge-new .confetti {
+  top: 48px;
+}
+
+.badge-new h2,
+.badge-new p {
+  margin: 0;
+}
+
+.badge-new h2 {
+  font-size: 1.125rem;
+}
+
+.badge-new-kicker {
+  color: var(--accent-ink);
+  font-size: 0.8125rem;
+  font-weight: 800;
+}
+
+.badge-new-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.badge-new-list li {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.badge-new-list p {
+  margin-top: 2px;
+}
+
+.badge-new .text-button {
+  align-self: flex-start;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .levelup-list li {
+    animation: rise 0.45s var(--ease-out) both;
+    animation-delay: calc(0.3s + var(--i, 0) * 0.08s);
+  }
+
+  .badge-new {
+    animation: rise 0.5s var(--ease-out) both;
+  }
+
+  .badge-new-list li {
+    animation: badge-pop 0.55s var(--ease-out) both;
+    animation-delay: calc(0.15s + var(--i, 0) * 0.08s);
+  }
+}
+
+@keyframes badge-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+
+  60% {
+    transform: scale(1.06);
   }
 }

@@ -1,5 +1,6 @@
 import type { ConceptStateKey, MapResponse } from '@moai/shared';
 import { useMemo, useState } from 'react';
+import { STATE_LABEL } from '../concept-state';
 import { Loading } from '../Loading';
 import { labelWidth, layoutGraph } from '../map/layout';
 import { Link, navigate } from '../router';
@@ -7,7 +8,6 @@ import { useApi } from '../useApi';
 
 // 지식 지도 (설계서 §9.7): 초록 익숙함, 노랑 흔들림, 회색 점선 아직 안 배움. 점을 누르면 개념 상세로 간다.
 
-export const STATE_LABEL: Record<ConceptStateKey, string> = { familiar: '익숙함', shaky: '흔들림', unlearned: '아직 안 배움', material: '자료 (아직 안 풂)' };
 const ORDER: ConceptStateKey[] = ['shaky', 'unlearned', 'familiar', 'material'];
 
 const topOf = (category: string | null) => (category ? category.split('/')[0]! : null);

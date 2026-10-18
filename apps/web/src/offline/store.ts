@@ -1,5 +1,5 @@
 import { REVIEWS_PER_REQUEST } from '@moai/shared/client';
-import type { QueueCard, ReviewItem } from '@moai/shared';
+import type { LevelUp, QueueCard, ReviewItem, ReviewsResponse } from '@moai/shared';
 import { clear, createStore, get, set, update } from 'idb-keyval';
 import { RequestError, request } from '../api';
 
@@ -53,6 +53,16 @@ const isPermanent = (error: unknown) => error instanceof RequestError && (error.
 
 let flushing: Promise<void> | null = null;
 
+/** 보낸 답으로 다음 단계가 열린 개념. 복습 끝 화면이 가져간다 (앱을 다시 열면 사라진다) */
+let levelUps: LevelUp[] = [];
+
+/** 모아 둔 LEVEL UP을 꺼내고 비운다. 복습을 시작할 때도 불러서 지난 것을 버린다 */
+export function takeLevelUps(): LevelUp[] {
+  const taken = levelUps;
+  levelUps = [];
+  return taken;
+}
+
 /** outbox를 20건씩 보낸다. 실패하면 남겨 두고 다음 기회(online 이벤트, 다음 실행)에 다시 보낸다. */
 export function flushReviews(): Promise<void> {
   flushing ??= (async () => {
@@ -62,7 +72,8 @@ export function flushReviews(): Promise<void> {
         if (items.length === 0) return;
         const batch = items.slice(0, REVIEWS_PER_REQUEST);
         try {
-          await request('/reviews', { method: 'POST', json: { reviews: batch } });
+          const result = await request<ReviewsResponse>('/reviews', { method: 'POST', json: { reviews: batch } });
+          levelUps.push(...(result.level_ups ?? []));
         } catch (error) {
           if (!isPermanent(error)) throw error;
           console.warn('답안 묶음을 서버가 받지 않아서 버렸어요', error);

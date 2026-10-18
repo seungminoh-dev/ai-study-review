@@ -1,11 +1,11 @@
 import type { ConceptDetail } from '@moai/shared';
 import { useState } from 'react';
 import { errorMessage, request } from '../api';
+import { STATE_LABEL } from '../concept-state';
 import { copyText } from '../copy';
 import { Loading } from '../Loading';
 import { BackLink, Link } from '../router';
 import { formatDate, useApi } from '../useApi';
-import { STATE_LABEL } from './MapScreen';
 import { CardRow } from './Sessions';
 
 // 개념 상세 (설계서 §9.7): 상태, 내 최종 버전, 판정 이력, 카드, 연결된 개념, "Claude에서 이어서 공부하기"

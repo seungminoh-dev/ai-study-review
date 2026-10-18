@@ -6,6 +6,8 @@ import './install';
 import { MotionProvider } from './motion';
 import { flushReviews } from './offline/store';
 import { onNavigate } from './router';
+// 윈도우에서도 맑은 고딕 대신 같은 글꼴로 보이게 Pretendard를 직접 올린다
+import './fonts/pretendard/pretendard.css';
 import './styles.css';
 
 createRoot(document.getElementById('root')!).render(

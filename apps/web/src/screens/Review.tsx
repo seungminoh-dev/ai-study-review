@@ -1,11 +1,13 @@
-import type { QueueCard, QueueResponse, ReportReason, ReviewGrade, StatsResponse } from '@moai/shared';
+import type { LevelUp, QueueCard, QueueResponse, ReportReason, ReviewGrade, StatsResponse } from '@moai/shared';
 import type { Confidence } from '@moai/shared/client';
 import { MAX_ELAPSED_MS, gradeAnswer } from '@moai/shared/client';
 import { AnimatePresence } from 'motion/react';
 import * as m from 'motion/react-m';
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { OfflineError, errorMessage, request } from '../api';
+import { NewBadges } from '../badges';
 import { AiGrade } from '../cards/AiGrade';
+import { ConceptPanel, forgetConcepts } from '../cards/ConceptPanel';
 import { ExplainCard } from '../cards/ExplainCard';
 import { QuestionCard, choicesOf, type Choice } from '../cards/QuestionCard';
 import { Confetti } from '../Confetti';
@@ -13,7 +15,7 @@ import { IconFlame } from '../icons';
 import { Loading } from '../Loading';
 import { Mascot } from '../Mascot';
 import { LEAVE, Presence, SOFT, useCountUp } from '../motion';
-import { cacheQueue, cachedQueue, enqueueReview, flushReviews, forgetAnswered, pendingCardIds, removeFromOutbox } from '../offline/store';
+import { cacheQueue, cachedQueue, enqueueReview, flushReviews, forgetAnswered, pendingCardIds, removeFromOutbox, takeLevelUps } from '../offline/store';
 import { goTab, leave } from '../router';
 
 // 복습 세션 (설계서 §12.1, §12.2). 카드 한 장씩: 답 고르기 → 맞음·틀림과 해설 → 다음.
@@ -49,6 +51,23 @@ const CONFIDENCE_LABEL: Record<Confidence, string> = { sure: '확실해요', uns
 /** 큐는 한 번에 20장까지 받는다 */
 const MAX_QUEUE = 20;
 
+/** 이 너비부터 복습 화면 오른쪽에 개념 패널을 둔다 (styles.css의 .review-body와 같다) */
+const WIDE = '(min-width: 1024px)';
+
+function useWide(): boolean {
+  const [wide, setWide] = useState(() => matchMedia(WIDE).matches);
+  useEffect(() => {
+    const query = matchMedia(WIDE);
+    const update = () => setWide(query.matches);
+    query.addEventListener('change', update);
+    return () => query.removeEventListener('change', update);
+  }, []);
+  return wide;
+}
+
+/** 끝 화면의 LEVEL UP: 새로 열린 단계에서 나오는 카드 */
+const RUNG_NEXT: Record<number, string> = { 2: '이제 빈칸·코드 문제가 나와요', 3: '이제 직접 설명하는 카드가 나와요' };
+
 type Load = { state: 'loading' } | { state: 'error'; message: string } | { state: 'ready'; cards: QueueCard[]; offline: boolean };
 
 export function Review({ size, category, material, part }: { size: number; category?: string | null; material?: string | null; part?: string | null }) {
@@ -60,6 +79,9 @@ export function Review({ size, category, material, part }: { size: number; categ
       try {
         // 밀린 답을 먼저 보낸다. 못 보낸 답의 카드는 서버가 아직 모르니 큐에서 뺀다
         await flushReviews();
+        // 지난 복습에서 남은 LEVEL UP과 개념 정보는 버린다. 끝 화면은 이번 복습의 것만 보여 준다
+        takeLevelUps();
+        forgetConcepts();
         const pending = await pendingCardIds();
         const params = new URLSearchParams({ size: String(Math.min(size + pending.size, MAX_QUEUE)) });
         if (category) params.set('category', category);
@@ -135,6 +157,9 @@ function Session({ initial, offline }: { initial: QueueCard[]; offline: boolean 
   /** 방금 기록한 답. 잘못 눌렀으면 다음 카드에서 되돌릴 수 있다 */
   const [last, setLast] = useState<Recorded | null>(null);
   const [reporting, setReporting] = useState(false);
+  /** 설명하기 카드에서 내 최종 버전을 펼친 카드 자리 (개념 패널을 연다) */
+  const [explainShown, setExplainShown] = useState<string | null>(null);
+  const wide = useWide();
   /** 두 번 탭해도 한 번만 기록한다 */
   const moving = useRef(false);
   const shownAt = useRef(Date.now());
@@ -339,96 +364,103 @@ function Session({ initial, offline }: { initial: QueueCard[]; offline: boolean 
           {index + 1}/{cards.length}
         </span>
       </header>
-      {offline ? <p className="notice">오프라인이에요. 답은 저장해 두었다가 연결되면 보내요.</p> : null}
-      {practice ? <p className="notice">다시 보기는 연습이라 기록하지 않아요. 틀린 카드는 곧 다시 나와요.</p> : null}
-      {last && !picked && !chosen ? (
-        <button type="button" className="text-button undo" disabled={busy} onClick={() => void undo()}>
-          ↶ 방금 답 되돌리기
-        </button>
-      ) : null}
-      {/* 다음 카드로 넘어갈 때 앞 카드가 왼쪽으로 빠지고 새 카드가 오른쪽에서 들어온다 */}
-      <AnimatePresence mode="wait" initial={false}>
-        <Presence
-          key={stageKey}
-          className="card-stage"
-          initial={{ opacity: 0, x: 28 }}
-          animate={{ opacity: 1, x: 0, transition: SOFT }}
-          exit={{ opacity: 0, x: -28, transition: LEAVE }}
-        >
-          {card.type === 'explain' ? (
-            <>
-              <ExplainCard
-                card={card}
-                onGrade={(grade, text) => void gradeExplain(grade, text)}
-                aiPanel={practice || offline ? undefined : (text, suggest) => <AiGrade cardId={card.id} text={text} onSuggest={suggest} />}
-              />
-              {notice ? <p className="notice bad">{notice}</p> : null}
-              {reportArea}
-            </>
-          ) : (
-            <>
-              <QuestionCard card={card} choices={choices} picked={picked} chosen={chosen} onPick={pick} />
-              <AnimatePresence mode="popLayout">
-                {chosen ? (
-                  <Presence
-                    key="confidence"
-                    className="confidence"
-                    role="group"
-                    aria-label="확신도"
-                    initial={{ opacity: 0, y: 14 }}
-                    animate={{ opacity: 1, y: 0, transition: SOFT }}
-                    exit={{ opacity: 0, y: 8, transition: LEAVE }}
-                  >
-                    <div className="confidence-head">
-                      <Mascot mood="think" size={32} />
-                      <p className="small muted">정답을 보기 전에, 얼마나 확신해요?</p>
-                    </div>
-                    <div className="actions">
-                      {(['sure', 'unsure', 'guess'] as const).map((level) => (
-                        <button key={level} type="button" className={`button confidence-${level}`} onClick={() => rate(level)}>
-                          {CONFIDENCE_LABEL[level]}
-                        </button>
-                      ))}
-                    </div>
-                  </Presence>
-                ) : null}
-              </AnimatePresence>
-              {!picked && notice ? <p className="notice bad">{notice}</p> : null}
-              {picked ? (
-                <m.div className="answer-panel" aria-live="polite" initial={{ opacity: 0, y: 56 }} animate={{ opacity: 1, y: 0, transition: SOFT }}>
-                  <div className="answer-head">
-                    <Mascot mood={picked.correct ? 'cheer' : 'oops'} size={48} />
-                    <div>
-                      <p className={picked.correct ? 'verdict right' : 'verdict wrong'}>{picked.correct ? '맞았어요' : '틀렸어요'}</p>
-                      {picked.correct && confidence === 'guess' ? <p className="small muted">찍어서 맞혔으니 조금 일찍 다시 볼게요.</p> : null}
-                      {/* 확신했는데 틀린 답은 따로 짚는다. 바로잡은 기억이 오래 남는다 */}
-                      {!picked.correct && confidence === 'sure' ? <p className="small muted">확신했던 문제예요. 왜 그렇게 생각했는지 떠올려 보고 해설과 비교해 봐요.</p> : null}
-                    </div>
-                  </div>
-                  {card.explain ? <p className="explain">{card.explain}</p> : null}
+      <div className="review-body">
+        <div className="review-main">
+          {offline ? <p className="notice">오프라인이에요. 답은 저장해 두었다가 연결되면 보내요.</p> : null}
+          {practice ? <p className="notice">다시 보기는 연습이라 기록하지 않아요. 틀린 카드는 곧 다시 나와요.</p> : null}
+          {last && !picked && !chosen ? (
+            <button type="button" className="text-button undo" disabled={busy} onClick={() => void undo()}>
+              ↶ 방금 답 되돌리기
+            </button>
+          ) : null}
+          {/* 다음 카드로 넘어갈 때 앞 카드가 왼쪽으로 빠지고 새 카드가 오른쪽에서 들어온다 */}
+          <AnimatePresence mode="wait" initial={false}>
+            <Presence
+              key={stageKey}
+              className="card-stage"
+              initial={{ opacity: 0, x: 28 }}
+              animate={{ opacity: 1, x: 0, transition: SOFT }}
+              exit={{ opacity: 0, x: -28, transition: LEAVE }}
+            >
+              {card.type === 'explain' ? (
+                <>
+                  <ExplainCard
+                    card={card}
+                    onGrade={(grade, text) => void gradeExplain(grade, text)}
+                    onReveal={() => setExplainShown(stageKey)}
+                    aiPanel={practice || offline ? undefined : (text, suggest) => <AiGrade cardId={card.id} text={text} onSuggest={suggest} />}
+                  />
                   {notice ? <p className="notice bad">{notice}</p> : null}
-                  <div className="actions">
-                    {picked.correct && !practice ? (
-                      <button type="button" className="button" onClick={() => void next(true)}>
-                        너무 쉬웠어요
-                      </button>
-                    ) : null}
-                    <button type="button" className="button primary" onClick={() => void next(false)}>
-                      다음
-                    </button>
-                  </div>
                   {reportArea}
-                </m.div>
-              ) : null}
-              <p className="kbd-hint muted small">
-                {chosen
-                  ? '키보드: 1 확실 · 2 반반 · 3 찍음'
-                  : `키보드: ${card.type === 'ox' ? 'O·X' : `1~${choices.length}`} 고르기 · Enter 다음${picked?.correct && !practice ? ' · E 너무 쉬웠어요' : ''} · Esc 그만하기`}
-              </p>
-            </>
-          )}
-        </Presence>
-      </AnimatePresence>
+                </>
+              ) : (
+                <>
+                  <QuestionCard card={card} choices={choices} picked={picked} chosen={chosen} onPick={pick} />
+                  <AnimatePresence mode="popLayout">
+                    {chosen ? (
+                      <Presence
+                        key="confidence"
+                        className="confidence"
+                        role="group"
+                        aria-label="확신도"
+                        initial={{ opacity: 0, y: 14 }}
+                        animate={{ opacity: 1, y: 0, transition: SOFT }}
+                        exit={{ opacity: 0, y: 8, transition: LEAVE }}
+                      >
+                        <div className="confidence-head">
+                          <Mascot mood="think" size={32} />
+                          <p className="small muted">정답을 보기 전에, 얼마나 확신해요?</p>
+                        </div>
+                        <div className="actions">
+                          {(['sure', 'unsure', 'guess'] as const).map((level) => (
+                            <button key={level} type="button" className={`button confidence-${level}`} onClick={() => rate(level)}>
+                              {CONFIDENCE_LABEL[level]}
+                            </button>
+                          ))}
+                        </div>
+                      </Presence>
+                    ) : null}
+                  </AnimatePresence>
+                  {!picked && notice ? <p className="notice bad">{notice}</p> : null}
+                  {picked ? (
+                    <m.div className="answer-panel" aria-live="polite" initial={{ opacity: 0, y: 56 }} animate={{ opacity: 1, y: 0, transition: SOFT }}>
+                      <div className="answer-head">
+                        <Mascot mood={picked.correct ? 'cheer' : 'oops'} size={48} />
+                        <div>
+                          <p className={picked.correct ? 'verdict right' : 'verdict wrong'}>{picked.correct ? '맞았어요' : '틀렸어요'}</p>
+                          {picked.correct && confidence === 'guess' ? <p className="small muted">찍어서 맞혔으니 조금 일찍 다시 볼게요.</p> : null}
+                          {/* 확신했는데 틀린 답은 따로 짚는다. 바로잡은 기억이 오래 남는다 */}
+                          {!picked.correct && confidence === 'sure' ? <p className="small muted">확신했던 문제예요. 왜 그렇게 생각했는지 떠올려 보고 해설과 비교해 봐요.</p> : null}
+                        </div>
+                      </div>
+                      {card.explain ? <p className="explain">{card.explain}</p> : null}
+                      {notice ? <p className="notice bad">{notice}</p> : null}
+                      <div className="actions">
+                        {picked.correct && !practice ? (
+                          <button type="button" className="button" onClick={() => void next(true)}>
+                            너무 쉬웠어요
+                          </button>
+                        ) : null}
+                        <button type="button" className="button primary" onClick={() => void next(false)}>
+                          다음
+                        </button>
+                      </div>
+                      {reportArea}
+                    </m.div>
+                  ) : null}
+                  <p className="kbd-hint muted small">
+                    {chosen
+                      ? '키보드: 1 확실 · 2 반반 · 3 찍음'
+                      : `키보드: ${card.type === 'ox' ? 'O·X' : `1~${choices.length}`} 고르기 · Enter 다음${picked?.correct && !practice ? ' · E 너무 쉬웠어요' : ''} · Esc 그만하기`}
+                  </p>
+                </>
+              )}
+            </Presence>
+          </AnimatePresence>
+        </div>
+        {/* 컴퓨터에서는 오른쪽에 이 카드의 개념을 둔다. 정답이 될 수 있는 내용은 답을 본 뒤에 연다 */}
+        {wide ? <ConceptPanel card={card} next={cards[index + 1]} revealed={picked !== null || explainShown === stageKey} /> : null}
+      </div>
     </div>
   );
 }
@@ -450,13 +482,16 @@ function Summary({
   const right = results.length - wrong.length;
   const misses = results.filter((result) => result.confidentMiss).map((result) => result.card.id);
   const [stats, setStats] = useState<StatsResponse | null>(null);
+  const [levelUps, setLevelUps] = useState<LevelUp[]>([]);
   useEffect(() => {
     if (practice) return;
     let cancelled = false;
     void (async () => {
       try {
-        // 밀린 답을 먼저 보내야 오늘 목표와 연속이 맞게 나온다
+        // 밀린 답을 먼저 보내야 오늘 목표와 연속, LEVEL UP이 맞게 나온다
         await flushReviews();
+        if (cancelled) return;
+        setLevelUps(takeLevelUps());
         const next = await request<StatsResponse>('/stats');
         if (!cancelled) setStats(next);
       } catch {
@@ -472,12 +507,14 @@ function Summary({
   const streakUp = goalMet && !practice && stats.today.reviewed - results.length < stats.goal;
   const xp = useCountUp(practice ? 0 : sessionXp(results));
   const toGoal = stats && !goalMet ? stats.goal - stats.today.reviewed : 0;
+  /** 설명하기를 스스로 통과로 매긴 개념 */
+  const passed = practice ? [] : [...new Set(results.filter((result) => result.card.type === 'explain' && result.correct).map((result) => result.card.concept_name))];
   const title = practice ? '다시 보기를 마쳤어요' : goalMet ? '오늘 목표 달성!' : wrong.length === 0 ? '다 맞혔어요!' : `${results.length}장을 끝냈어요`;
   return (
     <div className="summary">
       <div className="summary-head">
         {goalMet && !practice ? <Confetti /> : null}
-        <Mascot mood={goalMet ? 'cheer' : wrong.length === 0 ? 'happy' : 'think'} size={goalMet ? 112 : 96} />
+        <Mascot mood={goalMet ? 'cheer' : levelUps.length > 0 ? 'levelup' : wrong.length === 0 ? 'happy' : 'think'} size={goalMet ? 112 : 96} />
         <h1>{title}</h1>
         <p className="muted">
           {results.length}장 중 {right}장 맞혔어요{toGoal > 0 ? ` · 오늘 목표까지 ${toGoal}장` : ''}
@@ -507,6 +544,40 @@ function Summary({
           </div>
         </div>
       )}
+      {stats && !practice ? <NewBadges badges={stats.badges} /> : null}
+      {levelUps.length > 0 || passed.length > 0 ? (
+        <section className="levelup" aria-labelledby="levelup-title">
+          <div className="levelup-head">
+            <Mascot mood="levelup" size={56} />
+            <div>
+              <p className="levelup-kicker">LEVEL UP</p>
+              <h2 id="levelup-title">{levelUps.length > 0 ? `${levelUps.length}개 개념이 한 단계 올라갔어요` : '내 말로 설명해 냈어요'}</h2>
+            </div>
+          </div>
+          <ul className="levelup-list">
+            {levelUps.map((up, i) => (
+              <li key={up.concept_key} style={{ '--i': i } as CSSProperties}>
+                <span className="levelup-step">
+                  {up.rung - 1}→{up.rung}단계
+                </span>
+                <span className="grow">
+                  <strong>{up.concept_name}</strong>
+                  <span className="muted small">{RUNG_NEXT[up.rung] ?? '다음 단계 카드가 나와요'}</span>
+                </span>
+              </li>
+            ))}
+            {passed.map((name, i) => (
+              <li key={`explain-${name}`} style={{ '--i': levelUps.length + i } as CSSProperties}>
+                <span className="levelup-step pass">설명 통과</span>
+                <span className="grow">
+                  <strong>{name}</strong>
+                  <span className="muted small">설명하기 카드를 통과했어요</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
       {wrong.length > 0 ? (
         <section aria-labelledby="miss-title">
           <h2 id="miss-title">다시 볼 카드 {wrong.length}장</h2>

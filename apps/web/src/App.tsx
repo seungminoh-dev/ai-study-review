@@ -2,6 +2,7 @@ import type { AuthOptions, Me } from '@moai/shared';
 import * as m from 'motion/react-m';
 import { Suspense, lazy, useEffect, useState, type ComponentType, type ReactNode } from 'react';
 import { OfflineError, RequestError, errorMessage, request } from './api';
+import { forgetSeenBadges } from './badges';
 import { IconBook, IconGrowth, IconHome, IconMap, IconRecords, IconSettings } from './icons';
 import { Loading, Splash } from './Loading';
 import { Mascot } from './Mascot';
@@ -45,6 +46,9 @@ const MaterialDetail = lazyScreen(() => import('./screens/MaterialDetail').then(
 const Settings = lazyScreen(() => import('./screens/Settings').then((module) => module.Settings));
 const Welcome = lazyScreen(() => import('./screens/Welcome').then((module) => module.Welcome));
 const LATER = [Review, Sessions, SessionDetail, MapScreen, Concept, Growth, Import, Materials, MaterialDetail, Settings, Welcome];
+// 개인정보 처리방침·약관은 로그인 전에도 열고, 가끔만 보니 미리 받지 않는다
+const Legal = lazyScreen(() => import('./screens/Legal').then((module) => module.Legal));
+const legalDoc = (path: string) => (path === '/privacy' ? 'privacy' : path === '/terms' ? 'terms' : null);
 
 type Auth = { state: 'loading' } | { state: 'in'; me: Me } | { state: 'setup' } | { state: 'out'; github: boolean } | { state: 'error'; message: string };
 
@@ -136,6 +140,7 @@ const Bare = ({ children }: { children: ReactNode }) => <main className="app no-
 
 async function loggedOut(): Promise<Auth> {
   rememberMe(null);
+  forgetSeenBadges();
   const options = await request<AuthOptions>('/auth/options').catch((): AuthOptions => ({ setup_available: false, github: false }));
   return options.setup_available ? { state: 'setup' } : { state: 'out', github: options.github };
 }
@@ -197,6 +202,16 @@ export function App() {
     );
   }
   if (auth.state === 'out') {
+    const doc = legalDoc(path);
+    if (doc) {
+      return (
+        <Bare>
+          <Suspense fallback={<Loading />}>
+            <Legal doc={doc} />
+          </Suspense>
+        </Bare>
+      );
+    }
     // 가입하면 시작 가이드로 간다
     if (path === '/join') {
       return (
@@ -236,6 +251,7 @@ export function App() {
   else if (path === '/materials') screen = <Materials />;
   else if (path === '/materials/detail') screen = <MaterialDetail key={query.get('title') ?? ''} title={query.get('title') ?? ''} />;
   else if (path === '/welcome') screen = <Welcome name={auth.me.display_name} />;
+  else if (legalDoc(path)) screen = <Legal doc={legalDoc(path)!} />;
   else if (path === '/settings') {
     screen = (
       <Settings

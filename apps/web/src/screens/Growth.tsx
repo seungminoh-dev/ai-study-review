@@ -1,11 +1,12 @@
 import type { MapResponse, StatsResponse } from '@moai/shared';
+import { BadgeShelf } from '../badges';
 import { IconFlame } from '../icons';
 import { Loading } from '../Loading';
 import { Mascot } from '../Mascot';
 import { CategoryProgress, Heatmap, conceptCounts } from '../progress';
 import { useApi } from '../useApi';
 
-// 내 성장 (2단계): 친구와 겨루는 리그 대신 "지난주의 나"와 비교한다. 연속, XP, 익숙해진 개념, 최근 12주, 분류별 진행
+// 내 성장 (2단계): 친구와 겨루는 리그 대신 "지난주의 나"와 비교한다. 연속, XP, 익숙해진 개념, 이정표, 최근 12주, 분류별 진행
 
 export function Growth() {
   const { data: stats, error } = useApi<StatsResponse>('/stats');
@@ -54,6 +55,7 @@ export function Growth() {
           </p>
         </section>
       </div>
+      <BadgeShelf badges={stats.badges} />
       <section className="card" aria-labelledby="heat-title">
         <div className="card-head">
           <h2 id="heat-title">최근 12주</h2>

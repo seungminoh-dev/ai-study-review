@@ -8,7 +8,7 @@
 ## 1. 지금 상태
 
 - **운영**: https://moai.smoh.dev. Cloudflare Workers Paid, D1 `moai`, 매분 Cron 1개.
-- **배포된 마이그레이션**: `0001`~`0006` (0006: 자료·분류). 모두 운영과 비슷한 로컬 데이터로 미리 돌려 보고 올렸다.
+- **배포된 마이그레이션**: `0001`~`0006` (0006: 자료·분류). 모두 운영과 비슷한 로컬 데이터로 미리 돌려 보고 올렸다. `0007`(이정표 배지 테이블)은 3-4에서 더했고 같은 방법으로 미리 돌려 봤다 (외래 키 검사 빈칸, 행 수 그대로).
 - **끝난 기능**: MVP 0~2 전부. MVP 3은 Claude Code 플러그인, 채팅 복습, 확신도, 모의면접 체인, 질문 은행, 베타 지표, 자동 분류, PDF 자료까지다. 표는 [설계서 §2.4](design.md#24-mvp-3-확장-이후).
 - **2026-10-18 방향 바꿈**: 친구와 함께하는 기능(리그, 질문 은행, 질문 공유)은 PWA 화면에서 뺐다. 내 성취를 높이는 쪽으로 디자인을 다시 짠다. 서버 API와 데이터는 그대로 두었다.
 - **2단계 디자인 적용**: 마스코트 색(남색 주요 버튼, 주황 강조, 크림 선택), 마스코트 컴포넌트(`apps/web/src/Mascot.tsx`), 선 아이콘(`icons.tsx`), 휴대폰 아래 탭(오늘·지도·성장·기록, 설정은 오늘 화면 오른쪽 위)과 컴퓨터 사이드바, 새 "내 성장" 화면(`/growth`). 시안은 디자인 캔버스 "모아이 2단계 디자인 시안"에 있다. `/api/stats`에 `best_streak`, `last_week_xp`, `history`(84일)를 더했다. 설계서 §12의 화면 목록은 아직 예전 그대로다.
@@ -29,7 +29,14 @@
   - `GET /api/materials`에 `next`(이어서 풀 섹션)를 더했고, `GET /api/materials/detail?title=`이 섹션별 진행·개념(12개까지)·카드 미리보기(3장)를 준다. `GET /api/queue?material=&part=`는 그 섹션만 낸다.
   - 화면: 자료 목록(`Materials.tsx`), 자료 상세(`MaterialDetail.tsx`, 휴대폰은 펼침·컴퓨터는 두 칸). 휴대폰 기록 탭 위에 "공부한 대화 | 자료" 나누기(`RecordsNav.tsx`)가 있고, 저장 기록 목록은 같은 자료의 섹션 저장을 한 줄로 묶는다. 오늘 화면의 "이어서 풀 자료"는 다음 섹션을 푼다.
   - "Claude에서 이어 공부하기"는 섹션 이름을 넣은 질문으로 `claude.ai/new?q=`를 연다.
-- **테스트**: worker 124개, shared 23개 통과. CI·Deploy 모두 초록.
+- **3단계 3-4 승인한 추가 항목**:
+  - 글꼴: Pretendard 1.3.9 가변 글꼴을 글자 범위별 조각(92개, 3.1MB)으로 `apps/web/src/fonts/pretendard`에 넣었다 (OFL, `LICENSE.txt` 같이 둠). 화면에 나온 글자의 조각만 받고, 서비스 워커는 글꼴을 미리 받지 않는다. `_headers`가 `/assets/*`(해시가 붙은 파일)를 1년 캐시한다.
+  - 링크 미리보기: `index.html`의 Open Graph·Twitter 태그와 `public/og.png`(1200×630, `npm run gen:icons`가 아이콘과 같이 만든다). 크롤러는 JS를 안 돌려서 모든 주소가 같은 미리보기다.
+  - 개인정보 처리방침·약관: `/privacy`, `/terms` (`screens/Legal.tsx`, 로그인 전에도 열림). 랜딩 아래, 가입 화면, 설정 맨 아래에 링크가 있다. 책임자는 seungminoh-dev, 문의처는 contact@smoh.dev, 시행일은 2026-10-19다 (`Legal.tsx` 맨 위 상수). 저장하는 정보나 외부 서비스가 바뀌면 같이 고친다.
+  - LEVEL UP: `POST /api/reviews`가 `level_ups`(다음 단계가 열린 개념과 단계)를 준다. PWA는 답을 보낼 때 모아 두었다가(`offline/store.ts`의 `takeLevelUps`) 끝 화면에 보여 준다. 설명하기 통과(스스로 좋음 이상)도 같이 보인다. 오프라인으로 나중에 보낸 답의 LEVEL UP은 보이지 않는다.
+  - 이정표 배지: 설계서 §5.7. `/api/stats`의 `badges`, 내 성장의 이정표 선반, 오늘 화면과 끝 화면의 새 배지 축하 (`badges.tsx`).
+  - 컴퓨터 개념 패널: 1024px 이상 복습 화면 오른쪽 (`cards/ConceptPanel.tsx`). 기존 `GET /api/concepts/:key`를 쓴다. 정답이 될 수 있는 내 정리·지난 설명은 답을 고른 뒤(설명하기는 비교를 펼친 뒤)에 연다.
+- **테스트**: worker 126개, shared 23개 통과. CI·Deploy 모두 초록.
 - **브랜치**: 클라우드 작업 브랜치 `claude/elegant-galileo-iupy8p`는 `main`에 합치고 지웠다. 열린 PR은 없다. 앞으로는 `main`에서 시작한다.
 - **확인 못 한 것**: 마지막 배포(`a6ea056`) 뒤 운영 화면은 직접 열어 보지 못했다 (클라우드 환경에서 moai.smoh.dev 접속이 막혀 있었다). 로컬에서 먼저 볼 것:
   1. 기록 탭 → 자료 화면이 열리는지, 분류 칩(지식 지도·오늘 화면)이 보이는지
@@ -96,7 +103,7 @@ npm run typecheck && npm run build && npm test
 - 마이그레이션은 **열·테이블 추가만** 한다. 기존 행을 바꾸는 UPDATE가 필요하면 결과를 미리 확인한다.
 - **운영 비슷한 데이터로 미리 돌려 보기** (마이그레이션이 있을 때마다):
   1. 지금 배포된 코드를 따로 꺼낸다: `git worktree add ../moai-deployed origin/main` (머지 전 기준). 거기서 `npm ci`와 `npm run build`를 하고, `apps/worker/.dev.vars`를 복사해 둔다.
-  2. 빈 폴더를 정해 그 코드로 띄운다: `cd ../moai-deployed/apps/worker && npx wrangler d1 migrations apply moai --local --persist-to <폴더>` → `npx wrangler dev --persist-to <폴더>`.
+  2. 빈 폴더를 정해 그 코드로 띄운다: `cd ../moai-deployed/apps/worker && npx wrangler d1 migrations apply moai --local --persist-to <폴더>` → `npx wrangler dev --local-upstream localhost:8787 --persist-to <폴더>`. `--local-upstream`이 없으면 wrangler가 Host와 Origin을 운영 주소로 바꿔서 API가 403(wrong_origin), MCP가 421을 준다.
   3. API로 데이터를 채운다:
      - `POST /api/setup`으로 오너를 만든다 (Origin 헤더 필요).
      - `POST /api/mcp-token`으로 커넥터 URL을 받는다.

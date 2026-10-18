@@ -1,9 +1,9 @@
-// 앱 아이콘, 파비콘, 알림 배지를 마스코트 픽셀 격자로 만들어 apps/web/public/icons에 쓴다.
+// 앱 아이콘, 파비콘, 알림 배지, 링크 미리보기 그림을 마스코트 픽셀 격자로 만들어 apps/web/public에 쓴다.
 // 그림은 apps/web/src/Mascot.tsx의 happy 표정과 같다. 마스코트를 고치면 ART도 고치고 다시 돌린다.
 import { writeFileSync } from 'node:fs';
 import { crc32, deflateSync } from 'node:zlib';
 
-const OUT = new URL('../apps/web/public/icons/', import.meta.url);
+const OUT = new URL('../apps/web/public/', import.meta.url);
 
 // [x, y, 너비, 높이, 부위] (16×14 격자). HAT, BODY, ARMS_DOWN, FACE.happy 순서로 덮어 그린다
 const ART = [
@@ -39,6 +39,7 @@ const COLOR = {
   eye: '#192849',
   shine: '#ffffff',
   blush: '#ffb17c',
+  spark: '#ffbd4a',
 };
 const BACKGROUND = '#fff0c7';
 
@@ -87,6 +88,49 @@ function icon({ size, scale, background, radius = 0, badge = false }) {
   return png(size, size, pixels);
 }
 
+// 링크 미리보기에서 손 흔드는 마스코트: 오른팔을 든다 (Mascot.tsx의 ARM_RIGHT_UP). 몸 밖 반짝임은 SPARKS에서 골랐다
+const WAVE = [
+  ...ART.filter(([x, y]) => !(x === 14 && y >= 6)),
+  [14, 1, 2, 5, 'line'],
+  [14, 2, 1, 3, 'body'],
+  [-2, 0, 1, 3, 'spark'],
+  [-3, 1, 3, 1, 'spark'],
+  [-2, 9, 1, 1, 'green'],
+];
+
+/** 픽셀 글씨 "모아이". 한 칸이 마스코트 한 칸과 같은 크기다 */
+const WORDMARK = [
+  ['.#######.', '.#.....#.', '.#.....#.', '.#.....#.', '.#######.', '.........', '....#....', '....#....', '#########'],
+  ['......#.', '......#.', '.###..#.', '#...#.#.', '#...#.##', '#...#.#.', '.###..#.', '......#.', '......#.'],
+  ['......#', '......#', '.###..#', '#...#.#', '#...#.#', '#...#.#', '.###..#', '......#', '......#'],
+];
+
+/** 링크 미리보기 그림 (og:image 1200×630). 크림 바탕에 손 흔드는 마스코트와 "모아이". 미리보기가 가운데를 잘라도 보이게 가운데에 모은다 */
+function ogImage() {
+  const width = 1200;
+  const height = 630;
+  const cell = 20;
+  const pixels = Buffer.alloc(width * height * 4);
+  const fill = (x, y, w, h, hex) => {
+    const color = [...rgb(hex), 255];
+    for (let py = y; py < y + h; py += 1) for (let px = x; px < x + w; px += 1) pixels.set(color, (py * width + px) * 4);
+  };
+  fill(0, 0, width, height, BACKGROUND);
+  // 마스코트(16×14칸)와 글씨(9칸 높이)의 가운데를 맞춘다
+  const top = (height - 14 * cell) / 2;
+  for (const [x, y, w, h, part] of WAVE) fill(120 + x * cell, top + y * cell, w * cell, h * cell, COLOR[part]);
+  let left = 520;
+  for (const glyph of WORDMARK) {
+    glyph.forEach((row, y) => {
+      [...row].forEach((mark, x) => {
+        if (mark === '#') fill(left + x * cell, top + 50 + y * cell, cell, cell, COLOR.line);
+      });
+    });
+    left += (glyph[0].length + 2) * cell;
+  }
+  return png(width, height, pixels);
+}
+
 function png(width, height, rgba) {
   const stride = width * 4;
   const raw = Buffer.alloc((stride + 1) * height); // 줄마다 필터 0
@@ -113,18 +157,20 @@ function png(width, height, rgba) {
 
 const files = {
   // 설치 아이콘 (컴퓨터, 알림의 큰 아이콘). 모서리를 둥글게 자른다
-  'icon-192.png': icon({ size: 192, scale: 8, background: BACKGROUND, radius: 0.22 }),
-  'icon-512.png': icon({ size: 512, scale: 21, background: BACKGROUND, radius: 0.22 }),
+  'icons/icon-192.png': icon({ size: 192, scale: 8, background: BACKGROUND, radius: 0.22 }),
+  'icons/icon-512.png': icon({ size: 512, scale: 21, background: BACKGROUND, radius: 0.22 }),
   // Android가 원·둥근 사각형으로 자른다. 가운데 지름 80% 안에 그림을 둔다
-  'icon-512-maskable.png': icon({ size: 512, scale: 18, background: BACKGROUND }),
+  'icons/icon-512-maskable.png': icon({ size: 512, scale: 18, background: BACKGROUND }),
   // iOS는 투명 부분을 검게 칠하고 모서리를 직접 자른다
-  'apple-touch-icon.png': icon({ size: 180, scale: 7, background: BACKGROUND }),
+  'icons/apple-touch-icon.png': icon({ size: 180, scale: 7, background: BACKGROUND }),
   // 24dp 배지의 안쪽 22dp에 맞춘다
-  'badge.png': icon({ size: 96, scale: 5, badge: true }),
-  'favicon-32.png': icon({ size: 32, scale: 2 }),
-  'favicon.svg': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -1 16 16" shape-rendering="crispEdges">${ART.map(
+  'icons/badge.png': icon({ size: 96, scale: 5, badge: true }),
+  'icons/favicon-32.png': icon({ size: 32, scale: 2 }),
+  'icons/favicon.svg': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -1 16 16" shape-rendering="crispEdges">${ART.map(
     ([x, y, w, h, part]) => `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${COLOR[part]}"/>`,
   ).join('')}</svg>\n`,
+  // 카톡·슬랙 등에 주소를 보냈을 때의 미리보기 (index.html의 og:image)
+  'og.png': ogImage(),
 };
 
 for (const [name, content] of Object.entries(files)) {

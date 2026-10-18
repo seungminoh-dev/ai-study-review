@@ -2,6 +2,7 @@ import type { MapResponse, MaterialSummary, McpTokenStatus, StatsResponse, Today
 import { materialLabel } from '@moai/shared/client';
 import { useEffect, useState } from 'react';
 import { request } from '../api';
+import { NewBadges } from '../badges';
 import { IconArrow, IconBook, IconCheck, IconFlame, IconSettings } from '../icons';
 import { Loading } from '../Loading';
 import { Mascot } from '../Mascot';
@@ -287,6 +288,8 @@ export function Today({ name }: { name: string }) {
       <div className="today-cols">
         <div className="today-col">
           <Hero data={data} stats={stats ?? null} />
+          {/* 첫 저장처럼 복습 밖에서 이룬 이정표는 여기서 축하한다 */}
+          {stats ? <NewBadges badges={stats.badges} link className="o-badges" /> : null}
           <Onboarding saved={data.sessions.length > 0} />
           {map && map.nodes.some((node) => node.state !== 'material' && node.category) ? (
             <section className="card o-category" aria-labelledby="category-title">

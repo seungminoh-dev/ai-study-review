@@ -15,6 +15,9 @@ async function fillAccount(user: TestUser): Promise<void> {
   await api(user, '/reminders', { method: 'PUT', json: { times: ['08:10'] } });
   await api(user, '/login-codes', { method: 'POST' });
   await api(user, `/cards/${card}/report`, { method: 'POST', json: { reason: 'unclear' } });
+  // 통계를 보면 첫 저장·첫 복습 배지가 생긴다
+  await api(user, '/stats');
+  expect(await env.DB.prepare('SELECT count(*) AS n FROM badges WHERE user_id = ?1').bind(user.id).first<number>('n')).toBeGreaterThan(0);
   expect((await api(user, '/shared-questions', { method: 'POST', json: { concept_name: '깊은 복사', question: '깊은 복사는 언제 필요할까요?' } })).status).toBe(204);
   const now = Date.now();
   await env.DB.batch([
