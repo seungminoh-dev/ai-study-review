@@ -19,6 +19,7 @@
     "db:migrate:remote": "npm run db:migrate:remote -w @moai/worker",
     "gen:vapid": "node scripts/gen-vapid.mjs",
     "gen:token": "node scripts/gen-token.mjs",
+    "gen:icons": "node scripts/gen-icons.mjs",
     "replay": "node scripts/replay.mjs",
     "build": "npm run build -w @moai/web",
     "dev:web": "npm run dev -w @moai/web"

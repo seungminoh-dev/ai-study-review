@@ -41,7 +41,8 @@
   --mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
 }
 
-/* 다크에서는 남색 버튼이 배경에 묻히므로 주요 버튼을 주황(남색 글자)으로 바꾼다. 마스코트 테두리는 크림이다 */
+/* 다크에서는 남색 버튼이 배경에 묻히므로 주요 버튼을 주황(남색 글자)으로 바꾼다.
+   마스코트 테두리는 배경보다 어두운 먹색이다. 밝은 테두리는 스티커처럼 떠 보였다 */
 @media (prefers-color-scheme: dark) {
   :root {
     color-scheme: dark;
@@ -71,7 +72,7 @@
     --warn: #f0c060;
     --warn-soft: #33270f;
     --code-bg: #10141b;
-    --mascot-line: #f4efe4;
+    --mascot-line: #070b14;
     --nav-current: #ffb27a;
     --heat-1: #4a3324;
     --heat-2: #7a4a2a;
@@ -1511,11 +1512,6 @@ a.chip {
 
 .mascot .m-spark2 {
   fill: #78c98c;
-}
-
-/* 남색 카드 안의 마스코트는 테두리를 크림으로 */
-.hero .mascot .m-line {
-  fill: var(--hero-text);
 }
 
 .icon-link {

@@ -1,4 +1,5 @@
-// 마스코트 모아(moAI): 16×14 픽셀 격자의 주황 캐릭터. 색은 styles.css의 .mascot 규칙을 따른다 (다크에서는 테두리가 크림).
+// 마스코트 모아(moAI): 16×14 픽셀 격자의 주황 캐릭터. 색은 styles.css의 .mascot 규칙을 따른다 (다크에서는 테두리가 배경보다 어두운 먹색).
+// 앱 아이콘은 scripts/gen-icons.mjs가 같은 격자(happy)로 만든다. 그림을 바꾸면 그쪽 ART도 고치고 `npm run gen:icons`를 돌린다.
 // happy 기본·인사, think 생각 중(확신도), oops 틀림, cheer 목표 달성(팔을 들고 반짝임).
 
 export type Mood = 'happy' | 'think' | 'oops' | 'cheer';

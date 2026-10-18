@@ -34,7 +34,8 @@ self.addEventListener('push', (event) => {
       body: data.body ?? '',
       tag: data.tag ?? 'daily',
       icon: '/icons/icon-192.png',
-      badge: '/icons/icon-192.png',
+      // Android 상태 표시줄은 배지의 알파만 쓴다. 색 있는 사각형을 주면 흰 네모가 된다
+      badge: '/icons/badge.png',
       data: { url: data.url ?? '/' },
     }),
   );
