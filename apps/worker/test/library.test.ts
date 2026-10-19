@@ -228,3 +228,19 @@ describe('renaming', () => {
     expect(await env.DB.prepare('SELECT topic FROM learning_sessions WHERE id = ?1').bind(id).first('topic')).toBe('파드 정리');
   });
 });
+
+// 앱의 분류 관리: 미리 보기는 바꾸지 않고, 바꾸면 자료 개념까지 옮긴다
+describe('category manage', () => {
+  it('previews a move without changing anything, then moves learned and material concepts', async () => {
+    await callTool(url, 'save_learning', pdf('1장'));
+    const manage = async () => (await (await api(user, '/categories/manage')).json()) as { categories: { path: string; concepts: number; material: number }[] };
+    expect((await manage()).categories).toEqual([{ path: '인프라/Kubernetes', concepts: 0, material: 1 }]);
+    const move = (dry_run: boolean) => api(user, '/categories/rename', { method: 'POST', json: { from: '인프라/Kubernetes', to: '인프라/컨테이너', dry_run } });
+    expect(await (await move(true)).json()).toMatchObject({ dry_run: true, moves: [{ from: '인프라/Kubernetes', to: '인프라/컨테이너' }], merged: [] });
+    expect((await manage()).categories[0]!.path).toBe('인프라/Kubernetes');
+    expect(await (await move(false)).json()).toMatchObject({ renamed: 1 });
+    expect((await manage()).categories).toEqual([{ path: '인프라/컨테이너', concepts: 0, material: 1 }]);
+    // 다른 사람의 분류는 그대로다
+    expect((await (await api(await newUser(), '/categories/rename', { method: 'POST', json: { from: '인프라/컨테이너', to: 'x' } })).json()) as { renamed: number }).toMatchObject({ renamed: 0 });
+  });
+});

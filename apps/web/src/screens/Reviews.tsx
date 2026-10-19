@@ -2,6 +2,7 @@ import type { MapResponse, QueueResponse, SessionSummary, TodayResponse } from '
 import { Loading } from '../Loading';
 import { Mascot } from '../Mascot';
 import { CategoryProgress } from '../progress';
+import { examHref } from '../materials';
 import { Link } from '../router';
 import { formatDate, useApi } from '../useApi';
 import { InterviewLink, ReviewHero, useCanInterview } from './Today';
@@ -71,10 +72,25 @@ export function Reviews() {
         <section className="card" aria-labelledby="category-title">
           <div className="card-head">
             <h2 id="category-title">분류별로</h2>
+            <Link href="/categories" className="aside">
+              분류 관리
+            </Link>
           </div>
           <CategoryProgress nodes={map.nodes} limit={6} />
         </section>
       ) : null}
+
+      <section className="exam-card" aria-label="랜덤 시험">
+        <span className="grow">
+          <strong>랜덤 시험</strong>
+          <span className="muted small">한 번이라도 푼 카드에서 10문제를 섞어 내요. 기록하지 않아서 복습 일정은 그대로예요.</span>
+        </span>
+        <div className="exam-actions">
+          <Link className="button" href={examHref()}>
+            시험 보기
+          </Link>
+        </div>
+      </section>
 
       {canInterview && data.sessions.length > 0 ? <InterviewLink /> : null}
 

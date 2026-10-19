@@ -1,5 +1,5 @@
-import type { MaterialSummary, McpTokenStatus, StatsResponse, TodayResponse } from '@moai/shared';
-import { isPdf } from '@moai/shared/client';
+import type { LevelUp, MaterialSummary, McpTokenStatus, StatsResponse, TodayResponse } from '@moai/shared';
+import { QUEST_XP, isPdf } from '@moai/shared/client';
 import { useEffect, useState } from 'react';
 import { aiStatus } from '../ai';
 import { request } from '../api';
@@ -8,7 +8,7 @@ import { IconArrow, IconBook, IconCheck, IconFlame, IconHistory, IconSettings } 
 import { Loading } from '../Loading';
 import { Mascot } from '../Mascot';
 import { materialReview, partView } from '../materials';
-import { cachedQueue } from '../offline/store';
+import { cachedQueue, peekLevelUps, takeLevelUps } from '../offline/store';
 import { GoalRing, StreakGoal, WeekDays, todayLabel } from '../progress';
 import { isStandalone, pushState } from '../push';
 import { Link, TabLink } from '../router';
@@ -224,6 +224,46 @@ function WeekCard({ stats }: { stats: StatsResponse }) {
   );
 }
 
+const QUEST_LABEL: Record<StatsResponse['quests'][number]['id'], string> = {
+  cards: '카드 10장 풀기',
+  perfect: '한 번도 안 틀리고 복습하기 (5장 이상)',
+  learn: '새 카드 5장 학습 또는 설명하기 1장',
+};
+
+/** 오늘의 퀘스트 세 가지. 하나에 QUEST_XP씩 */
+function QuestCard({ stats }: { stats: StatsResponse }) {
+  const done = stats.quests.filter((quest) => quest.done).length;
+  return (
+    <section className="card quest-card o-quest" aria-labelledby="quest-title">
+      <div className="card-head">
+        <h2 id="quest-title">오늘의 퀘스트</h2>
+        <span className="aside">
+          {done}/{stats.quests.length}
+        </span>
+      </div>
+      <ul className="quest-list">
+        {stats.quests.map((quest) => (
+          <li key={quest.id} className={quest.done ? 'done' : undefined}>
+            <span className="quest-mark" aria-hidden="true">
+              {quest.done ? <IconCheck size={14} /> : null}
+            </span>
+            <span className="grow">
+              <span className="quest-name">
+                {QUEST_LABEL[quest.id]}
+                <span className="sr-only">{quest.done ? ' 완료' : ` ${Math.min(quest.value, quest.target)}/${quest.target}`}</span>
+              </span>
+              <span className="bar" aria-hidden="true">
+                <span style={{ width: `${quest.done ? 100 : (Math.min(quest.value, quest.target) / quest.target) * 100}%` }} />
+              </span>
+            </span>
+            <span className="quest-xp">+{QUEST_XP}</span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 /** 오늘 목표: 복습과 학습을 나눠 칠한다 */
 function GoalCard({ stats }: { stats: StatsResponse }) {
   const learned = stats.today.learned;
@@ -240,6 +280,37 @@ function GoalCard({ stats }: { stats: StatsResponse }) {
         <span className="goal-legend">복습 {reviewed}장</span>
         <span className="goal-legend goal-legend-learn">학습 {learned}장</span>
       </div>
+    </section>
+  );
+}
+
+/** 복습 밖에서 받은 LEVEL UP (앱을 열 때 밀린 답을 보내서 열린 단계). 확인하면 비운다 */
+function LevelUpNotice() {
+  const [ups, setUps] = useState<LevelUp[]>([]);
+  useEffect(() => {
+    void peekLevelUps().then(setUps);
+  }, []);
+  if (ups.length === 0) return null;
+  return (
+    <section className="card levelup-notice o-badges" aria-labelledby="levelup-notice-title">
+      <div className="card-head">
+        <Mascot mood="levelup" size={40} />
+        <div className="grow">
+          <p className="levelup-kicker">LEVEL UP</p>
+          <h2 id="levelup-notice-title">{ups.length}개 개념이 한 단계 올라갔어요</h2>
+        </div>
+      </div>
+      <p className="muted small">{ups.map((up) => `${up.concept_name} ${up.rung}단계`).join(' · ')}</p>
+      <button
+        type="button"
+        className="text-button"
+        onClick={() => {
+          setUps([]);
+          void takeLevelUps();
+        }}
+      >
+        확인
+      </button>
     </section>
   );
 }
@@ -318,6 +389,7 @@ export function Today({ name }: { name: string }) {
           </div>
           {/* 첫 저장처럼 복습 밖에서 이룬 이정표는 여기서 축하한다 */}
           {stats ? <NewBadges badges={stats.badges} link className="o-badges" /> : null}
+          <LevelUpNotice />
           <Onboarding saved={data.sessions.length > 0} />
           {data.followups.length > 0 ? (
             <section className="card o-followups" aria-labelledby="followups-title">
@@ -341,6 +413,7 @@ export function Today({ name }: { name: string }) {
           ) : null}
         </div>
         <div className="today-col">
+          {stats ? <QuestCard stats={stats} /> : null}
           {stats ? <WeekCard stats={stats} /> : null}
           {stats ? <GoalCard stats={stats} /> : null}
           {canInterview && data.sessions.length > 0 ? <InterviewLink className="o-interview" /> : null}

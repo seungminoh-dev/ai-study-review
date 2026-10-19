@@ -16,7 +16,19 @@ import { IconArrow, IconChat, IconFlame, IconStar } from '../icons';
 import { Loading } from '../Loading';
 import { Mascot } from '../Mascot';
 import { LEAVE, Presence, SOFT, useCountUp } from '../motion';
-import { cacheQueue, cachedQueue, enqueueReview, flushReviews, forgetAnswered, pendingCardIds, pendingCount, removeFromOutbox, takeLevelUps } from '../offline/store';
+import {
+  cacheMaterialQueue,
+  cacheQueue,
+  cachedMaterialQueue,
+  cachedQueue,
+  enqueueReview,
+  flushReviews,
+  forgetAnswered,
+  pendingCardIds,
+  pendingCount,
+  removeFromOutbox,
+  takeLevelUps,
+} from '../offline/store';
 import { buzz } from '../prefs';
 import { StreakGoal } from '../progress';
 import { materialReview, partView } from '../materials';
@@ -86,6 +98,7 @@ export function Review({
   material,
   part,
   mistakes = false,
+  exam = false,
 }: {
   size: number;
   category?: string | null;
@@ -93,6 +106,8 @@ export function Review({
   part?: string | null;
   /** 복습 탭의 "틀린 것만 풀기" */
   mistakes?: boolean;
+  /** 랜덤 시험: 푼 카드에서 뽑고, 연습이라 기록하지 않는다 */
+  exam?: boolean;
 }) {
   const [load, setLoad] = useState<Load>({ state: 'loading' });
 
@@ -102,12 +117,12 @@ export function Review({
       try {
         // 밀린 답을 먼저 보낸다. 못 보낸 답의 카드는 서버가 아직 모르니 큐에서 뺀다
         await flushReviews();
-        // 지난 복습에서 남은 LEVEL UP과 개념 정보는 버린다. 끝 화면은 이번 복습의 것만 보여 준다
-        takeLevelUps();
+        // 지난 복습의 개념 정보는 버린다. LEVEL UP은 아직 못 본 것이면 이번 끝 화면에서 함께 보여 준다
         forgetConcepts();
         const pending = await pendingCardIds();
         const params = new URLSearchParams({ size: String(Math.min(size + pending.size, MAX_QUEUE)) });
         if (mistakes) params.set('mode', 'mistakes');
+        if (exam) params.set('mode', 'random');
         if (category) params.set('category', category);
         if (material) params.set('material', material);
         // 자료의 섹션 하나만 풀 때
@@ -119,11 +134,16 @@ export function Review({
         ]);
         const cards = queue.cards.filter((card) => !pending.has(card.id)).slice(0, size);
         // 오프라인용으로는 오늘 큐 전체만 남긴다. 분류·자료로 거른 큐를 남기면 다음 오프라인 복습이 그 카드만 낸다
-        if (!category && !material && !mistakes) await cacheQueue(cards);
+        if (!category && !material && !mistakes && !exam) await cacheQueue(cards);
+        // 자료 섹션은 따로 남겨 둔다. 지하철에서 연결이 끊겨도 이어서 학습한다
+        if (material && !exam) await cacheMaterialQueue(material, part ?? null, queue.cards.filter((card) => !pending.has(card.id)));
         if (!cancelled) setLoad({ state: 'ready', cards, offline: false, before: before && { xp: before.today.xp, reviewed: before.today.reviewed } });
       } catch (error) {
-        if (error instanceof OfflineError && (category || material || mistakes)) {
-          if (!cancelled) setLoad({ state: 'error', message: '인터넷에 연결되지 않았어요. 분류·자료별 복습과 틀린 것은 연결된 뒤에 할 수 있어요.' });
+        if (error instanceof OfflineError && material && !exam) {
+          const cards = (await cachedMaterialQueue(material, part ?? null)).slice(0, size);
+          if (!cancelled) setLoad(cards.length > 0 ? { state: 'ready', cards, offline: true } : { state: 'error', message: '인터넷에 연결되지 않았고, 이 섹션은 기기에 받아 두지 않았어요. 연결된 곳에서 한 번 열면 다음부터 오프라인으로도 풀 수 있어요.' });
+        } else if (error instanceof OfflineError && (category || material || mistakes || exam)) {
+          if (!cancelled) setLoad({ state: 'error', message: '인터넷에 연결되지 않았어요. 분류별 복습, 틀린 것, 랜덤 시험은 연결된 뒤에 할 수 있어요.' });
         } else if (error instanceof OfflineError) {
           const cards = (await cachedQueue()).slice(0, size);
           if (!cancelled) setLoad(cards.length > 0 ? { state: 'ready', cards, offline: true } : { state: 'error', message: '인터넷에 연결되지 않았고, 저장해 둔 카드도 없어요.' });
@@ -133,7 +153,7 @@ export function Review({
     return () => {
       cancelled = true;
     };
-  }, [size, category, material, part, mistakes]);
+  }, [size, category, material, part, mistakes, exam]);
 
   if (load.state === 'loading') return <Loading label="카드를 가져오는 중" />;
   if (load.state === 'error') {
@@ -148,13 +168,15 @@ export function Review({
     return (
       <div className="screen done">
         <Mascot mood="sleep" size={96} />
-        <p className="big">{mistakes ? '다시 풀 틀린 카드가 없어요' : '오늘 복습할 카드가 없어요'}</p>
-        <p className="muted">{mistakes ? '최근 30일 안에 틀린 카드는 오늘 다 풀었어요.' : '다 했거나, 아직 저장한 카드가 없어요.'}</p>
+        <p className="big">{exam ? '시험 낼 카드가 없어요' : mistakes ? '다시 풀 틀린 카드가 없어요' : '오늘 복습할 카드가 없어요'}</p>
+        <p className="muted">
+          {exam ? '시험은 한 번이라도 푼 카드에서 내요.' : mistakes ? '최근 30일 안에 틀린 카드는 오늘 다 풀었어요.' : '다 했거나, 아직 저장한 카드가 없어요.'}
+        </p>
         <HomeButton primary />
       </div>
     );
   }
-  return <Session initial={load.cards} offline={load.offline} before={load.before ?? null} />;
+  return <Session initial={load.cards} offline={load.offline} before={load.before ?? null} exam={exam} />;
 }
 
 interface Recorded {
@@ -169,7 +191,7 @@ const REPORT_REASONS: { reason: ReportReason; label: string }[] = [
   { reason: 'other', label: '그 밖의 문제' },
 ];
 
-function Session({ initial, offline, before }: { initial: QueueCard[]; offline: boolean; before: TodayBefore | null }) {
+function Session({ initial, offline, before, exam }: { initial: QueueCard[]; offline: boolean; before: TodayBefore | null; exam: boolean }) {
   const [cards, setCards] = useState(initial);
   const [index, setIndex] = useState(0);
   const [picked, setPicked] = useState<Choice | null>(null);
@@ -180,7 +202,7 @@ function Session({ initial, offline, before }: { initial: QueueCard[]; offline: 
   const [results, setResults] = useState<Result[]>([]);
   const [busy, setBusy] = useState(false);
   /** "틀린 카드 다시 보기"는 연습이라 기록하지 않는다. 방금 정답을 봤으니 기록하면 재학습 단계를 건너뛰게 된다 */
-  const [practice, setPractice] = useState(false);
+  const [practice, setPractice] = useState(exam);
   const [notice, setNotice] = useState<string | null>(null);
   /** 방금 기록한 답. 잘못 눌렀으면 다음 카드에서 되돌릴 수 있다 */
   const [last, setLast] = useState<Recorded | null>(null);
@@ -394,7 +416,7 @@ function Session({ initial, offline, before }: { initial: QueueCard[]; offline: 
     return () => window.removeEventListener('keydown', onKey);
   });
 
-  if (!card) return <Summary results={results} practice={practice} before={before} onRetry={retry} onUndo={last ? () => void undo() : null} notice={notice} />;
+  if (!card) return <Summary results={results} practice={practice} exam={exam} before={before} onRetry={retry} onUndo={last ? () => void undo() : null} notice={notice} />;
 
   const report = async (reason: ReportReason) => {
     if (stale()) return;
@@ -444,7 +466,7 @@ function Session({ initial, offline, before }: { initial: QueueCard[]; offline: 
       <div className="review-body">
         <div className="review-main">
           {offline ? <p className="notice">오프라인이에요. 답은 저장해 두었다가 연결되면 보내요.</p> : null}
-          {practice ? <p className="notice">다시 보기는 연습이라 기록하지 않아요. 틀린 카드는 곧 다시 나와요.</p> : null}
+          {practice ? <p className="notice">{exam ? '랜덤 시험이에요. 기록하지 않아서 복습 일정은 그대로예요.' : '다시 보기는 연습이라 기록하지 않아요. 틀린 카드는 곧 다시 나와요.'}</p> : null}
           {/* 방금 기록한 답은 다음 카드에서 고르기 전까지, 길어야 6초 동안 되돌릴 수 있다. 그 뒤에는 끝 화면에서 되돌린다 */}
           <AnimatePresence>
             {last && toast === last.reviewId && !picked && !chosen ? (
@@ -590,6 +612,7 @@ function Session({ initial, offline, before }: { initial: QueueCard[]; offline: 
 function Summary({
   results,
   practice,
+  exam,
   before,
   onRetry,
   onUndo,
@@ -597,6 +620,8 @@ function Summary({
 }: {
   results: Result[];
   practice: boolean;
+  /** 랜덤 시험이었다 (점수를 보여 준다) */
+  exam: boolean;
   /** 시작할 때 서버가 센 오늘 숫자. 없으면(오프라인으로 시작) 화면에서 어림한다 */
   before: TodayBefore | null;
   onRetry: (cards: QueueCard[]) => void;
@@ -622,7 +647,7 @@ function Summary({
         // 밀린 답을 먼저 보내야 오늘 목표와 연속, LEVEL UP이 맞게 나온다
         await flushReviews();
         if (cancelled) return;
-        setLevelUps(takeLevelUps());
+        setLevelUps(await takeLevelUps());
         setAllSent((await pendingCount()) === 0);
         const [next, materials] = await Promise.all([request<StatsResponse>('/stats'), request<{ materials: MaterialSummary[] }>('/materials').catch(() => null)]);
         if (cancelled) return;
@@ -649,7 +674,7 @@ function Summary({
   }, [celebrate]);
   /** 설명하기를 스스로 통과로 매긴 개념 */
   const passed = practice ? [] : [...new Set(results.filter((result) => result.card.type === 'explain' && result.correct).map((result) => result.card.concept_name))];
-  const title = practice ? '다시 보기를 마쳤어요' : goalMet ? '오늘 목표 달성!' : wrong.length === 0 ? '다 맞혔어요!' : `${results.length}장을 끝냈어요`;
+  const title = exam ? `시험 끝! ${right}/${results.length}` : practice ? '다시 보기를 마쳤어요' : goalMet ? '오늘 목표 달성!' : wrong.length === 0 ? '다 맞혔어요!' : `${results.length}장을 끝냈어요`;
   return (
     <div className="summary">
       <div className="summary-head">
@@ -657,7 +682,9 @@ function Summary({
         <Mascot mood={goalMet ? 'cheer' : levelUps.length > 0 ? 'levelup' : wrong.length === 0 ? 'happy' : 'think'} size={goalMet ? 112 : 96} />
         <h1>{title}</h1>
         <p className="muted">
-          {results.length}장 중 {right}장 맞혔어요{toGoal > 0 ? ` · 오늘 목표까지 ${toGoal}장` : ''}
+          {exam
+            ? `${results.length}문제 중 ${right}개 맞혔어요 · ${Math.round((right / Math.max(results.length, 1)) * 100)}점`
+            : `${results.length}장 중 ${right}장 맞혔어요${toGoal > 0 ? ` · 오늘 목표까지 ${toGoal}장` : ''}`}
         </p>
       </div>
       {practice ? null : (
@@ -747,7 +774,7 @@ function Summary({
         </section>
       ) : (
         <p className="muted" style={{ textAlign: 'center', margin: 0 }}>
-          {practice ? '다시 보기에서 다 맞혔어요.' : '다음 복습은 알림으로 알려 드릴게요.'}
+          {exam ? '다 맞혔어요! 시험은 기록하지 않아서 복습 일정은 그대로예요.' : practice ? '다시 보기에서 다 맞혔어요.' : '다음 복습은 알림으로 알려 드릴게요.'}
         </p>
       )}
       {onUndo ? (

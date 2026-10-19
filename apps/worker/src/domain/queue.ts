@@ -192,6 +192,37 @@ export async function loadMistakes(env: Env, userId: string, now: number, size: 
   return { cards: results.slice(0, size).map((row) => toQueueCard(row, now)), remaining: results.length };
 }
 
+/**
+ * 랜덤 시험: 한 번이라도 푼 카드에서 고르게 뽑는다. 설명하기는 스스로 매겨야 해서 뺀다.
+ * 범위는 분류(그 아래 포함)나 자료(섹션)로 좁힌다. 시험은 연습이라 PWA가 기록하지 않는다.
+ */
+export async function loadRandom(
+  env: Env,
+  userId: string,
+  now: number,
+  size: number,
+  scope: { category: string | null; material: string | null; part: string | null },
+): Promise<{ cards: QueueCard[]; remaining: number }> {
+  const from = `FROM cards c JOIN concepts k ON k.id = c.concept_id LEFT JOIN learning_sessions s ON s.id = c.session_id
+     WHERE c.user_id = ?1 AND c.status = 'active' AND c.state != 0 AND c.type != 'explain'
+       AND ${categoryClause('k.domain', '?2')}
+       AND (?3 IS NULL OR s.material = ?3) AND (?4 IS NULL OR coalesce(s.material_part, '') = ?4)`;
+  const binds = [userId, scope.category, scope.material, scope.part];
+  const [rows, count] = await env.DB.batch([
+    env.DB.prepare(
+      `SELECT c.id, c.concept_id, c.state, c.due, c.created_at, c.type, c.rung, c.prompt, c.code, c.answer, c.options, c.explain,
+              c.checklist, c.stability, c.difficulty, c.elapsed_days, c.scheduled_days, c.learning_steps, c.reps, c.lapses,
+              c.last_review, k.key AS concept_key, k.name AS concept_name, k.final_answer
+         ${from} ORDER BY random() LIMIT ?5`,
+    ).bind(...binds, size),
+    env.DB.prepare(`SELECT count(*) AS n ${from}`).bind(...binds),
+  ]);
+  return {
+    cards: (rows!.results as unknown as CandidateRow[]).map((row) => toQueueCard(row, now)),
+    remaining: (count!.results[0] as { n: number } | undefined)?.n ?? 0,
+  };
+}
+
 /** 이 카드들 중 마지막 답이 틀린 카드 수 (오늘 화면의 "틀린 것") */
 export async function countLastWrong(env: Env, userId: string, cardIds: readonly string[]): Promise<number> {
   if (cardIds.length === 0) return 0;

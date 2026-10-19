@@ -113,7 +113,12 @@ export function MapScreen() {
   const counts = Object.fromEntries(ORDER.map((state) => [state, data.nodes.filter((node) => node.state === state).length])) as Record<ConceptStateKey, number>;
   return (
     <div className="screen">
-      <h1>지식 지도</h1>
+      <div className="title-row">
+        <h1>지식 지도</h1>
+        <Link href="/categories" className="text-button">
+          분류 관리
+        </Link>
+      </div>
       {tops.length > 0 ? (
         <div className="segmented" role="group" aria-label="분류">
           <button type="button" className={top === null ? 'current' : ''} aria-pressed={top === null} onClick={() => setTop(null)}>

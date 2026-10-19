@@ -1,7 +1,7 @@
 import { ReviewItem, ReviewsBody, estimateMinutes, normalizeCategory, type OpenFollowup, type QueueResponse, type SessionSummary, type TodayResponse } from '@moai/shared';
 import { Hono } from 'hono';
 import type { AppEnv } from '../context';
-import { countLastWrong, countReviewedToday, loadMaterialQueue, loadMistakes, loadTodayQueue } from '../domain/queue';
+import { countLastWrong, countReviewedToday, loadMaterialQueue, loadMistakes, loadRandom, loadTodayQueue } from '../domain/queue';
 import { recordReviews } from '../domain/reviews';
 import { loadMe } from '../domain/users';
 import { errorJson, readJson } from '../lib/http';
@@ -51,12 +51,20 @@ review.get('/today', async (c) => {
 
 /**
  * ?category=분류 경로: 그 분류만 복습. ?material=자료 제목: 그 자료 풀기 (아직 안 푼 자료 카드 포함), &part=섹션 이름이면 그 섹션만.
- * ?mode=mistakes: 틀린 것만 (domain/queue.ts의 loadMistakes)
+ * ?mode=mistakes: 틀린 것만 (domain/queue.ts의 loadMistakes). ?mode=random: 랜덤 시험 (푼 카드에서, category·material·part로 좁힌다)
  */
 review.get('/queue', async (c) => {
   const size = Math.min(Math.max(Number.parseInt(c.req.query('size') ?? '8', 10) || 8, 1), 20);
   const now = Date.now();
   if (c.req.query('mode') === 'mistakes') return c.json((await loadMistakes(c.env, c.var.userId, now, size)) satisfies QueueResponse);
+  if (c.req.query('mode') === 'random') {
+    const scope = {
+      category: normalizeCategory(c.req.query('category')),
+      material: c.req.query('material')?.slice(0, 120) ?? null,
+      part: c.req.query('part')?.slice(0, 80) ?? null,
+    };
+    return c.json((await loadRandom(c.env, c.var.userId, now, size, scope)) satisfies QueueResponse);
+  }
   const material = c.req.query('material')?.slice(0, 120);
   if (material) {
     const part = c.req.query('part');

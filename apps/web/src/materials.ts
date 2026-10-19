@@ -9,6 +9,14 @@ export function materialReview(title: string, part: string | null, size = 10): s
   return `/review?${params}`;
 }
 
+/** 랜덤 시험 주소: 한 번이라도 푼 카드에서 10문제. 자료나 섹션으로 좁힐 수 있다 (기록하지 않는다) */
+export function examHref(scope: { material?: string; part?: string } = {}): string {
+  const params = new URLSearchParams({ mode: 'random', size: '10' });
+  if (scope.material) params.set('material', scope.material);
+  if (scope.part !== undefined) params.set('part', scope.part);
+  return `/review?${params}`;
+}
+
 /** 자료 상세(섹션 목록) 주소 */
 export const materialHref = (title: string) => `/materials/detail?${new URLSearchParams({ title })}`;
 

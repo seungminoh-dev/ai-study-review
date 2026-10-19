@@ -51,7 +51,8 @@ const Welcome = lazyScreen(() => import('./screens/Welcome').then((module) => mo
 const Interview = lazyScreen(() => import('./screens/Interview').then((module) => module.Interview));
 const Learn = lazyScreen(() => import('./screens/Learn').then((module) => module.Learn));
 const Reviews = lazyScreen(() => import('./screens/Reviews').then((module) => module.Reviews));
-const LATER = [Review, Sessions, SessionDetail, MapScreen, Concept, Growth, Import, Materials, MaterialDetail, Settings, Welcome, Interview, Learn, Reviews];
+const Categories = lazyScreen(() => import('./screens/Categories').then((module) => module.Categories));
+const LATER = [Review, Sessions, SessionDetail, MapScreen, Concept, Growth, Import, Materials, MaterialDetail, Settings, Welcome, Interview, Learn, Reviews, Categories];
 // 개인정보 처리방침·약관은 로그인 전에도 열고, 가끔만 보니 미리 받지 않는다
 const Legal = lazyScreen(() => import('./screens/Legal').then((module) => module.Legal));
 const legalDoc = (path: string) => (path === '/privacy' ? 'privacy' : path === '/terms' ? 'terms' : null);
@@ -85,7 +86,7 @@ function sectionOf(path: string): Section | null {
   if (path === '/') return 'today';
   if (path === '/learn' || path === '/materials' || path.startsWith('/materials/')) return 'learn';
   if (path === '/reviews' || path.startsWith('/sessions') || path === '/import') return 'reviews';
-  if (path === '/map' || path.startsWith('/concepts/')) return 'map';
+  if (path === '/map' || path.startsWith('/concepts/') || path === '/categories') return 'map';
   if (path === '/growth') return 'growth';
   if (path === '/settings') return 'settings';
   return null;
@@ -291,10 +292,11 @@ export function App() {
   let screen;
   if (path === '/review') {
     const size = Math.min(Math.max(Number(query.get('size')) || 8, 1), 20);
-    screen = <Review key={location.search} size={size} category={query.get('category')} material={query.get('material')} part={query.get('part')} mistakes={query.get('mode') === 'mistakes'} />;
+    screen = <Review key={location.search} size={size} category={query.get('category')} material={query.get('material')} part={query.get('part')} mistakes={query.get('mode') === 'mistakes'} exam={query.get('mode') === 'random'} />;
   }
   else if (path === '/learn') screen = <Learn key={query.get('title') ?? ''} title={query.get('title')} />;
   else if (path === '/reviews') screen = <Reviews />;
+  else if (path === '/categories') screen = <Categories />;
   else if (path === '/sessions') screen = <Sessions />;
   else if (sessionMatch) screen = <SessionDetail id={sessionMatch[1]!} />;
   else if (path === '/map') screen = <MapScreen />;

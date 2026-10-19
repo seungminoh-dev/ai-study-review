@@ -8,6 +8,10 @@ import { RequestError, request } from '../api';
 const store = createStore('moai', 'kv');
 const OUTBOX = 'outbox';
 const QUEUE = 'queue';
+/** 보낸 답으로 열린 단계. 보여 줄 때까지 남긴다 */
+const LEVEL_UPS = 'level-ups';
+/** 자료 섹션 큐 (오프라인 학습) */
+const MATERIAL_QUEUES = 'material-queues';
 /** 이 기기의 답과 큐를 남긴 사람의 id */
 const OWNER = 'owner';
 
@@ -79,13 +83,25 @@ const isPermanent = (error: unknown) => error instanceof RequestError && (error.
 
 let flushing: Promise<void> | null = null;
 
-/** 보낸 답으로 다음 단계가 열린 개념. 복습 끝 화면이 가져간다 (앱을 다시 열면 사라진다) */
-let levelUps: LevelUp[] = [];
+/**
+ * 보낸 답으로 다음 단계가 열린 개념. 기기에 남겨 두었다가 복습 끝 화면이나 오늘 화면이 보여 주고 비운다.
+ * 앱을 다시 열거나 오프라인 답을 나중에 보내도 사라지지 않는다.
+ */
+export async function peekLevelUps(): Promise<LevelUp[]> {
+  return (await get<LevelUp[]>(LEVEL_UPS, store)) ?? [];
+}
 
-/** 모아 둔 LEVEL UP을 꺼내고 비운다. 복습을 시작할 때도 불러서 지난 것을 버린다 */
-export function takeLevelUps(): LevelUp[] {
-  const taken = levelUps;
-  levelUps = [];
+/** 모아 둔 LEVEL UP을 꺼내고 비운다 */
+export async function takeLevelUps(): Promise<LevelUp[]> {
+  let taken: LevelUp[] = [];
+  await update<LevelUp[]>(
+    LEVEL_UPS,
+    (items) => {
+      taken = items ?? [];
+      return [];
+    },
+    store,
+  );
   return taken;
 }
 
@@ -100,7 +116,8 @@ export function flushReviews(): Promise<void> {
         const batch = items.slice(0, REVIEWS_PER_REQUEST);
         try {
           const result = await request<ReviewsResponse>('/reviews', { method: 'POST', json: { reviews: batch } });
-          levelUps.push(...(result.level_ups ?? []));
+          const opened = result.level_ups ?? [];
+          if (opened.length > 0) await update<LevelUp[]>(LEVEL_UPS, (items) => [...(items ?? []), ...opened], store);
         } catch (error) {
           if (!isPermanent(error)) throw error;
           console.warn('답안 묶음을 서버가 받지 않아서 버렸어요', error);
@@ -138,4 +155,44 @@ export async function cachedQueue(): Promise<QueueCard[]> {
 export async function forgetAnswered(cardIds: readonly string[]): Promise<void> {
   const done = new Set(cardIds);
   await update<CachedQueue | undefined>(QUEUE, (cached) => (cached ? { ...cached, cards: cached.cards.filter((card) => !done.has(card.id)) } : cached), store);
+  await update<CachedMaterialQueue[]>(MATERIAL_QUEUES, (list) => (list ?? []).map((item) => ({ ...item, cards: item.cards.filter((card) => !done.has(card.id)) })), store);
+}
+
+interface CachedMaterialQueue {
+  material: string;
+  /** 섹션 이름. null이면 자료 전체 */
+  part: string | null;
+  cards: QueueCard[];
+  saved_at: number;
+}
+
+/** 자료 섹션 큐는 일주일 동안 쓴다. 새 카드는 때가 정해져 있지 않다 */
+const MATERIAL_TTL = 7 * 24 * 60 * 60 * 1000;
+/** 기기에 남기는 자료 섹션 수 */
+const MATERIAL_KEEP = 6;
+
+/** 연 자료 섹션의 카드를 남겨 둔다. 오프라인에서도 그 섹션을 이어서 학습한다 */
+export async function cacheMaterialQueue(material: string, part: string | null, cards: QueueCard[]): Promise<void> {
+  await update<CachedMaterialQueue[]>(
+    MATERIAL_QUEUES,
+    (list) => [{ material, part, cards, saved_at: Date.now() }, ...(list ?? []).filter((item) => item.material !== material || item.part !== part)].slice(0, MATERIAL_KEEP),
+    store,
+  );
+}
+
+/** 남겨 둔 자료 섹션 큐에서 이미 답한 카드를 뺀다 */
+export async function cachedMaterialQueue(material: string, part: string | null): Promise<QueueCard[]> {
+  const item = ((await get<CachedMaterialQueue[]>(MATERIAL_QUEUES, store)) ?? []).find((entry) => entry.material === material && entry.part === part);
+  if (!item || Date.now() - item.saved_at > MATERIAL_TTL) return [];
+  const answered = await pendingCardIds();
+  return item.cards.filter((card) => !answered.has(card.id));
+}
+
+/** 오프라인 학습 탭: 남겨 둔 자료 섹션과 남은 장수 */
+export async function cachedMaterialQueues(): Promise<{ material: string; part: string | null; count: number }[]> {
+  const answered = await pendingCardIds();
+  return ((await get<CachedMaterialQueue[]>(MATERIAL_QUEUES, store)) ?? [])
+    .filter((item) => Date.now() - item.saved_at <= MATERIAL_TTL)
+    .map((item) => ({ material: item.material, part: item.part, count: item.cards.filter((card) => !answered.has(card.id)).length }))
+    .filter((item) => item.count > 0);
 }

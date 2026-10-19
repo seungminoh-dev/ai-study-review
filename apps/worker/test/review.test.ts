@@ -323,3 +323,16 @@ describe('mistakes', () => {
     expect((await (await api(await newUser(), '/queue?mode=mistakes')).json()) as QueueResponse).toEqual({ cards: [], remaining: 0 });
   });
 });
+
+describe('random exam', () => {
+  it('draws only cards I have answered, never explain cards, and never anyone else\'s', async () => {
+    await saveExample();
+    expect(((await (await api(user, '/queue?mode=random')).json()) as QueueResponse).remaining).toBe(0);
+    const { cards } = (await (await api(user, '/queue')).json()) as QueueResponse;
+    await api(user, '/reviews', { method: 'POST', json: { reviews: cards.map((card) => answer(card.id, 3)) } });
+    const exam = (await (await api(user, '/queue?mode=random&size=20')).json()) as QueueResponse;
+    expect(exam.remaining).toBe(cards.filter((card) => card.type !== 'explain').length);
+    expect(exam.cards.every((card) => card.type !== 'explain' && cards.some((answered) => answered.id === card.id))).toBe(true);
+    expect(((await (await api(await newUser(), '/queue?mode=random')).json()) as QueueResponse).remaining).toBe(0);
+  });
+});

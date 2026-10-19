@@ -2551,6 +2551,7 @@ a.notice.link:active,
   order: 2;
 }
 
+.o-quest,
 .o-week {
   order: 3;
 }
@@ -6802,4 +6803,165 @@ a.notice.link:active,
 .title-row.small-title .text-button {
   min-height: 32px;
   font-size: 0.8125rem;
+}
+
+/* 분류 관리: 깊이만큼 들여 쓴 트리, 옮기기 폼 */
+.categories-screen {
+  gap: 12px;
+}
+
+.categories-screen h1 {
+  margin: 0;
+}
+
+.category-tree {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--surface);
+  list-style: none;
+}
+
+.category-tree > li {
+  padding-left: calc(var(--depth, 0) * 18px);
+  border-bottom: 1px solid var(--border);
+}
+
+.category-tree > li:last-child {
+  border-bottom: none;
+}
+
+.category-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 6px 8px;
+}
+
+.category-row .grow {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.move-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 8px 14px;
+}
+
+.move-form p,
+.move-preview ul {
+  margin: 0;
+}
+
+.move-preview ul {
+  padding-left: 1.2em;
+}
+
+/* 오늘의 퀘스트 */
+.quest-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.quest-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.quest-list .grow {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.quest-name {
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.quest-mark {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid var(--border-strong);
+}
+
+.quest-list li.done .quest-mark {
+  border-color: var(--good-fill);
+  background: var(--good-fill);
+  color: #192849;
+}
+
+.quest-list li.done .quest-name {
+  color: var(--muted);
+}
+
+.quest-list li.done .bar > span {
+  background: var(--good-fill);
+}
+
+.quest-xp {
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: var(--accent-ink);
+}
+
+/* 랜덤 시험 입구 (학습 탭, 복습 탭) */
+.exam-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--surface);
+}
+
+.exam-card .grow {
+  flex: 1 1 200px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.exam-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.exam-actions .button {
+  flex: 0 0 auto;
+  min-height: 44px;
+}
+
+.levelup-notice .grow {
+  flex: 1;
+}
+
+.levelup-notice h2,
+.levelup-notice p {
+  margin: 0;
+}
+
+.levelup-notice .text-button {
+  align-self: flex-start;
 }

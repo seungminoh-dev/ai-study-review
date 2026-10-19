@@ -1,11 +1,12 @@
-import type { MaterialDetail, MaterialPart, MaterialSummary } from '@moai/shared';
-import { useState, type CSSProperties } from 'react';
-import { request } from '../api';
+import type { MaterialDetail, MaterialPart, MaterialSummary, QueueResponse } from '@moai/shared';
+import { useEffect, useState, type CSSProperties } from 'react';
+import { OfflineError, request } from '../api';
+import { cacheMaterialQueue, cachedMaterialQueues } from '../offline/store';
 import { EditableTitle } from '../EditableTitle';
 import { IconCheck, IconChevron } from '../icons';
 import { Loading } from '../Loading';
 import { Mascot } from '../Mascot';
-import { materialHref, materialReview, partView } from '../materials';
+import { examHref, materialHref, materialReview, partView } from '../materials';
 import { Link } from '../router';
 import { useApi } from '../useApi';
 import { BookTile } from './Materials';
@@ -23,9 +24,10 @@ export function Learn({ title }: { title: string | null }) {
   const { data, error } = useApi<{ materials: MaterialSummary[] }>('/materials');
   if (error) {
     return (
-      <div className="screen">
+      <div className="screen learn-screen">
         <h1>학습</h1>
         <p className="notice bad">{error}</p>
+        <OfflineSections />
       </div>
     );
   }
@@ -48,6 +50,30 @@ export function Learn({ title }: { title: string | null }) {
   return <MaterialPath key={material.title} material={material} materials={data.materials} />;
 }
 
+/** 오프라인: 기기에 받아 둔 자료 섹션을 이어서 학습한다 */
+function OfflineSections() {
+  const [sections, setSections] = useState<{ material: string; part: string | null; count: number }[] | null>(null);
+  useEffect(() => {
+    void cachedMaterialQueues().then(setSections);
+  }, []);
+  if (!sections || sections.length === 0) return null;
+  return (
+    <section className="card" aria-labelledby="offline-sections-title">
+      <h2 id="offline-sections-title">기기에 받아 둔 섹션</h2>
+      <ul className="list">
+        {sections.map((section) => (
+          <li key={`${section.material}|${section.part ?? ''}`}>
+            <Link className="row-link" href={materialReview(section.material, section.part)}>
+              <span>{section.part !== null ? partView(section.part, 0).name : '자료 전체'}</span>
+              <span className="muted small">새 카드 {section.count}장</span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 function MaterialPath({ material, materials }: { material: MaterialSummary; materials: MaterialSummary[] }) {
   const { data, reload } = useApi<MaterialDetail>(`/materials/detail?${new URLSearchParams({ title: material.title })}`);
   const [switching, setSwitching] = useState(false);
@@ -57,6 +83,18 @@ function MaterialPath({ material, materials }: { material: MaterialSummary; mate
   const selected = picked ?? Math.max(current, 0);
   const sections = Math.max(material.parts.length, 1);
   const finished = parts.filter(doneOf).length;
+  const nextPart = current >= 0 ? parts[current]!.name : null;
+
+  // 이어서 할 섹션을 기기에 받아 둔다. 연결이 끊겨도 그 섹션은 학습할 수 있다
+  useEffect(() => {
+    if (nextPart === null || !navigator.onLine) return;
+    const params = new URLSearchParams({ material: material.title, part: nextPart, size: '10' });
+    void request<QueueResponse>(`/queue?${params}`)
+      .then((queue) => cacheMaterialQueue(material.title, nextPart, queue.cards))
+      .catch((reason) => {
+        if (!(reason instanceof OfflineError)) console.warn('섹션을 받아 두지 못했어요', reason);
+      });
+  }, [material.title, nextPart]);
 
   return (
     <div className="screen learn-screen">
@@ -99,6 +137,24 @@ function MaterialPath({ material, materials }: { material: MaterialSummary; mate
         <>
           {parts[selected] ? (
             <PartCard key={parts[selected].name} title={material.title} part={parts[selected]} index={selected} current={selected === current} label={data.part_labels[parts[selected].name]} onRenamed={reload} />
+          ) : null}
+          {material.solved > 0 ? (
+            <section className="exam-card" aria-label="랜덤 시험">
+              <span className="grow">
+                <strong>랜덤 시험</strong>
+                <span className="muted small">푼 카드에서 10문제를 섞어 내요. 기록하지 않아요.</span>
+              </span>
+              <div className="exam-actions">
+                {parts[selected] && parts[selected].solved > 0 ? (
+                  <Link className="button" href={examHref({ material: material.title, part: parts[selected].name })}>
+                    이 섹션
+                  </Link>
+                ) : null}
+                <Link className="button" href={examHref({ material: material.title })}>
+                  자료 전체
+                </Link>
+              </div>
+            </section>
           ) : null}
           <ol className="path" aria-label="섹션 길">
             {parts.map((part, index) => {

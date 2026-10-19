@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { BadgeId } from './badges';
+import type { QuestId } from './quests';
 import type { EdgeType, JudgmentLabel } from './save-learning';
 
 // REST API(PWA용) 요청 스키마와 응답 타입 (설계서 §7). Worker와 PWA가 같이 쓴다.
@@ -173,6 +174,8 @@ export interface StatsResponse {
   history: StatsDay[];
   /** 이정표 배지. packages/shared/src/badges.ts의 BADGES 순서 */
   badges: Badge[];
+  /** 오늘의 퀘스트 (packages/shared/src/quests.ts의 QUESTS 순서) */
+  quests: { id: QuestId; value: number; target: number; done: boolean }[];
 }
 
 /** 이정표 배지 하나 (3단계 3-4). 한 번 받으면 하루 목표를 바꾸거나 답을 되돌려도 남는다 */
@@ -296,6 +299,22 @@ export const MaterialBody = z.object({ title: z.string().trim().min(1).max(120) 
 export const MaterialLabelBody = z.object({ title: z.string().trim().min(1).max(120), label: z.string().trim().max(80) });
 /** 자료 섹션 이름 바꾸기. part는 원래 섹션 이름(이름 없는 섹션은 빈 문자열), 비우면 원래 이름으로 돌아간다 */
 export const MaterialPartLabelBody = z.object({ title: z.string().trim().min(1).max(120), part: z.string().max(80), label: z.string().trim().max(80) });
+/** 분류 옮기기·이름 바꾸기 (앱의 분류 관리). to가 기존 분류면 합쳐진다. dry_run이면 바꾸지 않고 옮길 내용만 돌려준다 */
+export const CategoryRenameBody = z.object({ from: z.string().trim().min(1).max(80), to: z.string().trim().min(1).max(80), dry_run: z.boolean().default(false) });
+
+/** 분류 관리 화면: 분류마다 공부한 개념 수와 자료(안 푼) 개념 수 */
+export interface CategoryManage {
+  categories: { path: string; concepts: number; material: number }[];
+}
+
+export interface CategoryRenameResult {
+  renamed: number;
+  moves: { from: string; to: string }[];
+  /** 3단계를 넘어 잘리면서 다른 분류와 합쳐진 이동 */
+  merged: { from: string; to: string }[];
+  dry_run?: true;
+}
+
 /** 저장한 대화 이름 바꾸기 */
 export const SessionTopicBody = z.object({ topic: z.string().trim().min(1).max(200) });
 

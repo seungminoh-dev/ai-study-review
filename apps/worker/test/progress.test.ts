@@ -65,8 +65,14 @@ describe('streak', () => {
     await run([3, 3, 2, 3, 3]); // 무실수: 50 + 보너스 10
     await run([3, 3, 1, 3, 3]); // 하나 틀림: 42
     await run([3, 3, 3, 3]); // 4장뿐: 40
-    // 저장 30
-    expect((await loadStats(env, user.id, now)).today.xp).toBe(30 + 60 + 42 + 40);
+    // 저장 30, 퀘스트: 카드 10장(14장) +10, 무실수 1번 +10, 학습은 아직
+    const stats = await loadStats(env, user.id, now);
+    expect(stats.today.xp).toBe(30 + 60 + 42 + 40 + 20);
+    expect(stats.quests).toEqual([
+      { id: 'cards', value: 14, target: 10, done: true },
+      { id: 'perfect', value: 1, target: 1, done: true },
+      { id: 'learn', value: 0, target: 5, done: false },
+    ]);
   });
 });
 

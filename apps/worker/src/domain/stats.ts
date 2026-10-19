@@ -1,11 +1,11 @@
-import { PERFECT_MIN_ANSWERS, PERFECT_XP, type StatsResponse } from '@moai/shared';
+import { PERFECT_MIN_ANSWERS, PERFECT_XP, QUESTS, QUEST_XP, type QuestId, type StatsResponse } from '@moai/shared';
 import type { Env } from '../env';
 import { badgeReads, settleBadges } from './badges';
-import { DAY_MS, STUDY_DAY_SHIFT, studyDayIndex, studyDayKey, studyDayStart, studyWeekday } from '../lib/kst';
+import { DAY_MS, STUDY_DAY_SHIFT, studyDayIndex, studyDayKey, studyWeekday } from '../lib/kst';
 
 // 스트릭·XP (설계서 §9.6). 따로 저장하지 않고 review_logs와 learning_sessions에서 센다. 프리즈만 저장한다.
 
-/** XP: 정답 10, 오답 2, 설명하기 완료 20, 학습 세션 저장 30, 무실수 복습 보너스 PERFECT_XP */
+/** XP: 정답 10, 오답 2, 설명하기 완료 20, 학습 세션 저장 30, 무실수 복습 보너스 PERFECT_XP, 오늘의 퀘스트 하나에 QUEST_XP */
 const REVIEW_XP = `CASE WHEN c.type = 'explain' THEN 20 WHEN r.grade >= 2 THEN 10 ELSE 2 END`;
 const SESSION_XP = 30;
 /** 스트릭은 1년까지만 거슬러 센다 */
@@ -15,14 +15,20 @@ interface DayRow {
   d: number;
   n: number;
   xp: number;
+  /** 자료 카드를 처음 푼 답 (학습) */
+  learned: number;
+  /** 통과한 설명하기 */
+  explains: number;
 }
 
 export async function loadStats(env: Env, userId: string, now: number): Promise<StatsResponse> {
   const today = studyDayIndex(now);
   const since = (today - LOOKBACK_DAYS) * DAY_MS - STUDY_DAY_SHIFT;
-  const [reviews, sessions, perfects, learned, freezes, user, ...badgeRows] = await env.DB.batch([
+  const [reviews, sessions, perfects, freezes, user, ...badgeRows] = await env.DB.batch([
     env.DB.prepare(
-      `SELECT CAST((r.reviewed_at + ?3) / ${DAY_MS} AS INTEGER) AS d, count(*) AS n, sum(${REVIEW_XP}) AS xp
+      `SELECT CAST((r.reviewed_at + ?3) / ${DAY_MS} AS INTEGER) AS d, count(*) AS n, sum(${REVIEW_XP}) AS xp,
+              sum(c.origin = 'material' AND json_extract(r.prev_card, '$.state') = 0) AS learned,
+              sum(c.type = 'explain' AND r.grade >= 2) AS explains
          FROM review_logs r JOIN cards c ON c.id = r.card_id
         WHERE r.user_id = ?1 AND r.reviewed_at >= ?2
         GROUP BY d`,
@@ -39,11 +45,6 @@ export async function loadStats(env: Env, userId: string, now: number): Promise<
                 GROUP BY run_id HAVING count(*) >= ${PERFECT_MIN_ANSWERS} AND min(grade) >= 2)
         GROUP BY d`,
     ).bind(userId, since, STUDY_DAY_SHIFT),
-    // 오늘 학습: 자료 카드를 처음 푼 답 (오늘 목표 링을 복습과 나눠 칠한다)
-    env.DB.prepare(
-      `SELECT count(*) AS n FROM review_logs r JOIN cards c ON c.id = r.card_id
-        WHERE r.user_id = ?1 AND r.reviewed_at >= ?2 AND c.origin = 'material' AND json_extract(r.prev_card, '$.state') = 0`,
-    ).bind(userId, studyDayStart(now)),
     env.DB.prepare('SELECT day FROM streak_freezes WHERE user_id = ?1').bind(userId),
     env.DB.prepare('SELECT daily_goal FROM users WHERE id = ?1').bind(userId),
     ...badgeReads(env, userId),
@@ -53,7 +54,16 @@ export async function loadStats(env: Env, userId: string, now: number): Promise<
   const saved = new Map((sessions!.results as unknown as { d: number; n: number }[]).map((row) => [row.d, row.n]));
   const frozen = new Set((freezes!.results as { day: string }[]).map((row) => row.day));
   const perfect = new Map((perfects!.results as unknown as { d: number; n: number }[]).map((row) => [row.d, row.n]));
-  const xpOf = (day: number) => (reviewed.get(day)?.xp ?? 0) + (saved.get(day) ?? 0) * SESSION_XP + (perfect.get(day) ?? 0) * PERFECT_XP;
+  /** 오늘의 퀘스트: 그날의 기록에서 센다. 셋 다 매일 같아서 지난날도 같은 규칙이다 */
+  const questOf = (day: number, id: QuestId): { value: number; done: boolean } => {
+    const row = reviewed.get(day);
+    const target = QUESTS.find((quest) => quest.id === id)!.target;
+    const value = id === 'cards' ? (row?.n ?? 0) : id === 'perfect' ? (perfect.get(day) ?? 0) : (row?.learned ?? 0);
+    // 학습 퀘스트는 설명하기 1장 통과로도 채운다
+    return { value, done: value >= target || (id === 'learn' && (row?.explains ?? 0) > 0) };
+  };
+  const questXp = (day: number) => QUESTS.filter((quest) => questOf(day, quest.id).done).length * QUEST_XP;
+  const xpOf = (day: number) => (reviewed.get(day)?.xp ?? 0) + (saved.get(day) ?? 0) * SESSION_XP + (perfect.get(day) ?? 0) * PERFECT_XP + questXp(day);
   const met = (day: number) => (reviewed.get(day)?.n ?? 0) >= goal;
   const weekOf = (day: number) => day - studyWeekday(day);
   const usedFreezeWeeks = new Set([...frozen].map((key) => weekOf(Math.round(Date.parse(key) / DAY_MS))));
@@ -109,7 +119,7 @@ export async function loadStats(env: Env, userId: string, now: number): Promise<
   const weekXp = (start: number) => Array.from({ length: 7 }, (_, i) => xpOf(start + i)).reduce((sum, xp) => sum + xp, 0);
   return {
     goal,
-    today: { reviewed: reviewed.get(today)?.n ?? 0, learned: (learned!.results[0] as { n: number } | undefined)?.n ?? 0, xp: xpOf(today) },
+    today: { reviewed: reviewed.get(today)?.n ?? 0, learned: reviewed.get(today)?.learned ?? 0, xp: xpOf(today) },
     streak,
     freeze_available: !usedFreezeWeeks.has(monday),
     week: { xp: weekXp(monday), days },
@@ -117,5 +127,6 @@ export async function loadStats(env: Env, userId: string, now: number): Promise<
     last_week_xp: weekXp(monday - 7),
     history: Array.from({ length: 84 }, (_, i) => dayOf(monday - 77 + i)),
     badges,
+    quests: QUESTS.map((quest) => ({ id: quest.id, target: quest.target, ...questOf(today, quest.id) })),
   };
 }

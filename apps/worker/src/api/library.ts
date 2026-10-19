@@ -1,4 +1,5 @@
 import {
+  CategoryRenameBody,
   ConceptCategoryBody,
   MaterialBody,
   MaterialLabelBody,
@@ -7,14 +8,16 @@ import {
   materialLabel,
   normalizeCategory,
   type CardType,
+  type CategoryManage,
   type CategoryNode,
+  type CategoryRenameResult,
   type MaterialConcept,
   type MaterialDetail,
   type MaterialSummary,
 } from '@moai/shared';
 import { Hono } from 'hono';
 import type { AppEnv } from '../context';
-import { categoryLookupQueries, resolveCategories } from '../domain/categories';
+import { categoryLookupQueries, categoryOverview, resolveCategories, updateCategories } from '../domain/categories';
 import { errorJson, readJson } from '../lib/http';
 
 // 자료(PDF 등)와 분류 (설계서 §5.6). 자료 카드는 풀기 전까지 내 지식이 아니다. 분류는 저장할 때 정하고 여기서 고친다.
@@ -214,6 +217,22 @@ library.post('/materials/suspend-unsolved', async (c) => {
 });
 
 /** 내 지식의 분류와 개념 수. 분류 필터에 쓴다 */
+/** 분류 관리: 분류마다 공부한 개념과 자료 개념 수 (옮기면 둘 다 옮겨진다) */
+library.get('/categories/manage', async (c) => {
+  const { categories } = await categoryOverview(c.env, c.var.userId);
+  const body: CategoryManage = { categories: [...categories].sort((a, b) => a.path.localeCompare(b.path, 'ko')) };
+  return c.json(body);
+});
+
+/** 분류 옮기기·이름 바꾸기. 채팅의 update_categories와 같은 규칙이다 (옛 이름을 남기고, 3단계를 넘으면 잘라서 합친다) */
+library.post('/categories/rename', async (c) => {
+  const body = await readJson(c, CategoryRenameBody);
+  if (body instanceof Response) return body;
+  const result = await updateCategories(c.env, c.var.userId, { assign: [], rename: [{ from: body.from, to: body.to }], dry_run: body.dry_run }, Date.now());
+  const response: CategoryRenameResult = { renamed: result.renamed, moves: result.moves, merged: result.merged, ...(result.dry_run ? { dry_run: true as const } : {}) };
+  return c.json(response);
+});
+
 library.get('/categories', async (c) => {
   const { results } = await c.env.DB.prepare(
     `SELECT domain AS path, count(*) AS concepts FROM concepts
