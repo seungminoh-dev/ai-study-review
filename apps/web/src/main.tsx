@@ -5,10 +5,14 @@ import { App } from './App';
 import './install';
 import { MotionProvider } from './motion';
 import { flushReviews } from './offline/store';
+import { applyTheme } from './prefs';
 import { onNavigate } from './router';
 // 윈도우에서도 맑은 고딕 대신 같은 글꼴로 보이게 Pretendard를 직접 올린다
 import './fonts/pretendard/pretendard.css';
 import './styles.css';
+
+// 설정에서 고른 밝게·어둡게를 첫 화면을 그리기 전에 맞춘다
+applyTheme();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

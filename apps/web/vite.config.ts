@@ -19,8 +19,8 @@ export default defineConfig({
         // 모든 브라우저에서 등록되도록 모듈이 아닌 일반 스크립트로 만든다
         rollupFormat: 'iife',
         globPatterns: ['**/*.{js,css,html,png,svg,webmanifest}'],
-        // 링크 미리보기 그림은 앱에서 쓰지 않는다. 글꼴(woff2)은 화면에 나온 글자 조각만 그때그때 받는다
-        globIgnores: ['og.png'],
+        // 링크 미리보기 그림과 설치 미리보기 화면은 앱에서 쓰지 않는다. 글꼴(woff2)은 화면에 나온 글자 조각만 그때그때 받는다
+        globIgnores: ['og.png', 'screenshots/**'],
       },
       manifest: {
         name: '모아이',
@@ -39,6 +39,19 @@ export default defineConfig({
           { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
           { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' },
           { src: '/icons/icon-512-maskable.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+        ],
+        // 홈 화면 아이콘을 길게 누르면 나오는 바로가기
+        shortcuts: [
+          { name: '오늘 복습', short_name: '복습', url: '/review', icons: [{ src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' }] },
+          { name: '지식 지도', short_name: '지도', url: '/map', icons: [{ src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' }] },
+          { name: '내 성장', short_name: '성장', url: '/growth', icons: [{ src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' }] },
+        ],
+        // 설치 창에 보여 줄 화면 (scripts/gen-screenshots.mjs로 시험 데이터에서 찍는다)
+        screenshots: [
+          { src: '/screenshots/today.webp', sizes: '780x1688', type: 'image/webp', form_factor: 'narrow', label: '오늘 복습할 카드와 하루 목표' },
+          { src: '/screenshots/review.webp', sizes: '780x1688', type: 'image/webp', form_factor: 'narrow', label: '한 장씩 푸는 복습' },
+          { src: '/screenshots/map.webp', sizes: '780x1688', type: 'image/webp', form_factor: 'narrow', label: '내 지식 지도' },
+          { src: '/screenshots/wide.webp', sizes: '1280x800', type: 'image/webp', form_factor: 'wide', label: '컴퓨터에서 보는 오늘 화면' },
         ],
       },
     }),

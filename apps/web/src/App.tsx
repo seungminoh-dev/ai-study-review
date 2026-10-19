@@ -3,7 +3,7 @@ import * as m from 'motion/react-m';
 import { Suspense, lazy, useEffect, useState, type ComponentType, type ReactNode } from 'react';
 import { OfflineError, RequestError, errorMessage, onUnauthorized, request } from './api';
 import { forgetSeenBadges } from './badges';
-import { IconBook, IconGrowth, IconHome, IconMap, IconRecords, IconSettings } from './icons';
+import { IconBook, IconGrowth, IconHome, IconMap, IconOffline, IconRecords, IconSettings } from './icons';
 import { Loading, Splash } from './Loading';
 import { Mascot } from './Mascot';
 import { SNAPPY } from './motion';
@@ -158,8 +158,24 @@ async function loggedOut(): Promise<Auth> {
   return options.setup_available ? { state: 'setup' } : { state: 'out', github: options.github };
 }
 
+/** 인터넷에 연결되어 있는지. 기기가 알려 주는 값이라 연결은 됐는데 서버가 안 되는 경우는 모른다 */
+function useOnline(): boolean {
+  const [online, setOnline] = useState(() => navigator.onLine);
+  useEffect(() => {
+    const update = () => setOnline(navigator.onLine);
+    window.addEventListener('online', update);
+    window.addEventListener('offline', update);
+    return () => {
+      window.removeEventListener('online', update);
+      window.removeEventListener('offline', update);
+    };
+  }, []);
+  return online;
+}
+
 export function App() {
   const [auth, setAuth] = useState<Auth>({ state: 'loading' });
+  const online = useOnline();
   const { path, query } = useLocation();
 
   const signedIn = async (me: Me, to = '/') => {
@@ -306,6 +322,13 @@ export function App() {
     <div className={focus ? 'shell focus' : 'shell'}>
       {focus ? null : <Sidebar current={section} />}
       <main className={focus ? 'app review-mode' : wide ? 'app wide' : 'app'}>
+        {/* 복습 화면은 따로 알린다 */}
+        {!online && !focus ? (
+          <p className="offline-bar" role="status">
+            <IconOffline size={18} />
+            오프라인이에요. 저장해 둔 카드로 복습할 수 있고, 답은 연결되면 보내요.
+          </p>
+        ) : null}
         {/* 화면마다 따로 잡는다. 한 화면이 깨져도 메뉴는 남고, 다른 화면으로 가면 풀린다 */}
         <ErrorBoundary key={path}>
           <Suspense fallback={<Loading />}>{screen}</Suspense>

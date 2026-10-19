@@ -17,6 +17,7 @@ import { Loading } from '../Loading';
 import { Mascot } from '../Mascot';
 import { LEAVE, Presence, SOFT, useCountUp } from '../motion';
 import { cacheQueue, cachedQueue, enqueueReview, flushReviews, forgetAnswered, pendingCardIds, pendingCount, removeFromOutbox, takeLevelUps } from '../offline/store';
+import { buzz } from '../prefs';
 import { goTab, leave } from '../router';
 
 // 복습 세션 (설계서 §12.1, §12.2). 카드 한 장씩: 답 고르기 → 맞음·틀림과 해설 → 다음.
@@ -177,6 +178,8 @@ function Session({ initial, offline, before }: { initial: QueueCard[]; offline: 
   /** 컴퓨터 개념 패널에서 보고 있는 탭 */
   const [panelTab, setPanelTab] = useState<'concept' | 'ask'>('concept');
   const askButton = useRef<HTMLButtonElement>(null);
+  /** 되돌리기 토스트를 보여 줄 답 */
+  const [toast, setToast] = useState<string | null>(null);
   const wide = useWide();
   /** 두 번 탭해도 한 번만 기록한다 */
   const moving = useRef(false);
@@ -213,6 +216,12 @@ function Session({ initial, offline, before }: { initial: QueueCard[]; offline: 
     shownAt.current = Date.now();
   }, [index, cards]);
 
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), 6000);
+    return () => clearTimeout(timer);
+  }, [toast]);
+
   const advance = () => {
     setPicked(null);
     setChosen(null);
@@ -238,7 +247,7 @@ function Session({ initial, offline, before }: { initial: QueueCard[]; offline: 
     setConfidence(level);
     setChosen(null);
     setPicked(choice);
-    navigator.vibrate?.(choice.correct ? 10 : [30, 40, 30]);
+    buzz(choice.correct ? 10 : [30, 40, 30]);
   };
 
   /** 보기를 고른다. 확신도를 물을 때는 정답을 보여 주기 전에 확신도를 먼저 받는다 (연습은 묻지 않는다) */
@@ -270,6 +279,7 @@ function Session({ initial, offline, before }: { initial: QueueCard[]; offline: 
       });
       await forgetAnswered([current.id]);
       setLast({ reviewId: id, card: current });
+      setToast(id);
     }
     setResults((list) => [...list, { card: current, correct, confidentMiss: !correct && level === 'sure' }]);
     advance();
@@ -416,11 +426,24 @@ function Session({ initial, offline, before }: { initial: QueueCard[]; offline: 
         <div className="review-main">
           {offline ? <p className="notice">오프라인이에요. 답은 저장해 두었다가 연결되면 보내요.</p> : null}
           {practice ? <p className="notice">다시 보기는 연습이라 기록하지 않아요. 틀린 카드는 곧 다시 나와요.</p> : null}
-          {last && !picked && !chosen ? (
-            <button type="button" className="text-button undo" disabled={busy} onClick={() => void undo()}>
-              ↶ 방금 답 되돌리기
-            </button>
-          ) : null}
+          {/* 방금 기록한 답은 다음 카드에서 고르기 전까지, 길어야 6초 동안 되돌릴 수 있다. 그 뒤에는 끝 화면에서 되돌린다 */}
+          <AnimatePresence>
+            {last && toast === last.reviewId && !picked && !chosen ? (
+              <m.div
+                key={last.reviewId}
+                className="toast"
+                role="status"
+                initial={{ opacity: 0, y: -12 }}
+                animate={{ opacity: 1, y: 0, transition: SOFT }}
+                exit={{ opacity: 0, y: -8, transition: LEAVE }}
+              >
+                <span>답을 기록했어요</span>
+                <button type="button" disabled={busy} onClick={() => void undo()}>
+                  되돌리기
+                </button>
+              </m.div>
+            ) : null}
+          </AnimatePresence>
           {/* 다음 카드로 넘어갈 때 앞 카드가 왼쪽으로 빠지고 새 카드가 오른쪽에서 들어온다 */}
           <AnimatePresence mode="wait" initial={false}>
             <Presence
@@ -595,6 +618,10 @@ function Summary({
   const gained = stats && before && allSent ? stats.today.xp - before.xp : -1;
   const xp = useCountUp(practice ? 0 : gained >= 0 ? gained : sessionXp(results));
   const toGoal = stats && !goalMet ? stats.goal - stats.today.reviewed : 0;
+  const celebrate = !practice && (streakUp || levelUps.length > 0);
+  useEffect(() => {
+    if (celebrate) buzz([20, 60, 20, 60, 40]);
+  }, [celebrate]);
   /** 설명하기를 스스로 통과로 매긴 개념 */
   const passed = practice ? [] : [...new Set(results.filter((result) => result.card.type === 'explain' && result.correct).map((result) => result.card.concept_name))];
   const title = practice ? '다시 보기를 마쳤어요' : goalMet ? '오늘 목표 달성!' : wrong.length === 0 ? '다 맞혔어요!' : `${results.length}장을 끝냈어요`;

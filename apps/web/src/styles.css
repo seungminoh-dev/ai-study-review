@@ -50,10 +50,11 @@
   --mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
 }
 
-/* 다크에서는 남색 버튼이 배경에 묻히므로 주요 버튼을 주황(남색 글자)으로 바꾼다.
+/* 다크 모드: 기기 설정을 따르고, 설정에서 밝게·어둡게를 고르면 html의 data-theme이 이긴다 (prefs.ts).
+   다크에서는 남색 버튼이 배경에 묻히므로 주요 버튼을 주황(남색 글자)으로 바꾼다.
    마스코트 테두리는 배경보다 어두운 먹색이다. 밝은 테두리는 스티커처럼 떠 보였다 */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme='light']) {
     color-scheme: dark;
     --bg: #0f1626;
     --surface: #182238;
@@ -94,6 +95,49 @@
     --heat-3: #c4652a;
     --heat-4: #ff914d;
   }
+}
+
+/* 설정에서 어둡게를 고른 기기. 위와 같은 값이다 (바꾸면 둘 다 바꾼다) */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #0f1626;
+  --surface: #182238;
+  --surface-2: #212d45;
+  --text: #f4efe4;
+  --muted: #a7b0c4;
+  --border: #2a3754;
+  --border-strong: #3a4868;
+  --pen: #ff914d;
+  --pen-text: #192849;
+  --pen-soft: #33281f;
+  --accent: #ff914d;
+  --accent-text: #192849;
+  --accent-ink: #ffb27a;
+  --accent-soft: #3a2a1f;
+  --hero: #1e2c4f;
+  --hero-text: #fff6e3;
+  --hero-muted: #c3cbe0;
+  --hero-line: rgba(255, 246, 227, 0.14);
+  --good: #7fd69a;
+  --good-fill: #5fb877;
+  --good-soft: #15301f;
+  --bad: #ff8a80;
+  --bad-soft: #3a1a18;
+  --warn: #f0c060;
+  --warn-soft: #33270f;
+  --code-bg: #10141b;
+  --mascot-line: #070b14;
+  --mascot-mark: #fff0c7;
+  --mascot-up: #78c98c;
+  --mascot-claude: #ffb27a;
+  --nav-current: #ffb27a;
+  --pen-edge: #b8561a;
+  --accent-edge: #b8561a;
+  --surface-edge: #0b1220;
+  --heat-1: #4a3324;
+  --heat-2: #7a4a2a;
+  --heat-3: #c4652a;
+  --heat-4: #ff914d;
 }
 
 * {
@@ -947,7 +991,8 @@ blockquote {
   margin: 6px 0;
 }
 
-.done {
+/* 빈 화면과 화면 오류. 완료 표시(li.done, .book-tile.done 등)에 붙지 않게 .screen으로 좁힌다 */
+.screen.done {
   gap: 12px;
   padding-top: 24px;
 }
@@ -1382,10 +1427,95 @@ html[data-nav='tab']::view-transition-new(page) {
   margin: 0;
 }
 
-.text-button.undo {
-  align-self: flex-start;
-  padding: 4px;
+/* 복습: 방금 기록한 답 되돌리기. 카드 자리를 밀지 않게 진행 막대 아래에 떠 있다 */
+.toast {
+  position: fixed;
+  top: calc(max(16px, env(safe-area-inset-top)) + 52px);
+  left: 50%;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  translate: -50% 0;
+  padding: 8px 8px 8px 16px;
+  border-radius: 999px;
+  background: var(--pen);
+  color: var(--pen-text);
+  font-size: 0.875rem;
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: 0 8px 24px -10px rgba(15, 22, 38, 0.6);
+}
+
+.toast button {
   min-height: 36px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 999px;
+  /* 토스트 바탕과 뒤집은 색. 다크에서는 바탕이 주황이라 주황 버튼이 묻힌다 */
+  background: var(--pen-text);
+  color: var(--pen);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* 오프라인일 때 화면 위 한 줄 */
+.offline-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--warn-soft);
+  color: var(--warn);
+  font-size: 0.875rem;
+}
+
+.offline-bar .icon {
+  flex-shrink: 0;
+}
+
+/* 설정: 화면 밝기 */
+.theme-picker {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
+  border-radius: 14px;
+  background: var(--surface-2);
+}
+
+.theme-option {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 44px;
+  padding: 0 8px;
+  border-radius: 10px;
+  color: var(--muted);
+  font-size: 0.875rem;
+  font-weight: 700;
+  text-align: center;
+  cursor: pointer;
+}
+
+.theme-option input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.theme-option.current {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 2px 0 var(--surface-edge);
+}
+
+.theme-option:has(input:focus-visible) {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .edit-form textarea,

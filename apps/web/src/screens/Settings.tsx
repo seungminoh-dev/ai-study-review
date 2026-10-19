@@ -9,6 +9,7 @@ import { clearDeviceData, flushReviews, pendingCount } from '../offline/store';
 import { disablePush, dropLocalPush, enablePush, isStandalone, pushState, type PushState } from '../push';
 import { Link, useLocation } from '../router';
 import { formatDate, formatDateTime, useApi } from '../useApi';
+import { setTheme, setVibrate, theme, vibrateOn, type Theme } from '../prefs';
 import { askConfidence, setAskConfidence } from './Review';
 
 // 설정 (설계서 §12.1): 알림 시간, 알림 켜기·테스트, 커넥터 URL, 계정과 다른 기기 로그인, 초대(오너), 코치 지침 복사(선택)
@@ -24,6 +25,7 @@ export function Settings({ me, onLogout }: { me: Me; onLogout: () => void }) {
       <ReminderSection />
       <GoalSection initial={me.daily_goal} />
       <ConfidenceSection />
+      <ScreenSection />
       <ConnectorSection />
       <AccountSection me={me} onLogout={onLogout} />
       <CoachSection />
@@ -599,6 +601,56 @@ function ConfidenceSection() {
         답을 고른 뒤 확신도 묻기 (권장)
       </label>
       <p className="muted small">찍어서 맞힌 카드는 조금 일찍 다시 나오고, 확신했는데 틀린 카드는 따로 짚어 줘요. 한 번 더 누르는 대신 기억이 정확해져요.</p>
+    </section>
+  );
+}
+
+const THEMES: { value: Theme; label: string }[] = [
+  { value: 'auto', label: '기기 설정 따르기' },
+  { value: 'light', label: '밝게' },
+  { value: 'dark', label: '어둡게' },
+];
+
+/** 이 기기에서만: 밝게·어둡게, 진동 */
+function ScreenSection() {
+  const [current, setCurrent] = useState(theme);
+  const [buzzing, setBuzzing] = useState(vibrateOn);
+  return (
+    <section>
+      <h2>화면</h2>
+      <div className="theme-picker" role="radiogroup" aria-label="화면 밝기">
+        {THEMES.map((item) => (
+          <label key={item.value} className={current === item.value ? 'theme-option current' : 'theme-option'}>
+            <input
+              type="radio"
+              name="theme"
+              value={item.value}
+              checked={current === item.value}
+              onChange={() => {
+                setCurrent(item.value);
+                setTheme(item.value);
+              }}
+            />
+            {item.label}
+          </label>
+        ))}
+      </div>
+      {/* 진동은 휴대폰에서만 뜻이 있다. 컴퓨터 Chrome도 vibrate가 있지만 아무 일도 하지 않는다 */}
+      {'vibrate' in navigator && matchMedia('(pointer: coarse)').matches ? (
+        <label className="toggle">
+          <input
+            type="checkbox"
+            checked={buzzing}
+            onChange={(event) => {
+              setBuzzing(event.target.checked);
+              setVibrate(event.target.checked);
+              if (event.target.checked) navigator.vibrate(15);
+            }}
+          />{' '}
+          진동 (맞음·틀림, 목표 달성)
+        </label>
+      ) : null}
+      <p className="muted small">이 기기에만 적용돼요.</p>
     </section>
   );
 }
