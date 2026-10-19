@@ -166,7 +166,75 @@ function ReminderSection() {
   );
 }
 
+interface ConnectedApp {
+  id: string;
+  name: string;
+  created_at: number;
+}
+
+/** claude.ai·Claude Code 연결. 권장은 OAuth 주소(/mcp)를 넣고 로그인·허용하는 것이고, 예전 비밀 주소도 계속 된다 */
 function ConnectorSection() {
+  const address = `${location.origin}/mcp`;
+  const { data: apps, reload: reloadApps } = useApi<{ apps: ConnectedApp[] }>('/oauth/apps');
+  const [message, setMessage] = useState<{ text: string; tone: 'good' | 'bad' } | null>(null);
+
+  const disconnect = async (app: ConnectedApp) => {
+    if (!confirm(`${app.name} 연결을 끊을까요? 그 앱에서 모아이를 쓰려면 다시 연결해야 해요.`)) return;
+    try {
+      await request(`/oauth/apps/${encodeURIComponent(app.id)}`, { method: 'DELETE' });
+      reloadApps();
+    } catch (error) {
+      setMessage({ text: errorMessage(error), tone: 'bad' });
+    }
+  };
+
+  return (
+    <section>
+      <h2>claude.ai 커넥터</h2>
+      <p className="small">커넥터 주소에 아래 주소를 넣고 연결하면 모아이 로그인 창이 떠요. 로그인하고 "허용"을 누르면 끝이에요.</p>
+      <code className="secret-url">{address}</code>
+      <div className="actions">
+        <button
+          type="button"
+          className="button primary"
+          onClick={() => void copyText(address).then((ok) => setMessage(ok ? { text: '복사했어요.', tone: 'good' } : { text: '복사하지 못했어요. 길게 눌러 복사해 주세요.', tone: 'bad' }))}
+        >
+          주소 복사
+        </button>
+      </div>
+      <ol className="steps small">
+        <li>웹 claude.ai → Customize → Connectors → Add custom connector</li>
+        <li>이름은 "모아이", 주소에 위 주소를 넣고 연결한다. 뜨는 창에서 모아이에 로그인하고 "허용"을 누른다.</li>
+        <li>도구 7개(저장·찾기·과거 기록·복습 문제·채점·모의면접·분류 보기)를 "Always allow"로 바꾼다. 분류 바꾸기는 여러 개념을 한꺼번에 바꾸니 묻게 둔다.</li>
+        <li>Claude Code는 <code>claude mcp add --transport http --scope user moai {address}</code> 뒤 <code>/mcp</code>에서 로그인한다.</li>
+      </ol>
+      {message ? <Status text={message.text} tone={message.tone} /> : null}
+      <h3>연결한 앱</h3>
+      {apps && apps.apps.length > 0 ? (
+        <ul className="invites">
+          {apps.apps.map((app) => (
+            <li key={app.id}>
+              <p>
+                <strong>{app.name}</strong>
+                <br />
+                <span className="muted small">{formatDateTime(app.created_at)}에 연결</span>
+              </p>
+              <button type="button" className="text-button" onClick={() => void disconnect(app)}>
+                끊기
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="muted small">아직 로그인으로 연결한 앱이 없어요.</p>
+      )}
+      <LegacyConnector />
+    </section>
+  );
+}
+
+/** 예전 방식: 비밀 주소. 로그인 창을 못 쓰는 곳을 위해 남겨 둔다. 주소 자체가 비밀번호다 */
+function LegacyConnector() {
   const { data, reload } = useApi<McpTokenStatus>('/mcp-token');
   const [url, setUrl] = useState<string | null>(null);
   const [message, setMessage] = useState<{ text: string; tone: 'good' | 'bad' } | null>(null);
@@ -184,10 +252,10 @@ function ConnectorSection() {
   };
 
   return (
-    <section>
-      <h2>claude.ai 커넥터</h2>
+    <details className="legacy-connector" open={Boolean(data?.active) || undefined}>
+      <summary>예전 방식: 비밀 주소로 연결</summary>
       {data ? (
-        <p className="muted small">{data.active && data.created_at ? `${formatDateTime(data.created_at)}에 만든 URL을 쓰고 있어요.` : '아직 커넥터 URL이 없어요.'}</p>
+        <p className="muted small">{data.active && data.created_at ? `${formatDateTime(data.created_at)}에 만든 비밀 주소를 쓰고 있어요. 로그인으로 연결했다면 이 주소는 지워도 돼요.` : '비밀 주소가 없어요. 위의 로그인 연결을 권해요.'}</p>
       ) : null}
       {url ? (
         <div className="secret">
@@ -200,22 +268,30 @@ function ConnectorSection() {
           >
             URL 복사
           </button>
-          <ol className="steps small">
-            <li>웹 claude.ai → Customize → Connectors → Add custom connector</li>
-            <li>이름은 "모아이", 주소에 위 URL을 넣고 "No sign in"을 고른다.</li>
-            <li>도구 7개(저장·찾기·과거 기록·복습 문제·채점·모의면접·분류 보기)를 "Always allow"로 바꾼다. 분류 바꾸기는 여러 개념을 한꺼번에 바꾸니 묻게 둔다.</li>
-            <li>폰 앱에서는 따로 할 일 없이 바로 쓸 수 있다.</li>
-          </ol>
+          <p className="small">커넥터를 추가할 때 이 주소를 넣고 "No sign in"을 고른다.</p>
         </div>
       ) : (
         <div className="actions">
           <button type="button" className="button" onClick={() => void issue()}>
-            {data?.active ? '커넥터 URL 다시 만들기' : '커넥터 URL 만들기'}
+            {data?.active ? '비밀 주소 다시 만들기' : '비밀 주소 만들기'}
           </button>
+          {data?.active ? (
+            <button
+              type="button"
+              className="button"
+              onClick={() =>
+                void request('/mcp-token', { method: 'DELETE' })
+                  .then(() => reload())
+                  .catch((error) => setMessage({ text: errorMessage(error), tone: 'bad' }))
+              }
+            >
+              비밀 주소 지우기
+            </button>
+          ) : null}
         </div>
       )}
       {message ? <Status text={message.text} tone={message.tone} /> : null}
-    </section>
+    </details>
   );
 }
 

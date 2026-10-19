@@ -84,7 +84,7 @@ describe('push subscriptions', () => {
 
 describe('connector URL', () => {
   it('issues, reissues and revokes the URL', async () => {
-    expect(await (await api(user, '/mcp-token')).json()).toEqual({ active: false, created_at: null });
+    expect(await (await api(user, '/mcp-token')).json()).toEqual({ active: false, created_at: null, connected: false });
     const issued = (await (await api(user, '/mcp-token', { method: 'POST' })).json()) as { url: string };
     expect(issued.url).toMatch(/^https:\/\/moai\.test\/mcp\/u\/[\w-]{43}$/);
     expect(((await (await api(user, '/mcp-token')).json()) as McpTokenStatus).active).toBe(true);

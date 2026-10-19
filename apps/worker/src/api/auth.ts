@@ -2,6 +2,7 @@ import { JoinBody, LoginCodeBody, LogoutBody, type AuthOptions, type PendingJoin
 import { Hono, type Context } from 'hono';
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import { authorizeUrl, fetchGithubUser, githubConfigured, pkceChallenge, type GithubUser } from '../auth/github';
+import { revokeAllGrants } from '../auth/grants';
 import { currentSession, endSession, startSession } from '../auth/session';
 import type { AppEnv } from '../context';
 import { loadMe } from '../domain/users';
@@ -16,6 +17,9 @@ import { MINUTE_MS } from '../lib/kst';
 export const auth = new Hono<AppEnv>();
 
 const STATE_COOKIE = '__Host-moai-oauth';
+/** GitHub 로그인 뒤 돌아갈 곳. 커넥터 허용 화면(/authorize?)만 받아서 남의 사이트로 보내지 못한다 */
+const NEXT_COOKIE = '__Host-moai-next';
+const safeNext = (value: string | undefined) => (value && /^\/authorize\?[^\s]*$/.test(value) && value.length <= 2048 ? value : null);
 const JOIN_COOKIE = '__Host-moai-join';
 const STATE_TTL_MS = 10 * MINUTE_MS;
 const JOIN_TTL_MS = 30 * MINUTE_MS;
@@ -45,6 +49,9 @@ auth.get('/github/start', async (c) => {
   const verifier = randomToken();
   // 콜백에서 같은 브라우저인지 확인한다. 로그인 CSRF(남의 계정으로 로그인시키기)를 막는다
   shortCookie(c, STATE_COOKIE, `${intent}.${state}.${verifier}`, STATE_TTL_MS);
+  const next = safeNext(c.req.query('next'));
+  if (next) shortCookie(c, NEXT_COOKIE, encodeURIComponent(next), STATE_TTL_MS);
+  else dropCookie(c, NEXT_COOKIE);
   return c.redirect(authorizeUrl(c.env, state, await pkceChallenge(verifier)));
 });
 
@@ -101,7 +108,9 @@ async function loginWithGithub(c: Context<AppEnv>, github: GithubUser, now: numb
       await c.env.DB.prepare("UPDATE user_identities SET login = ?2 WHERE provider = 'github' AND subject = ?1").bind(github.id, github.login).run();
     }
     await startSession(c, identity.user_id, now);
-    return c.redirect('/');
+    const next = safeNext(decodeURIComponent(getCookie(c, NEXT_COOKIE) ?? ''));
+    dropCookie(c, NEXT_COOKIE);
+    return c.redirect(next ?? '/');
   }
   // 처음 보는 GitHub 계정이면 초대 코드를 받는다. GitHub 정보는 서버에 두고 브라우저에는 토큰만 준다
   const token = randomToken();
@@ -223,6 +232,7 @@ async function recoverAccount(c: Context<AppEnv>, pending: PendingRow, invite: s
     return errorJson(409, 'github_taken', '이 GitHub 계정은 이미 다른 모아이 계정에 이어져 있어요.');
   }
   if (claim!.meta.changes === 0) return errorJson(403, 'wrong_code', '방금 이 초대 코드를 누가 썼어요.');
+  await revokeAllGrants(c.env, userId);
   console.log(JSON.stringify({ event: 'account_recovered', user_id: userId }));
   await finishJoin(c, pending.token_hash, userId, now);
   return c.json(await loadMe(c.env, userId));

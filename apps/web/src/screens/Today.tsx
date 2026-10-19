@@ -40,7 +40,7 @@ function Onboarding({ saved }: { saved: boolean }) {
     if (hidden) return;
     void (async () => {
       const [push, token] = await Promise.all([pushState().catch(() => 'off'), request<McpTokenStatus>('/mcp-token').catch(() => null)]);
-      setSteps({ installed: isStandalone(), push: push === 'on', connector: token?.active ?? false, saved });
+      setSteps({ installed: isStandalone(), push: push === 'on', connector: token?.connected ?? false, saved });
     })();
   }, [hidden, saved]);
   const done = steps ? Object.values(steps).every(Boolean) : false;

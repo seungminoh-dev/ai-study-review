@@ -432,8 +432,11 @@ export interface Reminder {
 }
 
 export interface McpTokenStatus {
+  /** 예전 방식 비밀 주소가 살아 있다 */
   active: boolean;
   created_at: number | null;
+  /** 비밀 주소든 로그인(OAuth)이든 claude.ai에 연결돼 있다 */
+  connected: boolean;
 }
 
 export interface ApiError {

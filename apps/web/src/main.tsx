@@ -14,7 +14,11 @@ import './styles.css';
 // 설정에서 고른 밝게·어둡게를 첫 화면을 그리기 전에 맞춘다
 applyTheme();
 
-createRoot(document.getElementById('root')!).render(
+// 커넥터 허용 화면은 서버가 그린다. 예전 서비스 워커가 앱 셸을 줬으면 그 워커를 내리고 서버에서 다시 받는다
+const staleShell = location.pathname === '/authorize';
+if (staleShell) void navigator.serviceWorker?.getRegistration().then((registration) => registration?.unregister()).finally(() => location.reload());
+
+if (!staleShell) createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <MotionProvider>
       <App />

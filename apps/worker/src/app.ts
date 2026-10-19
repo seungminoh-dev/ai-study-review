@@ -10,6 +10,7 @@ import { review } from './api/review';
 import { sessions } from './api/sessions';
 import { settings } from './api/settings';
 import { setup } from './api/setup';
+import { authorize } from './auth/authorize';
 import { requireUser } from './auth/session';
 import { raiseAlert } from './domain/alerts';
 import type { AppEnv } from './context';
@@ -20,6 +21,8 @@ import { handleMcp } from './mcp/route';
 export const app = new Hono<AppEnv>();
 
 app.all('/mcp/u/:token', handleMcp);
+// OAuth 커넥터의 허용 화면. 토큰·등록·메타데이터는 OAuthProvider가 이 앱 앞에서 받는다 (oauth.ts)
+app.route('/authorize', authorize);
 
 // 상태를 바꾸는 API 요청은 우리 Origin에서만 받는다 (설계서 §7.1).
 app.use('/api/*', async (c, next) => {

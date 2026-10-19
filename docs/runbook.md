@@ -158,7 +158,7 @@ AI 채점과 대화 붙여넣기 가져오기만 서버 AI를 쓴다. 넣지 않
 /plugin install moai@ai-study-review
 ```
 
-claude.ai 계정으로 로그인한 Claude Code면 claude.ai의 모아이 커넥터가 그대로 보인다. 아니면 `claude mcp add --transport http --scope user moai "<커넥터 URL>"`. 커넥터 URL은 레포에 넣지 않는다.
+claude.ai 계정으로 로그인한 Claude Code면 claude.ai의 모아이 커넥터가 그대로 보인다. 아니면 `claude mcp add --transport http --scope user moai https://moai.smoh.dev/mcp` 뒤 `/mcp`에서 로그인한다.
 
 ### 2-4. 채팅으로 복습·모의면접 (설정 없음)
 
@@ -211,9 +211,31 @@ npx wrangler d1 export moai --remote --output=moai-$(date +%F).sql
 
 ### 커넥터 URL이 새었을 때
 
-모아이 앱 설정 → **커넥터 URL 다시 만들기**. 이전 URL은 바로 막힌다. claude.ai에서 커넥터를 지우고 새 URL로 다시 추가한다.
+모아이 앱 설정 → claude.ai 커넥터 → **예전 방식** → **비밀 주소 다시 만들기**(또는 지우기). 이전 URL은 바로 막힌다. 로그인 연결(`/mcp`)로 바꾸는 편이 낫다.
+
+### 모르는 앱이 연결돼 있을 때
+
+모아이 앱 설정 → claude.ai 커넥터 → **연결한 앱**에서 **끊기**. 그 앱의 토큰은 바로 막힌다.
 
 ---
+
+## 3.5. OAuth 커넥터 켜기 (한 번만)
+
+### 3.5-1. KV 만들기 (🙋 직접, 로컬 터미널, Cloudflare 로그인 필요)
+
+```bash
+cd apps/worker
+npx wrangler kv namespace create OAUTH_KV
+```
+
+나온 `id`(비밀 아님)를 `wrangler.jsonc`의 `kv_namespaces`에 넣고 `main`에 push한다. 자리 표시 id(`0000…`)가 남아 있으면 Deploy가 멈춘다.
+
+### 3.5-2. claude.ai 커넥터 바꾸기 (🙋 직접, 웹 claude.ai)
+
+1. Customize → Connectors에서 기존 모아이 커넥터(비밀 URL)를 지운다.
+2. **Add custom connector** → 이름 `모아이`, URL `https://moai.smoh.dev/mcp`. 연결하면 뜨는 창에서 모아이에 로그인하고 **허용**.
+3. 도구 권한은 1-5와 같다 (7개 Always allow, `update_categories`는 Needs approval).
+4. 잘 되면 모아이 설정 → **예전 방식** → **비밀 주소 지우기**.
 
 ## 4. 로컬 개발
 

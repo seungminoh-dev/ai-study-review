@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@block65/webcrypto-web-push": "2.0.0",
+    "@cloudflare/workers-oauth-provider": "1.2.3",
     "@moai/shared": "0.0.0",
     "@modelcontextprotocol/server": "2.3.1",
     "hono": "4.13.13",

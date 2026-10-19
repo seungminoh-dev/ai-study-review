@@ -1,5 +1,6 @@
 import { PushEndpointBody, PushSubscriptionBody, RemindersBody, type McpTokenStatus } from '@moai/shared';
 import { Hono } from 'hono';
+import { listConnectedApps } from '../auth/grants';
 import type { AppEnv } from '../context';
 import { pushToUser } from '../domain/push';
 import { listReminders, replaceReminders } from '../domain/reminders';
@@ -51,11 +52,23 @@ settings.post('/push/test', async (c) => {
   return c.json(result);
 });
 
+/** OAuth로 연결한 앱 (claude.ai, Claude Code 등) */
+settings.get('/oauth/apps', async (c) => c.json({ apps: await listConnectedApps(c.env, c.var.userId) }));
+
+/** 연결을 끊는다. 그 앱의 토큰은 바로 쓸 수 없다. 권한은 사용자 id로 묶여 있어 남의 것은 끊지 못한다 */
+settings.delete('/oauth/apps/:id', async (c) => {
+  const helpers = c.env.OAUTH_PROVIDER;
+  if (!helpers) return errorJson(503, 'oauth_unavailable', 'OAuth 설정이 없어요.');
+  await helpers.revokeGrant(c.req.param('id'), c.var.userId);
+  return c.body(null, 204);
+});
+
 settings.get('/mcp-token', async (c) => {
   const row = await c.env.DB.prepare('SELECT created_at FROM mcp_tokens WHERE user_id = ?1 AND revoked_at IS NULL ORDER BY created_at DESC LIMIT 1')
     .bind(c.var.userId)
     .first<{ created_at: number }>();
-  const body: McpTokenStatus = { active: row !== null, created_at: row?.created_at ?? null };
+  const grants = row ? null : await c.env.OAUTH_PROVIDER?.listUserGrants(c.var.userId, { limit: 1 });
+  const body: McpTokenStatus = { active: row !== null, created_at: row?.created_at ?? null, connected: row !== null || (grants?.items.length ?? 0) > 0 };
   return c.json(body);
 });
 

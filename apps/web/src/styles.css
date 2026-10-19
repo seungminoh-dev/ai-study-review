@@ -1477,6 +1477,19 @@ html[data-nav='tab']::view-transition-new(page) {
   flex-shrink: 0;
 }
 
+/* 설정: 예전 비밀 주소 커넥터 (접어 둔다) */
+.legacy-connector {
+  margin-top: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+
+.legacy-connector summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
 /* 설정: 화면 밝기 */
 .theme-picker {
   display: grid;

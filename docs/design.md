@@ -32,7 +32,9 @@ claude.ai에서 공부하다가 "정리해줘"라고 하면, 대화 중인 Claud
                        ▼                                    ▼
  ┌─────────────────────────────────────────────────────────────────────┐
  │ Cloudflare Worker `moai`   (app.<도메인>, Workers Paid)                │
- │  ├─ POST /mcp/u/:token   MCP 서버 (@modelcontextprotocol/server)      │
+ │  ├─ POST /mcp            MCP 서버, OAuth 토큰 (workers-oauth-provider)│
+ │  ├─ POST /mcp/u/:token   MCP 서버, 예전 방식 비밀 URL                 │
+ │  ├─ /authorize, /oauth/*  커넥터 로그인·허용, 토큰 발급 (§8.7)        │
  │  ├─ /api/*               REST API (Hono)                              │
  │  ├─ 그 밖의 경로          PWA 정적 파일 (Workers Static Assets)         │
  │  └─ scheduled()          매분 Cron: 푸시 · LLM 작업 · 청소              │
@@ -251,7 +253,7 @@ claude.ai에서 공부하다가 "정리해줘"라고 하면, 대화 중인 Claud
 | 자동 분류 | 완료 | 저장할 때 Claude가 기존 분류에서 고르고 서버가 모양·철자를 맞춘다. 지도·복습·모의면접 필터, 채팅 분류 정리 도구 (§5.6) |
 | PDF 자료 | 완료 | claude.ai에 PDF 첨부 또는 `/moai:pdf`. 장별로 나눠 저장하고, 풀기 전까지 내 지식과 분리한다 (§5.6). 앱에서 PDF를 올리는 방식은 만들지 않기로 했다 (2026-10-19) |
 | 데이터 내보내기 zip 가져오기 | 남음 | claude.ai에서 내보낸 과거 대화를 Batch API(50% 할인)로 한꺼번에 카드로 만든다. 서버 AI 설정 뒤에 한다 |
-| OAuth 커넥터 인증 | 남음 | `@cloudflare/workers-oauth-provider` + KV. 비밀 URL 대신 쓴다. KV를 만들어야 해서 계정 작업이 필요하다. B2C 전에 한다 |
+| OAuth 커넥터 인증 | 완료 | `@cloudflare/workers-oauth-provider` + KV `OAUTH_KV`. 커넥터 주소 `/mcp`에 넣고 모아이 로그인·허용. 비밀 URL은 예전 방식으로 남긴다 (§8.7) |
 | 그 밖 | 남음 | 한국 외 시간대, 음성으로 설명하기 (방법 미정) |
 
 ---
@@ -281,7 +283,8 @@ claude.ai에서 공부하다가 "정리해줘"라고 하면, 대화 중인 Claud
 apps/
   worker/                      # Cloudflare Worker
     src/
-      index.ts                 # fetch()와 scheduled() 진입점
+      index.ts                 # fetch()와 scheduled() 진입점 (/mcp/u/ 말고는 OAuthProvider를 거친다)
+      oauth.ts                 # OAuthProvider 설정: /mcp, /authorize, /oauth/*, 메타데이터
       app.ts                   # Hono 앱: /api/*, /mcp/u/:token
       mcp/
         server.ts              # createMcpHandler + 서버 팩토리
@@ -684,10 +687,10 @@ CREATE TABLE badges (
 
 ### 6.1 엔드포인트와 인증
 
-- 주소: `POST https://app.<도메인>/mcp/u/<토큰>`. 라우트는 모든 메서드를 받아 핸들러로 넘기고, 핸들러가 GET과 DELETE에 405를 돌려준다.
+- 주소: `POST https://app.<도메인>/mcp` (OAuth, §8.7). 예전 방식은 `POST https://app.<도메인>/mcp/u/<토큰>`이고 둘 다 같은 MCP 핸들러를 쓴다. 비밀 URL 라우트는 모든 메서드를 받아 핸들러로 넘기고, 핸들러가 GET과 DELETE에 405를 돌려준다.
 - 토큰: 256비트 무작위 값(base64url). DB에는 `HMAC-SHA256(TOKEN_PEPPER, 토큰)`만 저장한다. 설정 화면에서 발급하면 주소를 한 번만 보여 주고, 재발급하면 이전 토큰은 바로 무효가 된다. 재발급한 뒤에는 claude.ai에서 커넥터를 지우고 다시 추가해야 한다.
 - 모르는 토큰이나 취소된 토큰은 본문 없이 404를 돌려준다.
-- claude.ai에는 "로그인 없음(No sign in)"으로 추가한다. 개인 Pro·Max 요금제에서는 고정 헤더 인증이 일부 조직만 쓰는 베타라서 기대하지 않는다. OAuth는 MVP 3에서 붙인다.
+- claude.ai에는 `/mcp`를 넣으면 OAuth 로그인 창이 뜬다 (§8.7). 비밀 URL은 "로그인 없음(No sign in)"으로 추가한다.
 - 요청 앞단 검사:
   - `Host`가 `app.<도메인>`이 아니면 421로 거절한다.
   - `Origin` 헤더가 있는데 `APP_ORIGIN`이 아니면 403이다. Anthropic 클라우드의 서버 간 호출에는 보통 `Origin`이 없다.
@@ -949,6 +952,25 @@ export const SaveLearningInput = z.object({
   3. 도구 3개를 "Always allow"로 바꾼다. 그래야 폰에서 승인 버튼을 누르지 않는다.
   4. 폰 앱에서는 자동으로 쓸 수 있다.
 - 재발급하면 이전 주소는 바로 막힌다.
+- §8.7 OAuth가 생긴 뒤로는 설정의 "예전 방식" 안에 접어 둔다. 로그인 창을 못 쓰는 곳에서만 쓴다.
+
+### 8.7 OAuth 커넥터 (MVP 3)
+
+- 라이브러리: `@cloudflare/workers-oauth-provider` 1.2.3. 같은 Worker 안에서 인가 서버와 자원 서버를 함께 한다. 권한(grant)과 토큰은 KV `OAUTH_KV`에 해시로 둔다.
+- 진입점: `index.ts`가 `/mcp/u/`로 시작하는 요청은 Hono 앱으로 바로, 나머지는 `oauth.ts`의 `OAuthProvider`로 보낸다. OAuthProvider는 `/mcp`의 Bearer 토큰을 검사하고 나머지는 Hono 앱에 넘긴다 (`env.OAUTH_PROVIDER` 도우미를 붙여서).
+- 주소:
+  - `/.well-known/oauth-protected-resource`, `/.well-known/oauth-authorization-server`: 메타데이터. `/mcp`가 401을 줄 때 `WWW-Authenticate`로 앞의 주소를 알려 준다.
+  - `/oauth/register`: 동적 클라이언트 등록. Client ID Metadata Document(주소가 client_id인 방식)도 받는다 (`global_fetch_strictly_public` 플래그가 내부 주소로 가는 fetch를 막는다).
+  - `/authorize`: 허용 화면 (`auth/authorize.ts`). `/oauth/token`: 토큰 발급(PKCE).
+- 권한은 하나(`moai`): 이 사람의 모아이를 읽고 쓴다. 액세스 토큰 1시간, 리프레시 토큰 60일(60일 안 쓰면 만료).
+- 허용 화면:
+  - 서버가 그리는 HTML이고 스크립트가 없다. CSP `default-src 'none'`, `frame-ancestors 'none'`, `no-store`. 클라이언트 이름 같은 값은 모두 이스케이프한다.
+  - 앱 이름, 확인된 도메인(CIMD일 때만, 아니면 "확인되지 않은 이름"), 연결할 모아이 계정, 권한이 갈 주소(이 컴퓨터 프로그램이면 경고), 할 수 있는 일을 보여 준다.
+  - 로그인하지 않았으면 `/login?next=/authorize?…`로 보낸다. 로그인 화면과 GitHub 로그인(`__Host-moai-next` 쿠키)은 `/authorize?`로 시작하는 next만 따른다.
+  - 허용·거절 폼은 `Origin === APP_ORIGIN`이어야 하고, 이 화면에서 받은 1회용 handle(10분)이 있어야 한다.
+- 설정 → claude.ai 커넥터: 주소 `/mcp`와 복사 버튼, "연결한 앱" 목록과 끊기(`GET /api/oauth/apps`, `DELETE /api/oauth/apps/:id`). 끊으면 그 앱의 토큰은 바로 막힌다. 남의 권한은 끊지 못한다.
+- 계정 지우기와 기기 복구(초대 코드로 원래 계정 찾기)는 그 사람의 OAuth 권한을 모두 끊는다. 매시 Cron이 만료된 권한과 토큰을 KV에서 지운다.
+- `GET /api/mcp-token`의 `connected`는 비밀 URL이나 OAuth 권한이 하나라도 있으면 참이다 (시작하기 체크리스트).
 
 ---
 

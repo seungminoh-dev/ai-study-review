@@ -17,9 +17,13 @@ const AUTH_TEXT: Record<string, string> = {
   unavailable: '서버에 GitHub 로그인이 아직 설정되지 않았어요. 로그인 코드를 써 주세요.',
 };
 
+/** 커넥터 허용 화면에서 로그인하러 왔으면 그리로 돌아간다. 남의 사이트로 보내지 않게 /authorize?만 따른다 */
+const nextOf = (value: string | null) => (value && value.startsWith('/authorize?') ? value : null);
+
 export function Login({ github, onDone }: { github: boolean; onDone: (me: Me) => void }) {
   const { query } = useLocation();
   const reason = AUTH_TEXT[query.get('auth') ?? ''];
+  const next = nextOf(query.get('next'));
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -29,7 +33,9 @@ export function Login({ github, onDone }: { github: boolean; onDone: (me: Me) =>
     setBusy(true);
     setError(null);
     try {
-      onDone(await request<Me>('/auth/login', { method: 'POST', json: { code } }));
+      const me = await request<Me>('/auth/login', { method: 'POST', json: { code } });
+      if (next) location.assign(next);
+      else onDone(me);
     } catch (reason) {
       setError(errorMessage(reason));
     } finally {
@@ -54,10 +60,11 @@ export function Login({ github, onDone }: { github: boolean; onDone: (me: Me) =>
         </div>
       </div>
       {reason ? <p className="notice bad">{reason}</p> : null}
+      {next ? <p className="notice">로그인하면 Claude 연결 허용 화면으로 돌아가요.</p> : null}
       {github ? (
         <>
           <div className="auth-block">
-            <a className="button primary" href="/api/auth/github/start">
+            <a className="button primary" href={next ? `/api/auth/github/start?${new URLSearchParams({ next })}` : '/api/auth/github/start'}>
               <IconGithub />
               GitHub로 계속하기
             </a>

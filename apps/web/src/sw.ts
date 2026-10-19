@@ -11,8 +11,8 @@ void self.skipWaiting();
 clientsClaim();
 cleanupOutdatedCaches();
 precacheAndRoute(self.__WB_MANIFEST);
-// 오프라인에서도 어느 주소로 열든 앱 셸을 준다. API와 MCP는 빼고
-registerRoute(new NavigationRoute(createHandlerBoundToURL('/index.html'), { denylist: [/^\/api\//, /^\/mcp\//] }));
+// 오프라인에서도 어느 주소로 열든 앱 셸을 준다. API, MCP, 커넥터 허용 화면(OAuth)은 서버가 직접 준다
+registerRoute(new NavigationRoute(createHandlerBoundToURL('/index.html'), { denylist: [/^\/api\//, /^\/mcp(\/|$)/, /^\/authorize/, /^\/oauth\//, /^\/\.well-known\//] }));
 
 interface PushData {
   title?: string;

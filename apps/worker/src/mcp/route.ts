@@ -22,18 +22,22 @@ export async function findMcpUser(env: Env, token: string): Promise<string | nul
   return row?.user_id ?? null;
 }
 
-/** POST /mcp/u/:token (설계서 §6.1, §6.2) */
+/** 커넥터 URL로 온 MCP 요청 (설계서 §6.1, §6.2). 토큰으로 사용자를 찾고 serveMcp에 넘긴다 */
 export async function handleMcp(c: Context<AppEnv>): Promise<Response> {
-  const rejected = checkHost(c.req.raw, c.env) ?? checkOrigin(c.req.raw, c.env);
-  if (rejected) return rejected;
   const userId = await findMcpUser(c.env, c.req.param('token') ?? '');
   if (!userId) return new Response(null, { status: 404 });
+  return serveMcp(c.req.raw, c.env, userId);
+}
 
+/** 사용자가 정해진 MCP 요청을 처리한다. 비밀 URL과 OAuth(/mcp) 둘 다 여기로 온다 */
+export async function serveMcp(raw: Request, env: Env, userId: string): Promise<Response> {
+  const rejected = checkHost(raw, env) ?? checkOrigin(raw, env);
+  if (rejected) return rejected;
   let body: string | undefined;
   let parsed: unknown;
-  if (c.req.method === 'POST') {
-    if (Number(c.req.header('content-length') ?? '0') > MAX_BODY_BYTES) return tooLarge();
-    body = await c.req.text();
+  if (raw.method === 'POST') {
+    if (Number(raw.headers.get('content-length') ?? '0') > MAX_BODY_BYTES) return tooLarge();
+    body = await raw.text();
     if (byteLength(body) > MAX_BODY_BYTES) return tooLarge();
     try {
       parsed = JSON.parse(body);
@@ -42,10 +46,10 @@ export async function handleMcp(c: Context<AppEnv>): Promise<Response> {
     }
   }
 
-  const deps: McpDeps = { env: c.env, userId };
-  const request = new Request(c.req.url, { method: c.req.method, headers: c.req.raw.headers, body: body ?? null });
+  const deps: McpDeps = { env, userId };
+  const request = new Request(raw.url, { method: raw.method, headers: raw.headers, body: body ?? null });
   const response = await mcpHandler.fetch(request, {
-    authInfo: { token: 'url-token', clientId: 'url-token', scopes: [], extra: deps as unknown as Record<string, unknown> },
+    authInfo: { token: 'moai', clientId: 'moai', scopes: [], extra: deps as unknown as Record<string, unknown> },
     ...(parsed === undefined ? {} : { parsedBody: parsed }),
   });
   // 로그에는 URL(토큰)과 본문을 남기지 않는다 (설계서 §13.4)

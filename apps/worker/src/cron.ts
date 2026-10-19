@@ -2,6 +2,7 @@ import { raiseAlert, sendAlerts } from './domain/alerts';
 import { repairLibrary } from './domain/categories';
 import { deliverDueReminders } from './domain/reminders';
 import { runPendingJobs } from './llm/jobs';
+import { oauthProvider } from './oauth';
 import type { Env } from './env';
 import { DAY_MS } from './lib/kst';
 
@@ -36,6 +37,12 @@ export async function runCron(env: Env, now: number): Promise<void> {
       env.DB.prepare("DELETE FROM llm_jobs WHERE created_at <= ?1 AND status IN ('done', 'failed')").bind(now - 30 * DAY_MS),
     ]);
     if (sessions!.meta.changes > 0) console.log(JSON.stringify({ event: 'sessions_expired', removed: sessions!.meta.changes }));
+    try {
+      // 만료됐거나 주인 잃은 OAuth 권한·토큰을 조금씩 지운다
+      await oauthProvider(env).purgeExpiredData(env);
+    } catch (error) {
+      console.error(JSON.stringify({ event: 'cron_oauth_purge_failed', message: (error as Error).message }));
+    }
     try {
       const repaired = await repairLibrary(env);
       if (repaired.normalized + repaired.adopted > 0) console.log(JSON.stringify({ event: 'library_repaired', ...repaired }));

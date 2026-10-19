@@ -12,7 +12,7 @@ import { Mascot } from '../Mascot';
 import { LEAVE, Presence, SOFT } from '../motion';
 import { enablePush, isIos, isStandalone, pushState, type PushState } from '../push';
 import { goTab, useLocation } from '../router';
-import { formatDateTime, useApi } from '../useApi';
+import { useApi } from '../useApi';
 
 // 시작 가이드 (3단계 시안): 가입 직후, 그리고 오늘 화면의 "시작하기"에서 연다 (?step=으로 그 단계부터).
 // 환영 → 홈 화면에 추가 → claude.ai 연결 → 첫 저장 → 알림 → 준비 끝. 단계마다 실제 기능(설치, 연결 주소, 알림)을 그대로 쓴다.
@@ -187,29 +187,14 @@ function InstallStep({ onNext, onInstalled }: { onNext: () => void; onInstalled:
   );
 }
 
-/** 연결 주소는 비밀번호와 같아서 처음에는 가려서 보여 준다 */
-const mask = (url: string) => url.replace(/(\/mcp\/u\/).+$/, '$1••••••••••');
-
+/** 연결 주소는 모두 같다. 커넥터를 추가하면 뜨는 창에서 모아이에 로그인하고 허용한다 (예전 비밀 주소는 설정에 있다) */
 function ConnectorStep({ onNext }: { onNext: () => void }) {
-  const { data: status, reload } = useApi<McpTokenStatus>('/mcp-token');
-  const [url, setUrl] = useState<string | null>(null);
-  const [visible, setVisible] = useState(false);
+  const { data: status } = useApi<McpTokenStatus>('/mcp-token');
   const [note, setNote] = useState<Note | null>(null);
+  const address = `${location.origin}/mcp`;
 
-  const make = async () => {
-    if (status?.active && !confirm('새 주소를 만들면 지금 쓰는 주소는 바로 막혀요. claude.ai에서 커넥터를 지우고 새로 추가해야 해요. 계속할까요?')) return;
-    try {
-      const result = await request<{ url: string }>('/mcp-token', { method: 'POST' });
-      setUrl(result.url);
-      setNote(null);
-      reload();
-    } catch (error) {
-      setNote({ text: errorMessage(error), tone: 'bad' });
-    }
-  };
   const copy = async () => {
-    if (!url) return;
-    setNote((await copyText(url)) ? { text: '복사했어요. claude.ai에 붙여 넣으세요.', tone: 'good' } : { text: '복사하지 못했어요. 주소를 보이게 한 뒤 길게 눌러 복사해 주세요.', tone: 'bad' });
+    setNote((await copyText(address)) ? { text: '복사했어요. claude.ai에 붙여 넣으세요.', tone: 'good' } : { text: '복사하지 못했어요. 주소를 길게 눌러 복사해 주세요.', tone: 'bad' });
   };
 
   return (
@@ -227,35 +212,16 @@ function ConnectorStep({ onNext }: { onNext: () => void }) {
           <li>
             <div className="guide-head">
               <span className="guide-no">1</span>
-              <strong>연결 주소 만들기</strong>
-              {!url && status && !status.active ? (
-                <button type="button" className="button accent" onClick={() => void make()}>
-                  주소 만들기
-                </button>
-              ) : null}
+              <strong>연결 주소 복사</strong>
             </div>
-            {url ? (
-              <div className="secret">
-                <code className="secret-url">{visible ? url : mask(url)}</code>
-                <div className="actions">
-                  <button type="button" className="button primary" onClick={() => void copy()}>
-                    주소 복사
-                  </button>
-                  <button type="button" className="button" onClick={() => setVisible(!visible)}>
-                    {visible ? '가리기' : '보기'}
-                  </button>
-                </div>
-                <p className="small">이 주소는 비밀번호와 같아요. 지금 한 번만 보이니 바로 claude.ai에 넣고, 다른 사람에게 보여 주지 마세요.</p>
-              </div>
-            ) : status?.active ? (
-              <p className="muted small">
-                {status.created_at ? `${formatDateTime(status.created_at)}에 만든 주소가 있어요. ` : '이미 만든 주소가 있어요. '}
-                claude.ai에 추가했다면 그대로 쓰면 돼요.{' '}
-                <button type="button" className="text-button inline" onClick={() => void make()}>
-                  새로 만들기
+            <div className="secret">
+              <code className="secret-url">{address}</code>
+              <div className="actions">
+                <button type="button" className="button primary" onClick={() => void copy()}>
+                  주소 복사
                 </button>
-              </p>
-            ) : null}
+              </div>
+            </div>
           </li>
           <li>
             <div className="guide-head">
@@ -265,7 +231,7 @@ function ConnectorStep({ onNext }: { onNext: () => void }) {
             <p className="guide-path">
               <span>Customize</span>›<span>Connectors</span>›<span className="hot">Add custom connector</span>
             </p>
-            <p className="muted small">웹 claude.ai에서 해요. 이름은 "모아이", 주소는 붙여 넣고 "No sign in"을 골라요.</p>
+            <p className="muted small">웹 claude.ai에서 해요. 이름은 "모아이", 주소는 붙여 넣고 연결하면 창이 떠요. 모아이에 로그인하고 "허용"을 눌러요.</p>
           </li>
           <li>
             <div className="guide-head">
@@ -275,6 +241,7 @@ function ConnectorStep({ onNext }: { onNext: () => void }) {
             <p className="muted small">도구들을 "Always allow"로 바꿔요. 여러 개념을 한꺼번에 바꾸는 분류 바꾸기만 묻게 두세요. 휴대폰 Claude 앱은 따로 할 일이 없어요.</p>
           </li>
         </ol>
+        {status?.connected ? <p className="notice good">연결돼 있어요.</p> : null}
         {note ? <p className={`notice ${note.tone}`}>{note.text}</p> : null}
       </div>
       <Actions>
@@ -490,7 +457,7 @@ function Ready({ installedNow, onFinish, onRestart }: { installedNow: boolean; o
       ]);
       setRows([
         { label: '홈 화면 앱', ok: installedNow || isStandalone() },
-        { label: 'claude.ai 연결', ok: token?.active ?? false },
+        { label: 'claude.ai 연결', ok: token?.connected ?? false },
         { label: '첫 저장', ok: (sessions?.sessions.length ?? 0) > 0 },
         { label: '알림', ok: push === 'on' && (reminders?.reminders.length ?? 0) > 0 },
       ]);

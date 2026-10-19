@@ -1,6 +1,7 @@
 import { DeleteAccountBody } from '@moai/shared';
 import { Hono } from 'hono';
 import { deleteCookie } from 'hono/cookie';
+import { revokeAllGrants } from '../auth/grants';
 import { SESSION_COOKIE } from '../auth/session';
 import type { AppEnv } from '../context';
 import type { Env } from '../env';
@@ -110,6 +111,7 @@ me.delete('/me', async (c) => {
   // 오너가 사라지면 초대와 관리를 할 사람이 없다
   if (user.role === 'owner') return errorJson(403, 'owner_cannot_delete', '오너 계정은 여기서 지울 수 없어요.');
   if (body.confirm.trim() !== user.display_name) return errorJson(400, 'confirm_mismatch', '이름이 맞지 않아요. 내 이름을 그대로 써 주세요.');
+  await revokeAllGrants(c.env, c.var.userId);
   await c.env.DB.batch(deleteUserStatements(c.env, c.var.userId));
   console.log(JSON.stringify({ event: 'account_deleted', user_id: c.var.userId }));
   deleteCookie(c, SESSION_COOKIE, { path: '/', secure: true });

@@ -1,5 +1,11 @@
+import type { OAuthHelpers } from '@cloudflare/workers-oauth-provider';
+
 export interface Env {
   DB: D1Database;
+  /** OAuth 커넥터 인증의 클라이언트·권한·토큰 (토큰은 해시만, props는 암호화돼 들어간다) */
+  OAUTH_KV: KVNamespace;
+  /** OAuthProvider가 /api·/authorize 같은 기본 경로를 부를 때 넣어 준다. 비밀 URL MCP 경로에는 없다 */
+  OAUTH_PROVIDER?: OAuthHelpers;
   /** 서비스 주소. Origin·Host 검사 기준 (예: https://moai.example.com) */
   APP_ORIGIN: string;
   VAPID_PUBLIC_KEY: string;

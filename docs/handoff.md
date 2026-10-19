@@ -82,8 +82,9 @@
     - 전역 `.done`이 완료 표시(시작하기 체크리스트, 가입 단계, 자료 표지)에도 위 여백을 줘서 간격이 들쭉날쭉하던 것을 `.screen.done`으로 좁혔다.
   - 다듬기 (2026-10-19): AI 개념 채팅 답은 2~4문장으로 짧게. 물어보기는 찍음·반반으로 맞힌 문제(이때 "너무 쉬웠어요"는 등급을 못 바꿔서 숨긴다)와 설명하기 비교 뒤에도 열린다(내 설명을 같이 보낸다). 끝 화면의 얻은 XP·연속 +1은 시작과 끝의 `/api/stats` 차이로 낸다(못 보낸 답이 있으면 어림). 지식 지도 배치는 Web Worker(`map/layout.worker.ts`)에서 하고 창 비율이 바뀌면 다시 배치한다. 처음 설치되는 동안 연 화면도 다음 배포 때 새로고침된다(`main.tsx`).
   - 세션 만료와 빈 화면 (2026-10-19): 쓰는 도중 API가 401을 주면 `/login?auth=session`으로 보낸다(`api.ts`의 `onUnauthorized`, App이 로그인한 동안 정한다). 못 보낸 답은 기기에 남는다. 화면을 그리다 오류가 나면 그 화면 자리에 새로고침 안내를 보여 준다(`ErrorBoundary.tsx`, 화면 주소마다 따로).
+  - OAuth 커넥터 (2026-10-19, 설계서 §8.7): 커넥터 주소가 모두 같은 `/mcp`이고, 추가하면 모아이 로그인·허용 화면(`auth/authorize.ts`)이 뜬다. 설정에 연결한 앱 목록과 끊기, 시작 가이드 2단계도 이 주소다. 비밀 URL은 설정의 "예전 방식"에 접어 두었다. KV `OAUTH_KV`가 있어야 배포된다.
   - 컴퓨터 화면 폭 (2026-10-19): `.app`이 `.shell` 그리드 칸에서 내용 폭으로 줄던 것을 `width: 100%`로 고쳤다. 이제 화면마다 760px(넓은 화면 1120px)까지 칸을 채운다. 내 성장은 오늘 화면처럼 두 칸(왼쪽 이정표·분류별 진행, 오른쪽 최근 12주)이고, 최근 12주 히트맵은 컴퓨터에서 칸 폭에 맞춰 날짜 칸을 키운다. 휴대폰은 그대로다.
-- **테스트**: worker 126개, shared 23개 통과. CI·Deploy 모두 초록.
+- **테스트**: worker 134개, shared 23개 통과. CI·Deploy 모두 초록.
 - **브랜치**: `main`만 쓴다. 열린 PR은 없다.
 - **확인 못 한 것**:
   1. 실제 카톡 링크 미리보기. 주소를 한 번 보내 본다. 예전 미리보기가 캐시돼 있으면 카카오 개발자 사이트의 공유 디버거로 지운다.
@@ -174,7 +175,7 @@
 ## 7. 코드 읽기 전에 알아 둘 규칙
 
 - **인증**: 오너 1명(`/setup`) + GitHub OAuth와 초대 코드 가입. 다른 기기는 GitHub나 10분짜리 로그인 코드로 들어온다. `/api/*`의 GET이 아닌 요청은 `Origin === APP_ORIGIN`이어야 한다. `/invites`, `/members`, `/admin/*`는 `requireOwner`다.
-- **MCP**: 비밀 URL `/mcp/u/<토큰>` 인증(토큰은 HMAC 해시로 찾는다), SDK 2.3.1 legacy stateless. 도구 8개:
+- **MCP**: `/mcp`는 OAuth Bearer 토큰(`oauth.ts`, 설계서 §8.7), 예전 방식 `/mcp/u/<토큰>`은 비밀 URL(HMAC 해시로 찾는다). 둘 다 `mcp/route.ts`의 `serveMcp`로 간다. SDK 2.3.1 legacy stateless. 도구 8개:
   - `find_concepts`, `save_learning`, `get_learner_context`
   - `get_review_queue`, `submit_review`, `get_interview_chain`
   - `get_categories`, `update_categories` (`destructiveHint: true`라 Always allow를 권하지 않는다)
@@ -216,6 +217,7 @@
 3. Android 내비게이션 바 색: GitHub를 먼저 이어 두고 PWA를 다시 설치한다. 알림도 다시 켠다.
 4. 플러그인 0.2.0으로 업데이트한다 (`/moai:pdf`).
 5. (선택) `ANTHROPIC_API_KEY`, `GRADER_MODEL`. 콘솔에서 월 지출 한도도 건다. 운영에 들어 있는지는 확인하지 않았다 (로그인 뒤 `GET /api/ai/status`). AI 개념 채팅을 만들려면 필요하다.
+6. **OAuth 커넥터** ([운영 가이드 3.5](runbook.md#35-oauth-커넥터-켜기-한-번만)): KV를 만들어 id를 `wrangler.jsonc`에 넣고, claude.ai 커넥터를 `/mcp`로 바꾼 뒤 비밀 주소를 지운다.
 
 ---
 
@@ -224,7 +226,6 @@
 | 작업 | 메모 |
 |---|---|
 | claude.ai 내보내기 zip 일괄 가져오기 | Batch API(50% 할인). 서버 AI 키가 필요하다. 기존 붙여넣기 가져오기(`llm/jobs.ts`의 import)와 예산 가드를 재사용한다 |
-| OAuth 커넥터 인증 | `@cloudflare/workers-oauth-provider` + KV. 비밀 URL을 대신한다. KV를 만드는 Cloudflare 계정 작업이 필요하다. B2C 전에 한다 |
 | 한국 외 시간대 | 지금은 04:00 KST 경계로 고정이다 (`lib/kst.ts`). `users.timezone` 열은 있다 |
 | 음성으로 설명하기 | 방법 미정 |
 
