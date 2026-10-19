@@ -39,6 +39,11 @@ export async function pendingCount(): Promise<number> {
   return ((await get<ReviewItem[]>(OUTBOX, store)) ?? []).length;
 }
 
+/** 세션이 끝났다(401). 다시 로그인을 확인할 때까지 답을 보내지 않고 기기에 남겨 둔다 */
+export function releaseDevice(): void {
+  confirmed = null;
+}
+
 /** 로그아웃할 때 이 기기에 남은 답과 큐를 지운다. 다음에 로그인한 사람에게 섞이지 않게 한다 */
 export async function clearDeviceData(): Promise<void> {
   confirmed = null;

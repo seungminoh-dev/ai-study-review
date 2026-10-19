@@ -952,6 +952,15 @@ blockquote {
   padding-top: 24px;
 }
 
+/* 화면 오류 (ErrorBoundary.tsx). 컴퓨터에서는 넓은 칸 끝까지 늘이지 않는다 */
+@media (min-width: 1024px) {
+  .crash .button {
+    flex: none;
+    align-self: flex-start;
+    min-width: 14rem;
+  }
+}
+
 /* 설정 */
 .field {
   display: flex;

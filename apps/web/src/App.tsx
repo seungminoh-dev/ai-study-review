@@ -1,13 +1,14 @@
 import type { AuthOptions, Me } from '@moai/shared';
 import * as m from 'motion/react-m';
 import { Suspense, lazy, useEffect, useState, type ComponentType, type ReactNode } from 'react';
-import { OfflineError, RequestError, errorMessage, request } from './api';
+import { OfflineError, RequestError, errorMessage, onUnauthorized, request } from './api';
 import { forgetSeenBadges } from './badges';
 import { IconBook, IconGrowth, IconHome, IconMap, IconRecords, IconSettings } from './icons';
 import { Loading, Splash } from './Loading';
 import { Mascot } from './Mascot';
 import { SNAPPY } from './motion';
-import { claimDevice } from './offline/store';
+import { ErrorBoundary } from './ErrorBoundary';
+import { claimDevice, releaseDevice } from './offline/store';
 import { dropLocalPush } from './push';
 import { TabLink, navigate, useLocation } from './router';
 import { Join } from './screens/Join';
@@ -190,6 +191,20 @@ export function App() {
     })();
   }, []);
 
+  // 쓰는 도중 세션이 끝나면(401) 로그인 화면으로 보낸다. 못 보낸 답은 기기에 남아 있다가 같은 사람이 다시 로그인하면 간다
+  useEffect(() => {
+    if (auth.state !== 'in') return;
+    let ended = false;
+    onUnauthorized(() => {
+      if (ended) return;
+      ended = true;
+      releaseDevice();
+      void loggedOut().then(setAuth);
+      navigate('/login?auth=session', { replace: true, direction: 'tab' });
+    });
+    return () => onUnauthorized(null);
+  }, [auth.state]);
+
   useEffect(() => {
     if (auth.state !== 'in') return;
     // 로그인하면 쉬는 틈에 나머지 화면을 받아 둔다 (오프라인이면 다음 기회에)
@@ -291,7 +306,10 @@ export function App() {
     <div className={focus ? 'shell focus' : 'shell'}>
       {focus ? null : <Sidebar current={section} />}
       <main className={focus ? 'app review-mode' : wide ? 'app wide' : 'app'}>
-        <Suspense fallback={<Loading />}>{screen}</Suspense>
+        {/* 화면마다 따로 잡는다. 한 화면이 깨져도 메뉴는 남고, 다른 화면으로 가면 풀린다 */}
+        <ErrorBoundary key={path}>
+          <Suspense fallback={<Loading />}>{screen}</Suspense>
+        </ErrorBoundary>
       </main>
       {focus ? null : (
         <nav className="tabs" aria-label="화면">

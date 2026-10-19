@@ -12,6 +12,7 @@ import { BackLink, useLocation } from '../router';
 const AUTH_TEXT: Record<string, string> = {
   denied: 'GitHub 로그인을 취소했어요.',
   expired: '로그인 시간이 지났어요. 다시 해 주세요.',
+  session: '로그인이 끝났어요. 다시 로그인해 주세요. 보내지 못한 답은 이 기기에 남아 있어요.',
   failed: 'GitHub에서 계정 정보를 받지 못했어요. 잠시 뒤에 다시 해 주세요.',
   unavailable: '서버에 GitHub 로그인이 아직 설정되지 않았어요. 로그인 코드를 써 주세요.',
 };

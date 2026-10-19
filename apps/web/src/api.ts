@@ -18,6 +18,13 @@ export class OfflineError extends Error {
   }
 }
 
+/** 쓰는 도중 세션이 끝나면(401) 부른다. 로그인한 동안 App이 정해 둔다 */
+let unauthorized: (() => void) | null = null;
+
+export function onUnauthorized(handler: (() => void) | null): void {
+  unauthorized = handler;
+}
+
 export async function request<T>(path: string, init: RequestInit & { json?: unknown } = {}): Promise<T> {
   const { json, headers, ...rest } = init;
   let response: Response;
@@ -34,6 +41,7 @@ export async function request<T>(path: string, init: RequestInit & { json?: unkn
   if (response.status === 204) return undefined as T;
   const body = (await response.json().catch(() => null)) as T | ApiError | null;
   if (!response.ok) {
+    if (response.status === 401) unauthorized?.();
     const error = (body as ApiError | null)?.error;
     throw new RequestError(response.status, error?.code ?? 'unknown', error?.message ?? '잠시 뒤에 다시 해 주세요.');
   }
