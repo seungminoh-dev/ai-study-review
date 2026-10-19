@@ -10,6 +10,7 @@ import { Mascot } from '../Mascot';
 import { materialReview, partView } from '../materials';
 import { LEAVE, Presence, SNAPPY, SOFT } from '../motion';
 import { Ring } from '../progress';
+import { EditableTitle } from '../EditableTitle';
 import { BackLink, Link } from '../router';
 import { formatDate, useApi } from '../useApi';
 import { BookTile } from './Materials';
@@ -71,7 +72,7 @@ export function MaterialDetail({ title }: { title: string }) {
   const started = parts.filter((part) => part.solved > 0).length;
 
   const suspend = async () => {
-    if (!confirm(`"${materialLabel(data.title)}"에서 아직 안 푼 카드를 모두 끌까요? 이미 푼 카드는 그대로예요. 기록 탭에서 다시 켤 수 있어요.`)) return;
+    if (!confirm(`"${data.name}"에서 아직 안 푼 카드를 모두 끌까요? 이미 푼 카드는 그대로예요. 기록 탭에서 다시 켤 수 있어요.`)) return;
     try {
       const result = await request<{ suspended: number }>('/materials/suspend-unsolved', { method: 'POST', json: { title: data.title } });
       setMessage({ text: `${result.suspended}장을 껐어요.`, tone: 'good' });
@@ -89,7 +90,13 @@ export function MaterialDetail({ title }: { title: string }) {
       <header className="material-head">
         <BookTile title={data.title} sections={parts.length} done={next === null && data.solved > 0} />
         <div className="grow">
-          <h1>{materialLabel(data.title)}</h1>
+          <EditableTitle
+            value={data.name}
+            maxLength={80}
+            allowEmpty
+            hint="보여 줄 이름만 바뀌어요. Claude가 같은 PDF로 이어서 저장해도 이 자료로 모여요. 비우면 원래 이름으로 돌아가요."
+            onSave={async (label) => (await request<{ name: string }>('/materials/label', { method: 'PUT', json: { title: data.title, label } })).name}
+          />
           <p className="muted small">
             섹션 {parts.length}개 · {formatDate(data.created_at)}에 추가
           </p>

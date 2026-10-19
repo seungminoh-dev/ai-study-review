@@ -72,10 +72,11 @@ export function QuestionCard({
   return (
     <div className="question">
       <div className="question-meta">
-        <span className="chip">{card.concept_name}</span>
         <span className="muted">
           {KIND[card.type]} · {card.rung === 1 ? '알아보기' : '떠올리기'}
         </span>
+        {/* 개념 이름이 곧 정답인 문제가 많아서("이것을 무엇이라 하나요?") 답한 뒤에 보여 준다 */}
+        {answered ? <span className="chip">{card.concept_name}</span> : null}
       </div>
       {card.type === 'cloze' ? (
         <ClozePrompt prompt={card.prompt} filled={answered ? correctLabel : null} />

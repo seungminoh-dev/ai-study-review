@@ -94,7 +94,8 @@ export function ConceptPanel({ card, next, revealed, ask }: { card: QueueCard; n
               <p className="panel-label">이 개념</p>
               {data ? <span className={`chip state-${data.state}`}>{STATE_LABEL[data.state]}</span> : null}
             </div>
-            <h2>{card.concept_name}</h2>
+            {/* 개념 이름이 정답일 수 있어서 답한 뒤에 보여 준다 (설명하기는 문제에 이미 이름이 있다) */}
+            <h2>{revealed || card.type === 'explain' ? card.concept_name : '답을 고르면 보여요'}</h2>
             <p className="muted small">{[data?.category, RUNG_LABEL[card.rung]].filter(Boolean).join(' · ')}</p>
             <AnimatePresence mode="wait" initial={false}>
               {revealed ? (

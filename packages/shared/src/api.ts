@@ -238,7 +238,10 @@ export interface LoginCode {
 
 /** 자료 하나 (PDF 등). 같은 제목의 저장을 묶는다 */
 export interface MaterialSummary {
+  /** 원래 이름 (Claude가 저장할 때 쓴 PDF 이름). 자료를 묶는 열쇠라 바꾸지 않는다 */
   title: string;
+  /** 보여 줄 이름: 사용자가 바꾼 이름, 없으면 원래 이름을 다듬은 것 */
+  name: string;
   /** 섹션 이름. 쪽수 순서(없으면 저장한 순서) */
   parts: string[];
   cards: number;
@@ -287,6 +290,10 @@ export interface CategoryNode {
 
 export const ConceptCategoryBody = z.object({ category: z.string().trim().max(80).nullable() });
 export const MaterialBody = z.object({ title: z.string().trim().min(1).max(120) });
+/** 자료 이름 바꾸기. 비우면 원래 이름(PDF 이름)으로 돌아간다 */
+export const MaterialLabelBody = z.object({ title: z.string().trim().min(1).max(120), label: z.string().trim().max(80) });
+/** 저장한 대화 이름 바꾸기 */
+export const SessionTopicBody = z.object({ topic: z.string().trim().min(1).max(200) });
 
 /** 베타 지표 (설계서 §2.3 끝났다는 기준) */
 export interface BetaMetrics {
@@ -361,6 +368,8 @@ export interface SessionSummary {
   source: string;
   /** 자료에서 만든 저장이면 자료 제목 */
   material: string | null;
+  /** 자료의 보여 줄 이름 (바꾼 이름, 없으면 PDF 이름을 다듬은 것) */
+  material_name: string | null;
   created_at: number;
   concepts: number;
   cards: number;

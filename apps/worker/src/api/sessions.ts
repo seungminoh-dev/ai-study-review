@@ -1,9 +1,9 @@
-import type { CardStatus, CardType, JudgmentLabel, McqOption, SessionCard, SessionDetail, SessionSummary } from '@moai/shared';
+import { SessionTopicBody, materialLabel, type CardStatus, type CardType, type JudgmentLabel, type McqOption, type SessionCard, type SessionDetail, type SessionSummary } from '@moai/shared';
 import { Hono } from 'hono';
 import type { AppEnv } from '../context';
 import { setCardSuspended } from '../domain/reviews';
 import type { Env } from '../env';
-import { errorJson } from '../lib/http';
+import { errorJson, readJson } from '../lib/http';
 
 // 저장 기록과 카드 끄기 (설계서 §7.2, §12.1)
 
@@ -14,13 +14,16 @@ interface SessionRow {
   topic: string;
   source: string;
   material: string | null;
+  material_label: string | null;
   created_at: number;
   counts: string;
 }
 
 export async function listSessions(env: Env, userId: string, limit: number): Promise<SessionSummary[]> {
   const { results } = await env.DB.prepare(
-    'SELECT id, topic, source, material, created_at, counts FROM learning_sessions WHERE user_id = ?1 ORDER BY created_at DESC LIMIT ?2',
+    `SELECT s.id, s.topic, s.source, s.material, l.label AS material_label, s.created_at, s.counts
+       FROM learning_sessions s LEFT JOIN material_labels l ON l.user_id = s.user_id AND l.material = s.material
+      WHERE s.user_id = ?1 ORDER BY s.created_at DESC LIMIT ?2`,
   )
     .bind(userId, limit)
     .all<SessionRow>();
@@ -31,6 +34,7 @@ export async function listSessions(env: Env, userId: string, limit: number): Pro
       topic: row.topic,
       source: row.source,
       material: row.material,
+      material_name: row.material ? (row.material_label ?? materialLabel(row.material)) : null,
       created_at: row.created_at,
       concepts: counts.concepts ?? 0,
       cards: counts.cards ?? 0,
@@ -39,6 +43,17 @@ export async function listSessions(env: Env, userId: string, limit: number): Pro
 }
 
 sessions.get('/sessions', async (c) => c.json({ sessions: await listSessions(c.env, c.var.userId, 50) }));
+
+/** 저장한 대화 이름 바꾸기 */
+sessions.patch('/sessions/:id', async (c) => {
+  const body = await readJson(c, SessionTopicBody);
+  if (body instanceof Response) return body;
+  const { meta } = await c.env.DB.prepare('UPDATE learning_sessions SET topic = ?3 WHERE id = ?1 AND user_id = ?2')
+    .bind(c.req.param('id'), c.var.userId, body.topic)
+    .run();
+  if (meta.changes === 0) return errorJson(404, 'not_found', '이 기록을 찾지 못했어요.');
+  return c.json({ topic: body.topic });
+});
 
 interface CardRow {
   id: string;

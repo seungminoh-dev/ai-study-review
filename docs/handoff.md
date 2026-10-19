@@ -22,7 +22,7 @@
 
 2. `.dev.vars`에는 **이 컴퓨터용 새 값**만 넣는다. 운영 secret을 회사 컴퓨터에 두지 않는다. 배포는 `main` push → GitHub Actions가 하므로 Cloudflare 로그인도 필요 없다. 운영 D1을 직접 봐야 할 때만 `wrangler login`을 한다.
 3. 로컬 DB는 컴퓨터마다 따로다 (`apps/worker/.wrangler`, gitignore). 새 컴퓨터는 빈 DB다.
-   - `npm run db:migrate:local`(`0001`~`0009`) → `npm run dev` → http://localhost:8787/setup 에서 로컬 `BOOTSTRAP_CODE`로 오너를 만든다.
+   - `npm run db:migrate:local`(`0001`~`0010`) → `npm run dev` → http://localhost:8787/setup 에서 로컬 `BOOTSTRAP_CODE`로 오너를 만든다.
    - 시험 데이터: 설정의 커넥터 주소(로컬)로 MCP `save_learning`을 부른다. 견본은 `packages/shared/fixtures/immutable-object.json`이다. §6의 리허설 순서를 그대로 써도 된다.
 4. Claude Code 앱의 미리보기 설정 `.claude/launch.json`은 레포에 없다 (`.claude/`는 커밋하지 않는다). 아래 내용으로 다시 만든다:
 
@@ -37,7 +37,7 @@
 ## 1. 지금 상태
 
 - **운영**: https://moai.smoh.dev. Cloudflare Workers Paid, D1 `moai`, 매분 Cron 1개.
-- **배포된 마이그레이션**: `0001`~`0009` (0006: 자료·분류, 0007: 이정표 배지, 0008: 오너 알림, 0009: 복습 묶음 `review_logs.run_id`). 모두 운영과 비슷한 로컬 데이터로 미리 돌려 보고 올렸다.
+- **배포된 마이그레이션**: `0001`~`0010` (0006: 자료·분류, 0007: 이정표 배지, 0008: 오너 알림, 0009: 복습 묶음 `review_logs.run_id`, 0010: 자료 보여 줄 이름 `material_labels`). 모두 운영과 비슷한 로컬 데이터로 미리 돌려 보고 올렸다.
 - **끝난 기능**: MVP 0~2 전부. MVP 3은 Claude Code 플러그인, 채팅 복습, 확신도, 모의면접 체인, 질문 은행, 베타 지표, 자동 분류, PDF 자료, OAuth 커넥터, 학습·복습 나누기까지다. 표는 [설계서 §2.4](design.md#24-mvp-3-확장-이후).
 - **2026-10-18 방향 바꿈**: 친구와 함께하는 기능(리그, 질문 은행, 질문 공유)은 PWA 화면에서 뺐다. 내 성취를 높이는 쪽으로 디자인을 다시 짰다. 2026-10-19에 서버 API(`/api/league`, `/api/shared-questions`)도 지웠다. `shared_questions` 테이블과 데이터는 남겨서 내보내기와 계정 지우기에 그대로 들어간다.
 - **디자인 개편** (모두 배포, 원칙은 §4):
@@ -90,8 +90,12 @@
     - 학습 탭: 자료 고르기, 고른 섹션 카드, 섹션 길(`screens/Learn.tsx`).
     - 복습 탭: 오늘 복습, 틀린 것(`GET /api/queue?mode=mistakes`: 최근 30일 안에 마지막 답이 틀린 카드, 오늘 푼 것 빼고, 다시 푼 답은 기록), 분류별, 모의면접, 공부한 대화(`screens/Reviews.tsx`).
     - 무실수 보너스: 복습 화면마다 `run_id`를 답에 붙이고, 5장 이상 모두 맞힌 묶음에 +10 XP(`domain/stats.ts`, 기록에서 센다). 끝 화면에 PERFECT 배너, 다음 연속 목표, "학습도 이어서 할까요?".
+  - 이름 바꾸기와 정답 가리기 (2026-10-19):
+    - 자료 상세와 저장한 대화 상세의 제목 옆 "이름 바꾸기"(`EditableTitle.tsx`). 대화는 `PATCH /api/sessions/:id`가 topic을 바꾼다. 자료는 원래 이름(`learning_sessions.material`)을 그대로 두고 보여 줄 이름만 `material_labels`에 둔다(`PUT /api/materials/label`, 비우면 원래 이름). 그래서 Claude가 같은 PDF의 다음 장을 원래 이름으로 저장해도 같은 자료로 모인다. API의 자료에 `name`, 저장 목록에 `material_name`이 있다.
+    - 개념 이름이 곧 정답인 문제가 많아서, 복습 카드의 개념 칩과 컴퓨터 개념 패널의 이름은 답한 뒤에 보여 준다(설명하기는 문제에 이름이 있어 그대로). 복습 탭 "틀린 것" 목록도 문제만 보여 준다. 채팅 복습 안내(MCP)에도 개념 이름을 먼저 말하지 말라고 적었다.
+    - 복습 탭의 "공부한 대화"는 대화만 보여 준다. 자료 섹션은 학습 탭에 있다.
   - 컴퓨터 화면 폭 (2026-10-19): `.app`이 `.shell` 그리드 칸에서 내용 폭으로 줄던 것을 `width: 100%`로 고쳤다. 이제 화면마다 760px(넓은 화면 1120px)까지 칸을 채운다. 내 성장은 오늘 화면처럼 두 칸(왼쪽 이정표·분류별 진행, 오른쪽 최근 12주)이고, 최근 12주 히트맵은 컴퓨터에서 칸 폭에 맞춰 날짜 칸을 키운다. 휴대폰은 그대로다.
-- **테스트**: worker 136개, shared 23개 통과. CI·Deploy 모두 초록.
+- **테스트**: worker 138개, shared 23개 통과. CI·Deploy 모두 초록.
 - **브랜치**: `main`만 쓴다. 열린 PR은 없다.
 - **확인 못 한 것**:
   1. 실제 카톡 링크 미리보기. 주소를 한 번 보내 본다. 예전 미리보기가 캐시돼 있으면 카카오 개발자 사이트의 공유 디버거로 지운다.
@@ -150,7 +154,7 @@
 | `apps/worker/src/mcp/` | MCP 서버. 도구 8개는 `server.ts`, 서버 지침·도구 설명은 `descriptions.ko.ts` |
 | `apps/worker/src/llm/` | 서버 AI: `anthropic.ts`(`callClaude`), `budget.ts`(`overBudget`), 작업 테이블(`jobs.ts`), 단가, 프롬프트 |
 | `apps/worker/src/cron.ts` | 매분: 알림 → AI 작업. 매시 0분: 만료 정리, `repairLibrary` |
-| `apps/worker/migrations/` | D1 마이그레이션 `0001`~`0009` |
+| `apps/worker/migrations/` | D1 마이그레이션 `0001`~`0010` |
 | `apps/web/src/` | PWA (Vite·React). `screens/`, `cards/`(문제·설명하기·체험·개념 패널), `badges.tsx`, `motion.tsx`, 오프라인 답안함 `offline/store`, 글꼴 `fonts/` |
 | `packages/shared/src/` | zod 스키마와 공용 규칙: `save-learning`, `api`, `grading`, `category`, `material`, `badges`, `llm` |
 | `plugins/moai/` | Claude Code 플러그인 (0.2.0): `/moai:coach`, `capture`, `review`, `pdf`. 마켓플레이스는 루트 `.claude-plugin/marketplace.json` |

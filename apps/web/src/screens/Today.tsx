@@ -1,5 +1,5 @@
 import type { MaterialSummary, McpTokenStatus, StatsResponse, TodayResponse } from '@moai/shared';
-import { isPdf, materialLabel } from '@moai/shared/client';
+import { isPdf } from '@moai/shared/client';
 import { useEffect, useState } from 'react';
 import { aiStatus } from '../ai';
 import { request } from '../api';
@@ -180,7 +180,7 @@ function NextPart({ material, next }: { material: MaterialSummary; next: NonNull
         </span>
         <div className="grow">
           <span className="muted small">
-            {materialLabel(material.title)} · 섹션 {index + 1}/{sections}
+            {material.name} · 섹션 {index + 1}/{sections}
           </span>
           <strong>{next.part ? view.name : '안 푼 카드'}</strong>
           <span className="muted small">

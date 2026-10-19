@@ -1,8 +1,8 @@
 import type { CardEditBody, SessionCard, SessionDetail as Detail, SessionSummary } from '@moai/shared';
-import { materialLabel } from '@moai/shared/client';
 import { useState, type FormEvent } from 'react';
 import { errorMessage, request } from '../api';
 import { CodeBlock } from '../cards/CodeBlock';
+import { EditableTitle } from '../EditableTitle';
 import { Loading } from '../Loading';
 import { materialHref } from '../materials';
 import { BackLink, Link } from '../router';
@@ -13,7 +13,7 @@ import { formatDate, formatDateTime, useApi } from '../useApi';
 
 type Row =
   | { kind: 'session'; session: SessionSummary }
-  | { kind: 'material'; title: string; created_at: number; sections: number; cards: number };
+  | { kind: 'material'; title: string; name: string; created_at: number; sections: number; cards: number };
 
 /** 같은 자료의 섹션 저장을 한 줄로 묶는다. 묶인 줄은 그 자료가 처음 나온(가장 최근) 자리에 둔다 */
 function rowsOf(sessions: SessionSummary[]): Row[] {
@@ -30,7 +30,7 @@ function rowsOf(sessions: SessionSummary[]): Row[] {
       group.cards += session.cards;
       continue;
     }
-    const row = { kind: 'material' as const, title: session.material, created_at: session.created_at, sections: 1, cards: session.cards };
+    const row = { kind: 'material' as const, title: session.material, name: session.material_name ?? session.material, created_at: session.created_at, sections: 1, cards: session.cards };
     materials.set(session.material, row);
     rows.push(row);
   }
@@ -63,7 +63,7 @@ export function Sessions() {
             <li key={`material:${row.title}`}>
               <Link href={materialHref(row.title)} className="row-link">
                 <span>
-                  <span className="chip state-material">자료</span> {materialLabel(row.title)}
+                  <span className="chip state-material">자료</span> {row.name}
                 </span>
                 <span className="muted small">
                   {formatDate(row.created_at)} · 섹션 {row.sections}개 · 카드 {row.cards}장
@@ -300,7 +300,11 @@ export function SessionDetail({ id }: { id: string }) {
       <BackLink href="/sessions" className="back">
         ← 저장 기록
       </BackLink>
-      <h1>{data.topic}</h1>
+      <EditableTitle
+        value={data.topic}
+        maxLength={200}
+        onSave={async (topic) => (await request<{ topic: string }>(`/sessions/${id}`, { method: 'PATCH', json: { topic } })).topic}
+      />
       <p className="muted small">
         {formatDateTime(data.created_at)} · {data.source}
       </p>

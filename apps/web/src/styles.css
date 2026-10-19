@@ -6724,21 +6724,18 @@ a.notice.link:active,
 }
 
 .mistake-list li {
-  display: flex;
-  flex-direction: column;
   padding: 10px 0;
   border-bottom: 1px solid var(--border);
+  font-size: 0.875rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .mistake-list li:last-child {
   border-bottom: none;
 }
 
-.mistake-list .small {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
 
 /* 끝 화면: 학습도 이어서 */
 .learn-suggest {
@@ -6763,4 +6760,28 @@ a.notice.link:active,
   font-size: 0.75rem;
   font-weight: 700;
   color: var(--accent-ink);
+}
+
+/* 제목과 "이름 바꾸기" (자료 상세, 저장한 대화) */
+.title-row {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+
+.title-row h1 {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.title-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.title-edit p {
+  margin: 0;
 }

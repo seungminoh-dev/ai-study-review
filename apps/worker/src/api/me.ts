@@ -37,8 +37,9 @@ me.get('/export', async (c) => {
     query('SELECT concept_name, question, created_at FROM shared_questions WHERE user_id = ?1 ORDER BY created_at'),
     query('SELECT alias, path, created_at FROM category_aliases WHERE user_id = ?1 ORDER BY created_at'),
     query('SELECT badge, earned_at FROM badges WHERE user_id = ?1 ORDER BY earned_at'),
+    query('SELECT material, label, updated_at FROM material_labels WHERE user_id = ?1'),
   ]);
-  const [user, identity, sessions, concepts, edges, judgments, followups, cards, reviews, reminders, freezes, reports, shared, categoryAliases, badges] = results.map(
+  const [user, identity, sessions, concepts, edges, judgments, followups, cards, reviews, reminders, freezes, reports, shared, categoryAliases, badges, materialLabels] = results.map(
     (result) => result.results,
   );
   const body = {
@@ -59,6 +60,7 @@ me.get('/export', async (c) => {
     shared_questions: shared,
     category_aliases: categoryAliases,
     badges,
+    material_labels: materialLabels,
   };
   const day = new Date().toISOString().slice(0, 10);
   return new Response(JSON.stringify(body, null, 2), {
@@ -81,6 +83,7 @@ export function deleteUserStatements(env: Env, userId: string): D1PreparedStatem
     run('DELETE FROM followups WHERE user_id = ?1'),
     run('DELETE FROM edges WHERE user_id = ?1'),
     run('DELETE FROM concepts WHERE user_id = ?1'),
+    run('DELETE FROM material_labels WHERE user_id = ?1'),
     run('DELETE FROM learning_sessions WHERE user_id = ?1'),
     run('DELETE FROM push_subscriptions WHERE user_id = ?1'),
     run('DELETE FROM reminder_slots WHERE user_id = ?1'),

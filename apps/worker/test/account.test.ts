@@ -22,6 +22,7 @@ async function fillAccount(user: TestUser): Promise<void> {
   await env.DB.batch([
     env.DB.prepare("INSERT INTO user_identities (provider, subject, user_id, login, created_at) VALUES ('github', ?1, ?2, 'gone', ?3)").bind(crypto.randomUUID(), user.id, now),
     env.DB.prepare("INSERT INTO streak_freezes (user_id, day) VALUES (?1, '2026-10-01')").bind(user.id),
+    env.DB.prepare("INSERT INTO material_labels (user_id, material, label, updated_at) VALUES (?1, '책.pdf', '내 책', ?2)").bind(user.id, now),
     // 질문 은행 API는 지웠지만 예전에 공유한 질문은 남아 있다
     env.DB.prepare("INSERT INTO shared_questions (id, user_id, concept_name, question, created_at) VALUES (?1, ?2, '깊은 복사', '깊은 복사는 언제 필요할까요?', ?3)").bind(crypto.randomUUID(), user.id, now),
     env.DB.prepare("INSERT INTO llm_jobs (id, user_id, kind, status, created_at, updated_at) VALUES (?1, ?2, 'grade', 'done', ?3, ?3)").bind(crypto.randomUUID(), user.id, now),

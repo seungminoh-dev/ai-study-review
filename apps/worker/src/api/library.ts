@@ -1,7 +1,9 @@
 import {
   ConceptCategoryBody,
   MaterialBody,
+  MaterialLabelBody,
   comparePart,
+  materialLabel,
   normalizeCategory,
   type CardType,
   type CategoryNode,
@@ -69,15 +71,22 @@ function groupBy<T, K>(rows: T[], key: (row: T) => K): Map<K, T[]> {
   return groups;
 }
 
+/** 사용자가 바꾼 자료 이름 */
+const LABELS = 'SELECT material, label FROM material_labels WHERE user_id = ?1';
+
+const nameOf = (labels: D1Result, title: string) =>
+  (labels.results as { material: string; label: string }[]).find((row) => row.material === title)?.label ?? materialLabel(title);
+
 library.get('/materials', async (c) => {
-  const [totals, parts] = await c.env.DB.batch([
+  const [totals, parts, labels] = await c.env.DB.batch([
     c.env.DB.prepare(`${TOTALS} GROUP BY s.material ORDER BY created_at DESC LIMIT 100`).bind(c.var.userId),
     c.env.DB.prepare(`${PARTS} GROUP BY s.material, coalesce(s.material_part, '')`).bind(c.var.userId),
+    c.env.DB.prepare(LABELS).bind(c.var.userId),
   ]);
   const partsOf = groupBy(parts!.results as unknown as PartRow[], (row) => row.title);
   const materials: MaterialSummary[] = (totals!.results as unknown as TotalsRow[]).map((row) => {
     const ordered = [...(partsOf.get(row.title) ?? [])].sort(comparePart);
-    return { ...row, parts: ordered.map((part) => part.name).filter(Boolean), next: nextPart(ordered) };
+    return { ...row, name: nameOf(labels!, row.title), parts: ordered.map((part) => part.name).filter(Boolean), next: nextPart(ordered) };
   });
   return c.json({ materials });
 });
@@ -87,7 +96,7 @@ library.get('/materials/detail', async (c) => {
   const title = c.req.query('title')?.slice(0, 120);
   if (!title) return errorJson(400, 'bad_request', '자료 제목이 없어요.');
   const user = c.var.userId;
-  const [totals, parts, sessions, concepts, previews] = await c.env.DB.batch([
+  const [totals, parts, sessions, concepts, previews, labels] = await c.env.DB.batch([
     c.env.DB.prepare(`${TOTALS} AND s.material = ?2 GROUP BY s.material`).bind(user, title),
     c.env.DB.prepare(`${PARTS} AND s.material = ?2 GROUP BY coalesce(s.material_part, '')`).bind(user, title),
     c.env.DB.prepare(`SELECT id, coalesce(material_part, '') AS name FROM learning_sessions WHERE user_id = ?1 AND material = ?2 ORDER BY created_at`).bind(user, title),
@@ -105,6 +114,7 @@ library.get('/materials/detail', async (c) => {
           WHERE s.user_id = ?1 AND s.material = ?2 AND c.status != 'suspended')
         WHERE n <= 3`,
     ).bind(user, title),
+    c.env.DB.prepare(`${LABELS} AND material = ?2`).bind(user, title),
   ]);
   const total = totals!.results[0] as unknown as TotalsRow | undefined;
   if (!total) return errorJson(404, 'not_found', '이 자료를 찾지 못했어요.');
@@ -115,6 +125,7 @@ library.get('/materials/detail', async (c) => {
   const previewsOf = groupBy(previews!.results as unknown as { part: string; type: CardType; prompt: string }[], (row) => row.part);
   const detail: MaterialDetail = {
     ...total,
+    name: nameOf(labels!, total.title),
     parts: [...(parts!.results as unknown as PartRow[])].sort(comparePart).map((part) => ({
       name: part.name,
       session_id: latest.get(part.name) ?? '',
@@ -130,6 +141,29 @@ library.get('/materials/detail', async (c) => {
     })),
   };
   return c.json(detail);
+});
+
+/**
+ * 자료 이름 바꾸기. 원래 이름(learning_sessions.material)은 두고 보여 줄 이름만 바꾼다.
+ * Claude가 같은 PDF의 다음 장을 원래 이름으로 저장해도 같은 자료로 이어진다. 비우면 원래 이름으로 돌아간다
+ */
+library.put('/materials/label', async (c) => {
+  const body = await readJson(c, MaterialLabelBody);
+  if (body instanceof Response) return body;
+  const user = c.var.userId;
+  const owned = await c.env.DB.prepare('SELECT 1 FROM learning_sessions WHERE user_id = ?1 AND material = ?2 LIMIT 1').bind(user, body.title).first();
+  if (!owned) return errorJson(404, 'not_found', '이 자료를 찾지 못했어요.');
+  if (body.label) {
+    await c.env.DB.prepare(
+      `INSERT INTO material_labels (user_id, material, label, updated_at) VALUES (?1, ?2, ?3, ?4)
+       ON CONFLICT (user_id, material) DO UPDATE SET label = excluded.label, updated_at = excluded.updated_at`,
+    )
+      .bind(user, body.title, body.label, Date.now())
+      .run();
+  } else {
+    await c.env.DB.prepare('DELETE FROM material_labels WHERE user_id = ?1 AND material = ?2').bind(user, body.title).run();
+  }
+  return c.json({ name: body.label || materialLabel(body.title) });
 });
 
 /** 자료에서 아직 안 푼 카드를 모두 끈다. 잘못 가져온 자료를 치울 때 쓴다. 기록 탭에서 다시 켤 수 있다 */

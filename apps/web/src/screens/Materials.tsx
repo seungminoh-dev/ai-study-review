@@ -1,5 +1,5 @@
 import type { MaterialSummary } from '@moai/shared';
-import { isPdf, materialLabel } from '@moai/shared/client';
+import { isPdf } from '@moai/shared/client';
 import { Loading } from '../Loading';
 import { Mascot } from '../Mascot';
 import { materialHref, materialReview, partView } from '../materials';
@@ -30,7 +30,7 @@ function MaterialCard({ material }: { material: MaterialSummary }) {
         <BookTile title={material.title} sections={sections} done={done} />
         <div className="grow">
           <Link className="material-item-title" href={materialHref(material.title)}>
-            {materialLabel(material.title)}
+            {material.name}
           </Link>
           <span className="muted small">
             섹션 {sections}개 · 카드 {material.cards}장

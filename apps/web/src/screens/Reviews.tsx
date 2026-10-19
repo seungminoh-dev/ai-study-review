@@ -1,4 +1,4 @@
-import type { MapResponse, QueueResponse, TodayResponse } from '@moai/shared';
+import type { MapResponse, QueueResponse, SessionSummary, TodayResponse } from '@moai/shared';
 import { Loading } from '../Loading';
 import { Mascot } from '../Mascot';
 import { CategoryProgress } from '../progress';
@@ -15,6 +15,9 @@ export function Reviews() {
   const { data, error } = useApi<TodayResponse>('/today');
   const { data: mistakes } = useApi<QueueResponse>(`/queue?mode=mistakes&size=5`);
   const { data: map } = useApi<MapResponse>('/map');
+  const { data: saved } = useApi<{ sessions: SessionSummary[] }>('/sessions');
+  /** 공부한 대화만. 자료 섹션은 학습 탭에 있다 */
+  const chats = saved?.sessions.filter((session) => session.material === null).slice(0, 3) ?? [];
   const canInterview = useCanInterview();
   if (error) {
     return (
@@ -50,11 +53,9 @@ export function Reviews() {
           <>
             {mistakes ? (
               <ul className="mistake-list">
+                {/* 개념 이름은 정답일 수 있어서 문제만 보여 준다 */}
                 {mistakes.cards.map((card) => (
-                  <li key={card.id}>
-                    <strong>{card.concept_name}</strong>
-                    <span className="muted small">{card.prompt}</span>
-                  </li>
+                  <li key={card.id}>{card.prompt}</li>
                 ))}
               </ul>
             ) : null}
@@ -84,11 +85,11 @@ export function Reviews() {
             모두 보기
           </Link>
         </div>
-        {data.sessions.length === 0 ? (
+        {saved && chats.length === 0 ? (
           <p className="muted small">아직 저장한 대화가 없어요. claude.ai에서 공부하고 "모아이에 저장해줘"라고 해 보세요.</p>
         ) : (
           <ul className="list">
-            {data.sessions.map((session) => (
+            {chats.map((session) => (
               <li key={session.id}>
                 <Link href={`/sessions/${session.id}`} className="row-link">
                   <span>{session.topic}</span>

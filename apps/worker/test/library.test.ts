@@ -169,3 +169,28 @@ function save2(key: string, domain: string) {
     cards: [{ type: 'ox', concept: key, prompt: `${key} 문제`, answer: 'O', explain: '해설' }],
   });
 }
+
+// 이름 바꾸기는 데이터를 바꾸므로 확인해 둔다: 내 것만, 자료는 원래 이름으로 계속 묶인다
+describe('renaming', () => {
+  it('renames a material for display only, so later saves of the same PDF join it', async () => {
+    await callTool(url, 'save_learning', pdf('1장'));
+    const rename = (who: TestUser, label: string) => api(who, '/materials/label', { method: 'PUT', json: { title: '쿠버네티스 입문.pdf', label } });
+    expect((await rename(await newUser(), '남의 이름')).status).toBe(404);
+    expect(await (await rename(user, 'K8s 기초')).json()).toEqual({ name: 'K8s 기초' });
+    // 같은 PDF의 다음 장은 원래 이름으로 저장돼도 같은 자료다
+    await callTool(url, 'save_learning', pdf('2장', 'service'));
+    const { materials } = (await (await api(user, '/materials')).json()) as { materials: MaterialSummary[] };
+    expect(materials.map((material) => [material.title, material.name, material.parts.length])).toEqual([['쿠버네티스 입문.pdf', 'K8s 기초', 2]]);
+    // 비우면 원래 이름
+    expect(await (await rename(user, '')).json()).toEqual({ name: '쿠버네티스 입문' });
+  });
+
+  it('renames only my own saved conversation', async () => {
+    const saved = await callTool(url, 'save_learning', pdf('1장'));
+    const id = saved.structuredContent.session_id as string;
+    expect((await api(await newUser(), `/sessions/${id}`, { method: 'PATCH', json: { topic: '남의 것' } })).status).toBe(404);
+    expect((await api(user, `/sessions/${id}`, { method: 'PATCH', json: { topic: '  ' } })).status).toBe(400);
+    expect(await (await api(user, `/sessions/${id}`, { method: 'PATCH', json: { topic: '파드 정리' } })).json()).toEqual({ topic: '파드 정리' });
+    expect(await env.DB.prepare('SELECT topic FROM learning_sessions WHERE id = ?1').bind(id).first('topic')).toBe('파드 정리');
+  });
+});

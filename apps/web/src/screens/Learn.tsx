@@ -1,5 +1,4 @@
 import type { MaterialDetail, MaterialPart, MaterialSummary } from '@moai/shared';
-import { materialLabel } from '@moai/shared/client';
 import { useState, type CSSProperties } from 'react';
 import { IconCheck, IconChevron } from '../icons';
 import { Loading } from '../Loading';
@@ -63,7 +62,7 @@ function MaterialPath({ material, materials }: { material: MaterialSummary; mate
       <button type="button" className="material-switch" aria-expanded={switching} onClick={() => setSwitching(!switching)}>
         <BookTile title={material.title} sections={sections} done={material.cards > 0 && material.unsolved_open === 0} />
         <span className="grow">
-          <strong>{materialLabel(material.title)}</strong>
+          <strong>{material.name}</strong>
           <span className="muted small">
             섹션 {finished}/{sections} 끝 · 새 카드 {material.unsolved_open}장 남음
           </span>
@@ -77,7 +76,7 @@ function MaterialPath({ material, materials }: { material: MaterialSummary; mate
           {materials.map((item) => (
             <li key={item.title}>
               <Link href={`/learn?${new URLSearchParams({ title: item.title })}`} className={item.title === material.title ? 'on' : undefined} onClick={() => setSwitching(false)}>
-                <strong>{materialLabel(item.title)}</strong>
+                <strong>{item.name}</strong>
                 <span className="muted small">
                   카드 {item.solved}/{item.cards}장 풂
                 </span>
