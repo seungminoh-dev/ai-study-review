@@ -3,6 +3,7 @@ import { z } from 'zod';
 // 서버 LLM (설계서 §11): 설명하기 AI 채점과 붙여넣기 가져오기의 입출력.
 
 import { MAX_IMPORT_CHARS } from './llm-limits';
+import { ConceptKey } from './save-learning';
 
 export { MAX_IMPORT_CHARS };
 
@@ -71,6 +72,37 @@ export interface AskResponse {
   left: number;
 }
 
+/** 앱 안 모의면접 (MCP get_interview_chain과 같은 순서): 한 질문씩 주고받는다. 대화는 기기가 들고 있다가 함께 보낸다 */
+const InterviewTurn = z.object({ question: z.string().trim().min(1).max(500), answer: z.string().trim().max(2000) });
+
+export const InterviewBody = z.object({
+  /** 첫 질문을 받을 때: 이 개념에서 시작한다 (없으면 최근에 많이 틀린 개념) */
+  concept_key: ConceptKey.optional(),
+  category: z.string().max(80).optional(),
+  /** 첫 응답이 정한 개념 순서. 다음 질문부터 그대로 보낸다 */
+  keys: z.array(ConceptKey).min(1).max(5).optional(),
+  turns: z.array(InterviewTurn).max(8).default([]),
+});
+export type InterviewBody = z.infer<typeof InterviewBody>;
+
+export const InterviewSaveBody = z.object({ keys: z.array(ConceptKey).min(1).max(5), turns: z.array(InterviewTurn).min(1).max(8) });
+
+export const InterviewQuestion = z.object({ question: z.string().min(1).max(500), concept_key: z.string().max(60) });
+export const InterviewSummary = z.object({ good: z.array(z.string().max(200)).max(5), fix: z.array(z.string().max(200)).max(5) });
+export type InterviewSummary = z.infer<typeof InterviewSummary>;
+
+export interface InterviewResponse {
+  keys: string[];
+  names: string[];
+  /** 이 면접에서 물을 질문 수 */
+  total: number;
+  /** 다음 질문. 마지막 답을 보냈으면 null이고 summary가 온다 */
+  question: { question: string; concept_key: string } | null;
+  summary: InterviewSummary | null;
+  /** 이번 달 남은 면접 질문 수 */
+  left: number;
+}
+
 export interface AiStatus {
   /** 서버에 API 키와 모델이 설정되어 있다 */
   available: boolean;
@@ -78,6 +110,8 @@ export interface AiStatus {
   over_budget: boolean;
   /** 이번 달 남은 개념 질문 수 */
   ask_left: number;
+  /** 이번 달 남은 모의면접 질문 수 */
+  interview_left: number;
 }
 
 export interface UsageReport {

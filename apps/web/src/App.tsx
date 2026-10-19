@@ -48,7 +48,8 @@ const Materials = lazyScreen(() => import('./screens/Materials').then((module) =
 const MaterialDetail = lazyScreen(() => import('./screens/MaterialDetail').then((module) => module.MaterialDetail));
 const Settings = lazyScreen(() => import('./screens/Settings').then((module) => module.Settings));
 const Welcome = lazyScreen(() => import('./screens/Welcome').then((module) => module.Welcome));
-const LATER = [Review, Sessions, SessionDetail, MapScreen, Concept, Growth, Import, Materials, MaterialDetail, Settings, Welcome];
+const Interview = lazyScreen(() => import('./screens/Interview').then((module) => module.Interview));
+const LATER = [Review, Sessions, SessionDetail, MapScreen, Concept, Growth, Import, Materials, MaterialDetail, Settings, Welcome, Interview];
 // 개인정보 처리방침·약관은 로그인 전에도 열고, 가끔만 보니 미리 받지 않는다
 const Legal = lazyScreen(() => import('./screens/Legal').then((module) => module.Legal));
 const legalDoc = (path: string) => (path === '/privacy' ? 'privacy' : path === '/terms' ? 'terms' : null);
@@ -298,6 +299,7 @@ export function App() {
   else if (path === '/materials') screen = <Materials />;
   else if (path === '/materials/detail') screen = <MaterialDetail key={query.get('title') ?? ''} title={query.get('title') ?? ''} />;
   else if (path === '/welcome') screen = <Welcome name={auth.me.display_name} />;
+  else if (path === '/interview') screen = <Interview key={location.search} concept={query.get('concept')} category={query.get('category')} />;
   else if (legalDoc(path)) screen = <Legal doc={legalDoc(path)!} />;
   else if (path === '/settings') {
     screen = (
@@ -312,8 +314,8 @@ export function App() {
   }
   else screen = <Today name={auth.me.display_name} />;
 
-  // 복습과 시작 가이드는 메뉴 없이 집중한다. 오늘·성장·지도는 컴퓨터에서 넓게 쓴다
-  const focus = path === '/review' || path === '/welcome';
+  // 복습, 모의면접, 시작 가이드는 메뉴 없이 집중한다. 오늘·성장·지도는 컴퓨터에서 넓게 쓴다
+  const focus = path === '/review' || path === '/interview' || path === '/welcome';
   const wide = path === '/' || path === '/growth' || path === '/map' || path === '/materials/detail';
   const section = sectionOf(path);
   // 휴대폰 탭에는 자료가 없어서 자료 화면에서는 기록 탭을 밝힌다

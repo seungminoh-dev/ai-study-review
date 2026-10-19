@@ -2556,6 +2556,10 @@ a.notice.link:active,
   order: 7;
 }
 
+.o-interview {
+  order: 7;
+}
+
 .o-reminder {
   order: 8;
 }
@@ -5727,6 +5731,99 @@ a.notice.link:active,
   text-align: left;
   cursor: pointer;
   transition: background-color 0.15s ease;
+}
+
+/* 앱 안 모의면접 (/interview): 복습처럼 메뉴 없이, 면접관 질문과 내 답이 번갈아 쌓인다 */
+.interview {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: calc(100dvh - 48px);
+}
+
+.interview-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.interview-head h1 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.interview-head .grow {
+  flex: 1;
+  min-width: 0;
+}
+
+.interview-head p {
+  margin: 0;
+}
+
+.interview-log {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.interview-form {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 -16px;
+  padding: 12px 16px max(12px, env(safe-area-inset-bottom));
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.interview-form .answer-input {
+  width: 100%;
+  font-size: 16px;
+}
+
+.interview-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 18px;
+  border: 2px solid var(--good-fill);
+  border-radius: 20px;
+  background: var(--good-soft);
+}
+
+.interview-summary h2,
+.interview-summary h3 {
+  margin: 0;
+  color: var(--text);
+}
+
+.interview-summary h2 {
+  font-size: 1.125rem;
+}
+
+.interview-summary h3 {
+  margin-top: 6px;
+  font-size: 0.9375rem;
+}
+
+.interview-summary ul {
+  margin: 0;
+  padding-left: 1.2em;
+  line-height: 1.6;
+}
+
+@media (min-width: 1024px) {
+  .interview-form {
+    margin: 0;
+    padding: 16px 20px;
+    border: 1px solid var(--border);
+    border-radius: 20px;
+  }
 }
 
 /* 대화로 카드 만들기 (2차) */

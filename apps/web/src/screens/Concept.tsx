@@ -1,5 +1,6 @@
 import type { ConceptDetail } from '@moai/shared';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { aiStatus } from '../ai';
 import { errorMessage, request } from '../api';
 import { STATE_LABEL } from '../concept-state';
 import { copyText } from '../copy';
@@ -20,6 +21,10 @@ const EDGE_LABEL: Record<string, { out: string; in: string }> = {
 export function Concept({ conceptKey }: { conceptKey: string }) {
   const { data, error } = useApi<ConceptDetail>(`/concepts/${encodeURIComponent(conceptKey)}`);
   const [copied, setCopied] = useState<boolean | null>(null);
+  const [canInterview, setCanInterview] = useState(false);
+  useEffect(() => {
+    void aiStatus().then((status) => setCanInterview(status.available && !status.over_budget && status.interview_left > 0));
+  }, []);
   if (error) return <div className="screen"><p className="notice bad">{error}</p></div>;
   if (!data) return <Loading />;
   return (
@@ -34,6 +39,13 @@ export function Concept({ conceptKey }: { conceptKey: string }) {
       </p>
       <CategoryEditor conceptKey={data.key} initial={data.category} />
       {data.state === 'material' ? <p className="notice">자료에서만 나온 개념이에요. 카드를 한 번 풀면 내 지식이 돼요.</p> : null}
+      {canInterview && data.state !== 'material' ? (
+        <div className="actions">
+          <Link className="button" href={`/interview?${new URLSearchParams({ concept: data.key })}`}>
+            이 개념으로 모의면접
+          </Link>
+        </div>
+      ) : null}
 
       <section>
         <h2>Claude에서 이어서 공부하기</h2>

@@ -1,4 +1,4 @@
-import { AskBody, AskCardsBody, GradeAiBody, ImportBody, type AiStatus, type AskResponse, type BetaMetrics, type JobView, type UsageReport } from '@moai/shared';
+import { AskBody, AskCardsBody, GradeAiBody, ImportBody, InterviewBody, InterviewSaveBody, type AiStatus, type AskResponse, type BetaMetrics, type InterviewResponse, type JobView, type UsageReport } from '@moai/shared';
 import { Hono } from 'hono';
 import type { AppEnv } from '../context';
 import { sha256Hex } from '../lib/crypto';
@@ -6,6 +6,7 @@ import { errorJson, readJson } from '../lib/http';
 import { DAY_MS } from '../lib/kst';
 import { llmConfigured } from '../llm/anthropic';
 import { askConcept, askLeft, askToCards } from '../llm/ask';
+import { interviewLeft, interviewTurn, saveInterview } from '../llm/interview';
 import { caps, monthStart, overBudget } from '../llm/budget';
 import { createJob, runJob } from '../llm/jobs';
 import { requireOwner } from './account';
@@ -20,8 +21,10 @@ const OVER_BUDGET = () => errorJson(429, 'budget', '이번 달 AI 한도에 닿�
 ai.get('/ai/status', async (c) => {
   const available = llmConfigured(c.env);
   const now = Date.now();
-  const [over, left] = available ? await Promise.all([overBudget(c.env, c.var.userId, now), askLeft(c.env, c.var.userId, now)]) : [false, 0];
-  const body: AiStatus = { available, over_budget: over, ask_left: left };
+  const [over, left, interview] = available
+    ? await Promise.all([overBudget(c.env, c.var.userId, now), askLeft(c.env, c.var.userId, now), interviewLeft(c.env, c.var.userId, now)])
+    : [false, 0, 0];
+  const body: AiStatus = { available, over_budget: over, ask_left: left, interview_left: interview };
   return c.json(body);
 });
 
@@ -61,6 +64,27 @@ ai.post('/cards/:id/grade-ai', async (c) => {
   // 응답을 보낸 뒤에도 돌린다 (30초까지). 끊기면 매분 Cron이 이어 받는다
   c.executionCtx.waitUntil(runJob(c.env, id, 'request'));
   return c.json({ job_id: id }, 202);
+});
+
+/** 앱 안 모의면접: 다음 질문 하나, 마지막이면 정리. 대화는 기기가 들고 있다가 같이 보낸다 */
+ai.post('/interview', async (c) => {
+  if (!llmConfigured(c.env)) return errorJson(503, 'ai_unavailable', '서버에 AI 설정이 없어요.');
+  const body = await readJson(c, InterviewBody);
+  if (body instanceof Response) return body;
+  const outcome = await interviewTurn(c.env, c.var.userId, body, Date.now());
+  if (!outcome.ok) return errorJson(outcome.status, outcome.code, outcome.message);
+  const { ok: _ok, ...response } = outcome;
+  return c.json(response satisfies InterviewResponse);
+});
+
+/** 면접을 기록으로 남긴다 (판정과 카드). 가져오기 작업으로 돌고, 끝나면 푸시로 알린다 */
+ai.post('/interview/save', async (c) => {
+  if (!llmConfigured(c.env)) return errorJson(503, 'ai_unavailable', '서버에 AI 설정이 없어요.');
+  const body = await readJson(c, InterviewSaveBody);
+  if (body instanceof Response) return body;
+  const outcome = await saveInterview(c.env, c.var.userId, body, Date.now());
+  if (!outcome.ok) return errorJson(outcome.status, outcome.code, outcome.message);
+  return c.json({ job_id: outcome.job_id, duplicate: outcome.duplicate }, outcome.duplicate ? 200 : 202);
 });
 
 const JOB_COLUMNS = 'id, kind, status, error, created_at, result';

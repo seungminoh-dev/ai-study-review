@@ -1,6 +1,7 @@
 import type { MapResponse, MaterialSummary, McpTokenStatus, StatsResponse, TodayResponse } from '@moai/shared';
 import { materialLabel } from '@moai/shared/client';
 import { useEffect, useState } from 'react';
+import { aiStatus } from '../ai';
 import { request } from '../api';
 import { NewBadges } from '../badges';
 import { IconArrow, IconBook, IconCheck, IconFlame, IconSettings } from '../icons';
@@ -246,9 +247,14 @@ export function Today({ name }: { name: string }) {
   const { data: map } = useApi<MapResponse>('/map');
   const { data: materials } = useApi<{ materials: MaterialSummary[] }>('/materials');
   const [cached, setCached] = useState(0);
+  /** 서버 AI가 있고 이번 달 면접 질문이 남았다 */
+  const [canInterview, setCanInterview] = useState(false);
   useEffect(() => {
     if (error) void cachedQueue().then((cards) => setCached(cards.length));
   }, [error]);
+  useEffect(() => {
+    void aiStatus().then((status) => setCanInterview(status.available && !status.over_budget && status.interview_left > 0));
+  }, []);
   if (error) {
     return (
       <div className="screen">
@@ -317,6 +323,16 @@ export function Today({ name }: { name: string }) {
                 ))}
               </ul>
             </section>
+          ) : null}
+          {canInterview && (map?.nodes.length ?? 0) > 0 ? (
+            <Link className="claude-link o-interview" href="/interview">
+              <Mascot mood="study" size={40} />
+              <span className="grow">
+                <strong>꼬리질문 모의면접</strong>
+                <span className="muted small">흔들리는 개념부터 면접관처럼 이어서 물어봐요</span>
+              </span>
+              <IconArrow />
+            </Link>
           ) : null}
           {!data.reminders_set ? (
             <Link className="notice link o-reminder" href="/settings">

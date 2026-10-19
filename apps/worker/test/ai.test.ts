@@ -1,4 +1,4 @@
-import type { JobView } from '@moai/shared';
+import type { InterviewResponse, JobView } from '@moai/shared';
 import { env } from 'cloudflare:workers';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import example from '../../../packages/shared/fixtures/immutable-object.json';
@@ -67,7 +67,7 @@ describe('AI grading', () => {
       .bind(crypto.randomUUID(), user.id, Date.now())
       .run();
     expect((await api(user, `/cards/${cardId}/grade-ai`, { method: 'POST', json: { answer: '설명' } })).status).toBe(429);
-    expect(await (await api(user, '/ai/status')).json()).toEqual({ available: true, over_budget: true, ask_left: 50 });
+    expect(await (await api(user, '/ai/status')).json()).toEqual({ available: true, over_budget: true, ask_left: 50, interview_left: 80 });
     expect(fetch).not.toHaveBeenCalled();
   });
 
@@ -150,6 +150,27 @@ describe('AI concept chat', () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('overloaded', { status: 529 }));
     expect((await api(user, `/cards/${cardId}/ask`, { method: 'POST', json: { question: '왜요?' } })).status).toBe(502);
     expect(await askCount()).toBe(0);
+  });
+});
+
+describe('in-app mock interview', () => {
+  it('asks along my own concepts, sums up at the end, counts each question and saves as an import', async () => {
+    await callTool(await mcpUrl(user), 'save_learning', example);
+    const fetch = mockClaude({ question: '불변 객체는 왜 스레드 안전한가요?', concept_key: 'immutable-object', good: ['핵심을 먼저 말했어요'], fix: ['방어적 복사를 빠뜨렸어요'] });
+    const first = (await (await api(user, '/interview', { method: 'POST', json: { concept_key: 'immutable-object' } })).json()) as InterviewResponse;
+    expect(first).toMatchObject({ question: { question: '불변 객체는 왜 스레드 안전한가요?' }, summary: null, left: 79 });
+    expect(first.keys[0]).toBe('immutable-object');
+    const turns = Array.from({ length: first.total }, () => ({ question: '불변 객체는 왜 스레드 안전한가요?', answer: '상태가 안 바뀌어서요.' }));
+    const last = (await (await api(user, '/interview', { method: 'POST', json: { keys: first.keys, turns } })).json()) as InterviewResponse;
+    expect(last).toMatchObject({ question: null, summary: { fix: ['방어적 복사를 빠뜨렸어요'] }, left: 78 });
+    expect(fetch).toHaveBeenCalledTimes(2);
+    // 남의 개념 key로는 면접할 수 없다
+    expect((await api(await newUser(), '/interview', { method: 'POST', json: { keys: first.keys } })).status).toBe(404);
+    const saved = await api(user, '/interview/save', { method: 'POST', json: { keys: first.keys, turns } });
+    expect(saved.status).toBe(202);
+    const { job_id } = (await saved.json()) as { job_id: string };
+    expect(await env.DB.prepare("SELECT input FROM llm_jobs WHERE id = ?1 AND kind = 'import'").bind(job_id).first<string>('input')).toContain('사용자: 상태가 안 바뀌어서요.');
+    await env.DB.prepare('DELETE FROM llm_jobs WHERE id = ?1').bind(job_id).run();
   });
 });
 
