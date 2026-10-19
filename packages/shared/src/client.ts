@@ -5,3 +5,4 @@ export { MAX_IMPORT_CHARS } from './llm-limits';
 export { inCategory, normalizeCategory } from './category';
 export { isPdf, materialLabel, splitPart } from './material';
 export { QUESTS, QUEST_XP } from './quests';
+export { CREDIT_COST, MONTHLY_CREDITS, creditsLeft } from './credits';

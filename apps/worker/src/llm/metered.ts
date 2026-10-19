@@ -1,15 +1,15 @@
+import { CREDIT_COST } from '@moai/shared';
+import { noCreditsMessage, refundCredits, spendCredits } from '../domain/credits';
 import type { Env } from '../env';
 import { callClaude, type CallRequest } from './anthropic';
-import { monthStart, overBudget } from './budget';
+import { overBudget } from './budget';
 import { costMicroUsd } from './pricing';
 
 // 요청 안에서 바로 답하는 서버 AI 호출 (개념 채팅, 모의면접). 답은 몇 초면 와서 작업 테이블을 쓰지 않는다.
-// 사람마다 한 달(UTC) 횟수 한도와 §11.5 예산을 함께 본다. 비용 기록(llm_usage)의 kind가 이번 달 횟수도 센다.
+// 사람마다 AI 크레딧을 쓰고(domain/credits.ts), 서비스 전체 예산(§11.5)도 본다. 청구되지 않은 실패는 크레딧을 돌려준다.
 
 export type MeteredKind = 'ask' | 'interview';
 
-/** 한 달에 쓸 수 있는 횟수. 모의면접은 질문 하나가 한 번이다 (면접 한 번에 6~8번) */
-export const MONTHLY_LIMIT: Record<MeteredKind, number> = { ask: 50, interview: 80 };
 /** 답이 오기 전에 미리 적어 두는 비용(마이크로달러). 모르는 모델 단가로 입력 3천·출력 2048토큰쯤이다 */
 const RESERVE_MICRO_USD = 150_000;
 
@@ -17,26 +17,18 @@ export type Failure = { ok: false; status: number; code: string; message: string
 
 export const fail = (status: number, code: string, message: string): Failure => ({ ok: false, status, code, message });
 
-export async function usesLeft(env: Env, userId: string, kind: MeteredKind, now: number): Promise<number> {
-  const used = await env.DB.prepare('SELECT count(*) AS n FROM llm_usage WHERE user_id = ?1 AND kind = ?2 AND created_at >= ?3')
-    .bind(userId, kind, monthStart(now))
-    .first<number>('n');
-  return Math.max(0, MONTHLY_LIMIT[kind] - (used ?? 0));
-}
-
-/** 한도를 보고, 미리 적고, 부르고, 실제 비용으로 고친다. 성공하면 모델이 쓴 글(JSON)을 돌려준다 */
-export async function meteredCall(env: Env, userId: string, kind: MeteredKind, request: CallRequest, now: number, limitMessage: string): Promise<Failure | { ok: true; text: string }> {
-  if (await overBudget(env, userId, now, true)) return fail(429, 'budget', '이번 달 AI 한도에 닿았어요.');
-  // 이번 달 횟수를 세고 비용을 미리 적어 두는 것을 한 문장으로 한다. 동시에 여러 번 보내도 한도와 예산을 넘지 않는다
+/** 크레딧을 쓰고, 비용을 미리 적고, 부르고, 실제 비용으로 고친다. 성공하면 모델이 쓴 글(JSON)을 돌려준다 */
+export async function meteredCall(env: Env, userId: string, kind: MeteredKind, request: CallRequest, now: number): Promise<Failure | { ok: true; text: string }> {
+  if (await overBudget(env, now, true)) return fail(429, 'budget', '이번 달 서비스 전체 AI 한도에 닿았어요.');
+  // 크레딧은 세기와 쓰기를 한 문장으로 한다. 동시에 여러 번 보내도 가진 것보다 더 쓰지 못한다
   const id = crypto.randomUUID();
-  const reserved = await env.DB.prepare(
+  if (!(await spendCredits(env, userId, kind, CREDIT_COST[kind], id, now))) return fail(429, 'no_credits', noCreditsMessage(CREDIT_COST[kind]));
+  await env.DB.prepare(
     `INSERT INTO llm_usage (id, user_id, job_id, kind, model, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_micro_usd, created_at)
-     SELECT ?1, ?2, ?1, ?7, 'reserved', 0, 0, 0, 0, ?3, ?4
-      WHERE (SELECT count(*) FROM llm_usage WHERE user_id = ?2 AND kind = ?7 AND created_at >= ?5) < ?6`,
+     VALUES (?1, ?2, ?1, ?3, 'reserved', 0, 0, 0, 0, ?4, ?5)`,
   )
-    .bind(id, userId, RESERVE_MICRO_USD, now, monthStart(now), MONTHLY_LIMIT[kind], kind)
+    .bind(id, userId, kind, RESERVE_MICRO_USD, now)
     .run();
-  if (reserved.meta.changes === 0) return fail(429, `${kind}_limit`, limitMessage);
 
   const result = await callClaude(env, request);
   // 미리 적은 비용을 실제 비용으로 바꾼다. 기다리다 끊었으면 청구됐을 수 있어 그대로 두고, 청구되지 않은 실패는 횟수로 세지 않는다
@@ -56,6 +48,7 @@ export async function meteredCall(env: Env, userId: string, kind: MeteredKind, r
     await env.DB.prepare('UPDATE llm_usage SET model = ?2 WHERE id = ?1').bind(id, `${env.GRADER_MODEL} (시간 초과, 예상)`).run();
   } else {
     await env.DB.prepare('DELETE FROM llm_usage WHERE id = ?1').bind(id).run();
+    await refundCredits(env, id);
   }
   console.log(JSON.stringify({ event: kind, user_id: userId, ok: result.ok, ...(result.ok ? {} : { error: result.error }) }));
 

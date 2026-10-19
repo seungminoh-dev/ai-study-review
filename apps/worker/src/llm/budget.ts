@@ -1,16 +1,13 @@
 import type { Env } from '../env';
 
-// 예산 가드 (설계서 §11.5): 이번 달(UTC) 사용자 합계와 전체 합계가 한도를 넘으면 새 작업을 받지 않는다.
+// 예산 가드 (설계서 §11.5): 이번 달(UTC) 서비스 전체 AI 비용이 한도를 넘으면 새 작업을 받지 않는다.
+// 사람마다 쓰는 양은 AI 크레딧(domain/credits.ts)이 정한다. 이 한도는 운영자 지갑을 지키는 안전장치다.
 
-const DEFAULT_USER_CAP_USD = 6;
 const DEFAULT_MONTHLY_CAP_USD = 90;
 
-export function caps(env: Env): { user: number; monthly: number } {
-  const read = (value: string | undefined, fallback: number) => {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
-  };
-  return { user: read(env.LLM_USER_CAP_USD, DEFAULT_USER_CAP_USD), monthly: read(env.LLM_MONTHLY_CAP_USD, DEFAULT_MONTHLY_CAP_USD) };
+export function caps(env: Env): { monthly: number } {
+  const parsed = Number(env.LLM_MONTHLY_CAP_USD);
+  return { monthly: Number.isFinite(parsed) && parsed >= 0 ? parsed : DEFAULT_MONTHLY_CAP_USD };
 }
 
 export function monthStart(now: number): number {
@@ -22,21 +19,14 @@ export function monthStart(now: number): number {
 const RESERVE_SQL = "sum(CASE kind WHEN 'import' THEN 1000000 ELSE 100000 END)";
 
 /**
- * 한도를 넘었으면 true.
+ * 서비스 전체 한도를 넘었으면 true.
  * withPending이면(새 작업을 받을 때) 끝나지 않은 작업도 넉넉한 예상 비용으로 더한다. 비용은 응답이 와야 기록되므로,
  * 한꺼번에 여러 작업을 넣어 한도를 넘기지 못하게 한다. 작업을 돌릴 때는 자기 자신을 세지 않도록 빼고 본다.
  */
-export async function overBudget(env: Env, userId: string, now: number, withPending = false): Promise<boolean> {
-  const since = monthStart(now);
-  const pending = withPending ? `+ (SELECT coalesce(${RESERVE_SQL}, 0) FROM llm_jobs WHERE status IN ('queued', 'running')` : '';
-  const [mine, all] = await env.DB.batch([
-    env.DB.prepare(
-      `SELECT coalesce(sum(cost_micro_usd), 0) ${pending ? `${pending} AND user_id = ?1)` : ''} AS cost FROM llm_usage WHERE user_id = ?1 AND created_at >= ?2`,
-    ).bind(userId, since),
-    env.DB.prepare(`SELECT coalesce(sum(cost_micro_usd), 0) ${pending ? `${pending})` : ''} AS cost FROM llm_usage WHERE created_at >= ?1`).bind(since),
-  ]);
-  const limit = caps(env);
-  const user = (mine!.results[0] as { cost: number }).cost / 1e6;
-  const total = (all!.results[0] as { cost: number }).cost / 1e6;
-  return user >= limit.user || total >= limit.monthly;
+export async function overBudget(env: Env, now: number, withPending = false): Promise<boolean> {
+  const pending = withPending ? `+ (SELECT coalesce(${RESERVE_SQL}, 0) FROM llm_jobs WHERE status IN ('queued', 'running'))` : '';
+  const all = await env.DB.prepare(`SELECT coalesce(sum(cost_micro_usd), 0) ${pending} AS cost FROM llm_usage WHERE created_at >= ?1`)
+    .bind(monthStart(now))
+    .first<number>('cost');
+  return (all ?? 0) / 1e6 >= caps(env).monthly;
 }

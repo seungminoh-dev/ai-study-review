@@ -1,5 +1,6 @@
 import { PERFECT_MIN_ANSWERS, PERFECT_XP, QUESTS, QUEST_XP, type QuestId, type StatsResponse } from '@moai/shared';
 import type { Env } from '../env';
+import { achievementReads, settleAchievements } from './achievements';
 import { badgeReads, settleBadges } from './badges';
 import { DAY_MS, STUDY_DAY_SHIFT, studyDayIndex, studyDayKey, studyWeekday } from '../lib/kst';
 
@@ -24,7 +25,7 @@ interface DayRow {
 export async function loadStats(env: Env, userId: string, now: number): Promise<StatsResponse> {
   const today = studyDayIndex(now);
   const since = (today - LOOKBACK_DAYS) * DAY_MS - STUDY_DAY_SHIFT;
-  const [reviews, sessions, perfects, freezes, user, ...badgeRows] = await env.DB.batch([
+  const [reviews, sessions, perfects, freezes, user, progress, owned, ...badgeRows] = await env.DB.batch([
     env.DB.prepare(
       `SELECT CAST((r.reviewed_at + ?3) / ${DAY_MS} AS INTEGER) AS d, count(*) AS n, sum(${REVIEW_XP}) AS xp,
               sum(c.origin = 'material' AND json_extract(r.prev_card, '$.state') = 0) AS learned,
@@ -47,6 +48,7 @@ export async function loadStats(env: Env, userId: string, now: number): Promise<
     ).bind(userId, since, STUDY_DAY_SHIFT),
     env.DB.prepare('SELECT day FROM streak_freezes WHERE user_id = ?1').bind(userId),
     env.DB.prepare('SELECT daily_goal FROM users WHERE id = ?1').bind(userId),
+    ...achievementReads(env, userId),
     ...badgeReads(env, userId),
   ]);
   const goal = (user!.results[0] as { daily_goal: number } | undefined)?.daily_goal ?? 5;
@@ -105,6 +107,9 @@ export async function loadStats(env: Env, userId: string, now: number): Promise<
   }
   const { badges, insert } = settleBadges(env, userId, now, badgeRows, { best: Math.max(best, streak), reached });
   if (insert) writes.push(insert);
+  const questDays = [...reviewed.keys()].filter((day) => QUESTS.every((quest) => questOf(day, quest.id).done)).length;
+  const settled = settleAchievements(env, userId, now, [progress!, owned!], { questDays, bestStreak: Math.max(best, streak) });
+  writes.push(...settled.writes);
   if (writes.length > 0) await env.DB.batch(writes);
 
   const dayOf = (day: number) => ({
@@ -127,6 +132,7 @@ export async function loadStats(env: Env, userId: string, now: number): Promise<
     last_week_xp: weekXp(monday - 7),
     history: Array.from({ length: 84 }, (_, i) => dayOf(monday - 77 + i)),
     badges,
+    achievements: settled.achievements,
     quests: QUESTS.map((quest) => ({ id: quest.id, target: quest.target, ...questOf(today, quest.id) })),
   };
 }

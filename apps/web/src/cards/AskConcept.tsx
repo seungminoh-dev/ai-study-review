@@ -1,4 +1,5 @@
 import type { AskResponse, ImportResult, QueueCard } from '@moai/shared';
+import { CREDIT_COST, creditsLeft } from '@moai/shared/client';
 import { AnimatePresence } from 'motion/react';
 import * as m from 'motion/react-m';
 import { Fragment, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
@@ -40,7 +41,7 @@ type Making = { state: 'idle' } | { state: 'making' } | { state: 'done'; summary
 export interface Ask {
   /** 서버 AI가 켜져 있고 이번 달 AI 한도가 남았다 */
   available: boolean;
-  /** 이번 달 남은 질문 수 */
+  /** 남은 AI 크레딧 (월간 + 보유) */
   left: number;
   turns: Turn[];
   pending: boolean;
@@ -56,7 +57,7 @@ export function useAsk(stageKey: string, cardId: string | undefined, picked: str
   const [made, setMade] = useState<{ key: string; making: Making }>({ key: stageKey, making: { state: 'idle' } });
 
   useEffect(() => {
-    void aiStatus().then((value) => setStatus({ available: value.available && !value.over_budget, left: value.ask_left }));
+    void aiStatus().then((value) => setStatus({ available: value.available && !value.over_budget, left: creditsLeft(value.credits) }));
   }, []);
 
   const turns = log.key === stageKey ? log.turns : [];
@@ -73,12 +74,13 @@ export function useAsk(stageKey: string, cardId: string | undefined, picked: str
     setLog({ key, turns: [...turns, { question: question.trim(), answer: null }] });
     try {
       const result = await request<AskResponse>(`/cards/${cardId}/ask`, { method: 'POST', json: { question: question.trim(), ...(picked ? { picked } : {}), history } });
-      setStatus((value) => ({ ...value, left: result.left }));
+      setStatus((value) => ({ ...value, left: creditsLeft(result.credits) }));
+      forgetAiStatus();
       settle({ answer: result.answer });
     } catch (error) {
       if (error instanceof RequestError && error.status === 429) {
         forgetAiStatus();
-        if (error.code === 'ask_limit') setStatus((value) => ({ ...value, left: 0 }));
+        if (error.code === 'no_credits') setStatus((value) => ({ ...value, left: 0 }));
       }
       settle({ error: errorMessage(error) });
     }
@@ -93,6 +95,7 @@ export function useAsk(stageKey: string, cardId: string | undefined, picked: str
     set({ state: 'making' });
     try {
       const { job_id } = await request<{ job_id: string }>(`/cards/${cardId}/ask/cards`, { method: 'POST', json: { turns: answered, ...(picked ? { picked } : {}) } });
+      forgetAiStatus();
       // 매분 작업이 만든다. 보통 1~2분이고, 다 되면 푸시로도 알린다
       const job = await waitForJob(job_id, 240_000);
       if (job.status === 'done') {
@@ -125,7 +128,7 @@ export function AskChat({ card, mode, picked, ask }: { card: QueueCard; mode: As
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    if (ask.pending || ask.left === 0 || !text.trim()) return;
+    if (ask.pending || ask.left < CREDIT_COST.ask || !text.trim()) return;
     void ask.ask(text);
     setText('');
   };
@@ -161,7 +164,7 @@ export function AskChat({ card, mode, picked, ask }: { card: QueueCard; mode: As
           </Fragment>
         ))}
         {ask.turns.some((turn) => turn.answer) && !ask.pending ? <MakeCards ask={ask} /> : null}
-        {!ask.pending && ask.left > 0 ? (
+        {!ask.pending && ask.left >= CREDIT_COST.ask ? (
           <div className="ask-suggest">
             {SUGGESTIONS[mode].filter((question) => !asked.has(question)).map((question) => (
               <button key={question} type="button" className="ask-chip" onClick={() => void ask.ask(question)}>
@@ -182,21 +185,23 @@ export function AskChat({ card, mode, picked, ask }: { card: QueueCard; mode: As
             maxLength={300}
             enterKeyHint="send"
             autoComplete="off"
-            placeholder={ask.left > 0 ? '궁금한 걸 직접 물어봐요' : '이번 달 질문을 다 썼어요'}
-            disabled={ask.left === 0}
+            placeholder={ask.left >= CREDIT_COST.ask ? '궁금한 걸 직접 물어봐요' : 'AI 크레딧을 다 썼어요'}
+            disabled={ask.left < CREDIT_COST.ask}
             onChange={(event) => setText(event.target.value)}
           />
-          <button type="submit" className="ask-send" aria-label="보내기" disabled={ask.pending || ask.left === 0 || !text.trim()}>
+          <button type="submit" className="ask-send" aria-label="보내기" disabled={ask.pending || ask.left < CREDIT_COST.ask || !text.trim()}>
             <IconArrow />
           </button>
         </div>
-        <p className="ask-foot">이번 달 남은 질문 {ask.left}번 · AI 답은 틀릴 수 있어요</p>
+        <p className="ask-foot">
+          질문 한 번에 {CREDIT_COST.ask} 크레딧 · 남은 크레딧 {ask.left} · AI 답은 틀릴 수 있어요
+        </p>
       </form>
     </div>
   );
 }
 
-/** 2차: 주고받은 대화로 카드 만들기. 붙여넣기 가져오기와 같은 작업이라 같은 예산 한도를 따른다 */
+/** 2차: 주고받은 대화로 카드 만들기. 붙여넣기 가져오기와 같은 작업이라 같은 예산 한도를 따르고, 크레딧은 CREDIT_COST.cards만큼 쓴다 */
 function MakeCards({ ask }: { ask: Ask }) {
   const { making } = ask;
   if (making.state === 'making') return <p className="notice">이 대화로 카드를 만드는 중이에요. 1~2분 걸리고, 다 되면 알림으로도 알려 드려요.</p>;
@@ -212,7 +217,7 @@ function MakeCards({ ask }: { ask: Ask }) {
     <>
       {making.state === 'failed' ? <p className="notice bad">{making.message}</p> : null}
       <button type="button" className="ask-chip make" onClick={() => void ask.makeCards()}>
-        이 대화로 카드 만들기
+        이 대화로 카드 만들기 · {CREDIT_COST.cards} 크레딧
       </button>
     </>
   );

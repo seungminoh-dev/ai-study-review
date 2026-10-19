@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { BadgeId } from './badges';
+import type { CreditBalance } from './credits';
 import type { QuestId } from './quests';
 import type { EdgeType, JudgmentLabel } from './save-learning';
 
@@ -176,6 +177,8 @@ export interface StatsResponse {
   badges: Badge[];
   /** 오늘의 퀘스트 (packages/shared/src/quests.ts의 QUESTS 순서) */
   quests: { id: QuestId; value: number; target: number; done: boolean }[];
+  /** 숨은 업적: 이룬 것과 전체 수. 못 이룬 것의 조건은 알려 주지 않는다 */
+  achievements: { earned: Achievement[]; total: number };
 }
 
 /** 이정표 배지 하나 (3단계 3-4). 한 번 받으면 하루 목표를 바꾸거나 답을 되돌려도 남는다 */
@@ -313,6 +316,35 @@ export interface CategoryRenameResult {
   /** 3단계를 넘어 잘리면서 다른 분류와 합쳐진 이동 */
   merged: { from: string; to: string }[];
   dry_run?: true;
+}
+
+/** 운영자가 보유 크레딧을 준다 */
+export const CreditGrantBody = z.object({ user_id: z.uuid(), amount: z.int().min(1).max(100_000), note: z.string().trim().max(80).optional() });
+
+/** 내 AI 크레딧과 최근 내역 (설정 화면) */
+export interface CreditsResponse {
+  credits: CreditBalance;
+  /** 최근 내역. amount는 받으면 +, 쓰면 - */
+  history: { kind: string; amount: number; note: string | null; created_at: number }[];
+}
+
+/** 운영자 화면: 사람마다 크레딧 */
+export interface CreditAdminRow {
+  id: string;
+  name: string;
+  credits: CreditBalance;
+  /** 이번 달 쓴 크레딧 */
+  used_month: number;
+}
+
+/** 숨은 업적 하나 (이룬 것만 이름과 조건을 받는다) */
+export interface Achievement {
+  id: string;
+  title: string;
+  text: string;
+  /** 받은 보유 크레딧 */
+  reward: number;
+  earned_at: number;
 }
 
 /** 저장한 대화 이름 바꾸기 */

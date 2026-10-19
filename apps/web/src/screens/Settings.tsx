@@ -1,5 +1,5 @@
-import type { AuthOptions, BetaMetrics, InviteSummary, LoginCode, McpTokenStatus, Me, MemberSummary, Reminder, UsageReport } from '@moai/shared';
-import { MAX_REMINDERS } from '@moai/shared/client';
+import type { AuthOptions, BetaMetrics, CreditAdminRow, CreditsResponse, InviteSummary, LoginCode, McpTokenStatus, Me, MemberSummary, Reminder, UsageReport } from '@moai/shared';
+import { CREDIT_COST, MAX_REMINDERS } from '@moai/shared/client';
 import { useEffect, useState, type FormEvent } from 'react';
 import { errorMessage, request } from '../api';
 import { COACH_INSTRUCTIONS } from '../coach';
@@ -9,7 +9,8 @@ import { clearDeviceData, flushReviews, pendingCount } from '../offline/store';
 import { disablePush, dropLocalPush, enablePush, isStandalone, pushState, type PushState } from '../push';
 import { Link, useLocation } from '../router';
 import { formatDate, formatDateTime, useApi } from '../useApi';
-import { setTheme, setVibrate, theme, vibrateOn, type Theme } from '../prefs';
+import { setSound, setTheme, setVibrate, soundOn, theme, vibrateOn, type Theme } from '../prefs';
+import { play } from '../sound';
 import { askConfidence, setAskConfidence } from './Review';
 
 // 설정 (설계서 §12.1): 알림 시간, 알림 켜기·테스트, 커넥터 URL, 계정과 다른 기기 로그인, 초대(오너), 코치 지침 복사(선택)
@@ -26,6 +27,7 @@ export function Settings({ me, onLogout }: { me: Me; onLogout: () => void }) {
       <GoalSection initial={me.daily_goal} />
       <ConfidenceSection />
       <ScreenSection />
+      <CreditsSection />
       <ConnectorSection />
       <AccountSection me={me} onLogout={onLogout} />
       <CoachSection />
@@ -41,6 +43,7 @@ export function Settings({ me, onLogout }: { me: Me; onLogout: () => void }) {
           <InviteSection />
           <MetricsSection />
           <UsageSection />
+          <CreditAdminSection />
         </div>
       ) : null}
     </div>
@@ -556,7 +559,7 @@ function UsageSection() {
     <section>
       <h2>AI 사용량 (이번 달)</h2>
       <p className="small">
-        {usd(data.total_usd)} / 한도 {usd(data.monthly_cap_usd)} · 한 사람 한도 {usd(data.user_cap_usd)}
+        {usd(data.total_usd)} / 서비스 전체 한도 {usd(data.monthly_cap_usd)} · 한 사람이 쓰는 양은 AI 크레딧이 정해요
       </p>
       <p className="muted small">코드에 둔 단가로 넉넉히 센 값이에요. 실제 청구는 Anthropic Console에서 확인하세요.</p>
       {data.by_user.length > 0 ? (
@@ -584,6 +587,117 @@ function UsageSection() {
             .join(', ')}
         </p>
       ) : null}
+    </section>
+  );
+}
+
+const CREDIT_KIND: Record<string, string> = {
+  grant: '받은 크레딧',
+  achievement: '숨은 업적',
+  ask: '개념 물어보기',
+  interview: '모의면접 질문',
+  grade: 'AI 채점',
+  cards: '대화로 카드 만들기',
+  import: '대화 붙여넣기',
+};
+
+/** AI 크레딧 (설계서 §11.8): 앱 안 재화. 월간은 매달 1일에 다시 채우고, 보유는 숨은 업적·운영자 지급으로 받아 계속 남는다 */
+function CreditsSection() {
+  const { data } = useApi<CreditsResponse>('/credits');
+  if (!data) return null;
+  const { credits, history } = data;
+  return (
+    <section>
+      <h2>AI 크레딧</h2>
+      <div className="credit-meter">
+        <p className="small">
+          월간 <strong>{credits.monthly}</strong> / {credits.monthly_total} · {formatDate(credits.refill_at)}에 다시 채워져요
+        </p>
+        <span className="bar" role="progressbar" aria-label="남은 월간 크레딧" aria-valuemin={0} aria-valuemax={credits.monthly_total} aria-valuenow={credits.monthly}>
+          <span style={{ width: `${(credits.monthly / Math.max(1, credits.monthly_total)) * 100}%` }} />
+        </span>
+        <p className="small">
+          보유 <strong>{credits.held}</strong> · 숨은 업적으로 받고, 다음 달에도 남아요
+        </p>
+      </div>
+      <p className="muted small">
+        월간부터 써요. 개념 물어보기·모의면접 질문·AI 채점 {CREDIT_COST.ask}, 대화로 카드 만들기 {CREDIT_COST.cards}, 대화 붙여넣기 {CREDIT_COST.import}. AI 서버에 닿지 못해 실패하면 돌려줘요. 돈으로
+        사거나 바꿀 수 없는 앱 안 재화예요.
+      </p>
+      {history.length > 0 ? (
+        <details className="credit-history">
+          <summary className="small">최근 기록</summary>
+          <ul className="list">
+            {history.map((row, index) => (
+              <li key={index} className="small">
+                {CREDIT_KIND[row.kind] ?? row.kind}{row.note ? ` (${row.note})` : ''} · {row.amount > 0 ? `+${row.amount}` : row.amount} · <span className="muted">{formatDateTime(row.created_at)}</span>
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
+    </section>
+  );
+}
+
+/** 오너: 보유 크레딧 주기. 돈이 오가지 않는다 */
+function CreditAdminSection() {
+  const { data, reload } = useApi<{ people: CreditAdminRow[] }>('/admin/credits');
+  const [target, setTarget] = useState('');
+  const [amount, setAmount] = useState(100);
+  const [note, setNote] = useState('');
+  const [message, setMessage] = useState<{ text: string; tone: 'good' | 'bad' } | null>(null);
+  if (!data) return null;
+  const grant = async (event: FormEvent) => {
+    event.preventDefault();
+    setMessage(null);
+    try {
+      await request('/admin/credits', { method: 'POST', json: { user_id: target, amount, ...(note.trim() ? { note: note.trim() } : {}) } });
+      setMessage({ text: `보유 크레딧 ${amount}을 줬어요.`, tone: 'good' });
+      setNote('');
+      forgetAiStatus();
+      reload();
+    } catch (error) {
+      setMessage({ text: errorMessage(error), tone: 'bad' });
+    }
+  };
+  return (
+    <section>
+      <h2>AI 크레딧 주기</h2>
+      <ul className="list">
+        {data.people.map((person) => (
+          <li key={person.id} className="small">
+            {person.name} · 월간 {person.credits.monthly} · 보유 {person.credits.held} · 이번 달 {person.used_month} 씀
+          </li>
+        ))}
+      </ul>
+      <form onSubmit={(event) => void grant(event)}>
+        <label className="field">
+          <span>누구에게</span>
+          <select value={target} onChange={(event) => setTarget(event.target.value)} required>
+            <option value="">고르기</option>
+            {data.people.map((person) => (
+              <option key={person.id} value={person.id}>
+                {person.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="field">
+          <span>얼마나</span>
+          <input type="number" min={1} max={100000} value={amount} onChange={(event) => setAmount(Number(event.target.value))} required />
+        </label>
+        <label className="field">
+          <span>메모 (받는 사람 기록에 보여요)</span>
+          <input value={note} onChange={(event) => setNote(event.target.value)} maxLength={80} placeholder="예: 베타 감사" />
+        </label>
+        <div className="actions">
+          <button type="submit" className="button">
+            보유 크레딧 주기
+          </button>
+        </div>
+      </form>
+      {message ? <Status text={message.text} tone={message.tone} /> : null}
     </section>
   );
 }
@@ -691,9 +805,10 @@ const THEMES: { value: Theme; label: string }[] = [
 function ScreenSection() {
   const [current, setCurrent] = useState(theme);
   const [buzzing, setBuzzing] = useState(vibrateOn);
+  const [sound, setSoundState] = useState(soundOn);
   return (
     <section>
-      <h2>화면</h2>
+      <h2>화면과 소리</h2>
       <div className="theme-picker" role="radiogroup" aria-label="화면 밝기">
         {THEMES.map((item) => (
           <label key={item.value} className={current === item.value ? 'theme-option current' : 'theme-option'}>
@@ -726,7 +841,19 @@ function ScreenSection() {
           진동 (맞음·틀림, 목표 달성)
         </label>
       ) : null}
-      <p className="muted small">이 기기에만 적용돼요.</p>
+      <label className="toggle">
+        <input
+          type="checkbox"
+          checked={sound}
+          onChange={(event) => {
+            setSoundState(event.target.checked);
+            setSound(event.target.checked);
+            if (event.target.checked) play('right');
+          }}
+        />{' '}
+        효과음 (맞음·틀림, 목표 달성, 숨은 업적)
+      </label>
+      <p className="muted small">이 기기에만 적용돼요. iPhone은 무음 모드면 소리가 나지 않아요.</p>
     </section>
   );
 }

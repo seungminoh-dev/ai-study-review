@@ -1,11 +1,15 @@
-import type { Badge, BadgeId } from '@moai/shared';
+import type { Achievement, Badge, BadgeId, StatsResponse } from '@moai/shared';
 import { useEffect, useState, type CSSProperties } from 'react';
+import { forgetAiStatus } from './ai';
 import { Confetti } from './Confetti';
+import { IconStar } from './icons';
+import { play } from './sound';
 import { Mascot, type Mood } from './Mascot';
 import { Link } from './router';
 
 // 이정표 배지 (3단계 3-4). 무엇을 몇 번 하면 받는지는 packages/shared/src/badges.ts, 받은 기록은 서버가 갖는다.
 // 새 배지 축하는 기기마다 한 번만 한다. 본 배지는 이 기기의 localStorage에 적어 둔다.
+// 숨은 업적(4단계)도 같은 방식으로 축하한다. 업적은 조건을 미리 알려 주지 않아서, 서버가 이룬 것만 내려 준다.
 
 /** tier: 1 처음 해 보기, 2 꾸준함, 3 오래 쌓기. 메달 색이 달라진다 */
 export const BADGE_INFO: Record<BadgeId, { title: string; text: string; ribbon: string; mood: Mood; tier: 1 | 2 | 3 }> = {
@@ -57,14 +61,16 @@ export function forgetSeenBadges(): void {
   }
 }
 
-/** 이 기기에서 아직 축하하지 않은 새 배지 */
-export function unseenBadges(badges: readonly Badge[], now = Date.now()): Badge[] {
+type Earnable = { id: string; earned_at: number | null };
+
+/** 이 기기에서 아직 축하하지 않은 새 배지·업적 (배지와 업적의 id는 겹치지 않는다) */
+export function unseenBadges<T extends Earnable>(badges: readonly T[], now = Date.now()): T[] {
   const seen = readSeen();
   return badges.filter((badge) => badge.earned_at !== null && now - badge.earned_at < NEW_MS && !seen.has(badge.id));
 }
 
 /** 처음 그릴 때의 새 배지 목록을 고정하고, 본 것으로 적는다. 다시 그려도 목록이 사라지지 않는다 */
-export function useUnseenBadges(badges: readonly Badge[]): Badge[] {
+export function useUnseenBadges<T extends Earnable>(badges: readonly T[]): T[] {
   const [unseen] = useState(() => unseenBadges(badges));
   useEffect(() => markSeen(unseen.map((badge) => badge.id)), [unseen]);
   return unseen;
@@ -151,6 +157,93 @@ export function BadgeShelf({ badges }: { badges: readonly Badge[] }) {
           );
         })}
       </ul>
+    </section>
+  );
+}
+
+/** 업적 보석. 숨은 것은 물음표 */
+function Gem({ hidden = false }: { hidden?: boolean }) {
+  return (
+    <span className={hidden ? 'achievement-gem hidden' : 'achievement-gem'} aria-hidden="true">
+      {hidden ? '?' : <IconStar size={18} />}
+    </span>
+  );
+}
+
+/** 새로 찾은 숨은 업적 축하 카드. 오늘 화면과 복습 끝 화면에 뜬다. 받은 크레딧이 바로 보이게 AI 상태를 다시 묻는다 */
+export function NewAchievements({ achievements, className }: { achievements: readonly Achievement[]; className?: string }) {
+  const unseen = useUnseenBadges(achievements);
+  useEffect(() => {
+    if (unseen.length === 0) return;
+    forgetAiStatus();
+    // 끝 화면의 다른 소리 뒤에 울린다
+    const timer = setTimeout(() => play('achievement'), 700);
+    return () => clearTimeout(timer);
+  }, [unseen]);
+  if (unseen.length === 0) return null;
+  const reward = unseen.reduce((sum, item) => sum + item.reward, 0);
+  return (
+    <section className={className ? `achievement-new ${className}` : 'achievement-new'} aria-labelledby="achievement-new-title">
+      <Confetti />
+      <p className="achievement-new-kicker">숨은 업적 발견</p>
+      <h2 id="achievement-new-title">{unseen.length === 1 ? '숨겨진 조건을 채웠어요' : `숨겨진 조건 ${unseen.length}개를 채웠어요`}</h2>
+      <ul className="badge-new-list">
+        {unseen.map((item, index) => (
+          <li key={item.id} style={{ '--i': index } as CSSProperties}>
+            <Gem />
+            <div>
+              <strong>{item.title}</strong>
+              <p className="small muted">{item.text}</p>
+            </div>
+          </li>
+        ))}
+      </ul>
+      <p className="achievement-new-reward">보유 크레딧 +{reward}</p>
+    </section>
+  );
+}
+
+/** 내 성장 화면의 숨은 업적. 이룬 것만 이름·조건·보상을 보여 주고, 나머지는 개수만 */
+export function AchievementShelf({ achievements }: { achievements: StatsResponse['achievements'] }) {
+  const fresh = new Set(useUnseenBadges(achievements.earned).map((item) => item.id));
+  const hidden = achievements.total - achievements.earned.length;
+  return (
+    <section className="card" aria-labelledby="achievement-title">
+      <div className="card-head">
+        <h2 id="achievement-title">숨은 업적</h2>
+        <span className="aside">
+          {achievements.earned.length}/{achievements.total}
+        </span>
+      </div>
+      {achievements.earned.length > 0 ? (
+        <ul className="achievement-list">
+          {achievements.earned.map((item) => (
+            <li key={item.id} className={fresh.has(item.id) ? 'fresh' : undefined}>
+              <Gem />
+              <div className="grow">
+                <strong>{item.title}</strong>
+                <p className="small muted">{item.text}</p>
+              </div>
+              <span className="achievement-reward">
+                +{item.reward}
+                <small>{earnedOn(item.earned_at)}</small>
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {hidden > 0 ? (
+        <div className="achievement-hidden">
+          <span className="achievement-hidden-gems" aria-hidden="true">
+            {Array.from({ length: Math.min(hidden, 5) }, (_, index) => (
+              <Gem key={index} hidden />
+            ))}
+          </span>
+          <p className="small muted">
+            {hidden}개가 더 숨어 있어요. 무엇을 하면 받는지는 비밀이고, 찾으면 보유 크레딧을 드려요.
+          </p>
+        </div>
+      ) : null}
     </section>
   );
 }

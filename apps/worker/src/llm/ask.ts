@@ -1,11 +1,12 @@
-import { AskResult, type AskBody, type AskCardsBody, type McqOption } from '@moai/shared';
+import { AskResult, CREDIT_COST, type AskBody, type AskCardsBody, type CreditBalance, type McqOption } from '@moai/shared';
 import { z } from 'zod';
+import { creditBalance, noCreditsMessage } from '../domain/credits';
 import type { Env } from '../env';
 import { sha256Hex } from '../lib/crypto';
 import { parseJson } from './anthropic';
 import { overBudget } from './budget';
 import { createJob } from './jobs';
-import { fail, meteredCall, usesLeft, type Failure } from './metered';
+import { fail, meteredCall, type Failure } from './metered';
 import { ASK_SYSTEM, askInput } from './prompts';
 import { toOutputSchema } from './schema';
 
@@ -17,9 +18,8 @@ const TIMEOUT_MS = 45_000;
 
 let schema: Record<string, unknown> | null = null;
 
-export const askLeft = (env: Env, userId: string, now: number) => usesLeft(env, userId, 'ask', now);
 
-export type AskOutcome = Failure | { ok: true; answer: string; left: number };
+export type AskOutcome = Failure | { ok: true; answer: string; credits: CreditBalance };
 
 interface CardRow {
   type: string;
@@ -66,11 +66,11 @@ export async function askConcept(env: Env, userId: string, cardId: string, body:
     maxTokens: MAX_TOKENS,
     timeoutMs: TIMEOUT_MS,
   };
-  const result = await meteredCall(env, userId, 'ask', request, now, '이번 달 질문 50번을 다 썼어요. 다음 달에 다시 물어볼 수 있어요.');
+  const result = await meteredCall(env, userId, 'ask', request, now);
   if (!result.ok) return result;
   const parsed = AskResult.safeParse(parseJson(result.text));
   if (!parsed.success) return fail(502, 'invalid_output', 'AI 답을 읽지 못했어요. 다시 물어봐 주세요.');
-  return { ok: true, answer: parsed.data.answer.trim(), left: await askLeft(env, userId, now) };
+  return { ok: true, answer: parsed.data.answer.trim(), credits: await creditBalance(env, userId, now) };
 }
 
 /**
@@ -101,8 +101,12 @@ export async function askToCards(env: Env, userId: string, cardId: string, body:
     .bind(userId, hash)
     .first<string>('id');
   if (existing) return { ok: true, job_id: existing, duplicate: true };
-  if (await overBudget(env, userId, now, true)) return fail(429, 'budget', '이번 달 AI 한도에 닿았어요.');
-  const id = await createJob(env, userId, 'import', text, { inputHash: hash }, now);
-  if (!id) return fail(429, 'too_many', '카드를 만드는 작업이 이미 3개 기다리고 있어요. 끝나면 다시 해 주세요.');
-  return { ok: true, job_id: id, duplicate: false };
+  if (await overBudget(env, now, true)) return fail(429, 'budget', '이번 달 서비스 전체 AI 한도에 닿았어요.');
+  const job = await createJob(env, userId, 'import', text, { inputHash: hash }, now, { kind: 'cards', amount: CREDIT_COST.cards });
+  if ('error' in job) {
+    return job.error === 'no_credits'
+      ? fail(429, 'no_credits', noCreditsMessage(CREDIT_COST.cards))
+      : fail(429, 'too_many', '카드를 만드는 작업이 이미 3개 기다리고 있어요. 끝나면 다시 해 주세요.');
+  }
+  return { ok: true, job_id: job.id, duplicate: false };
 }

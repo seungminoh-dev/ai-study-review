@@ -1,6 +1,7 @@
-import { GradeResult, SaveLearningInput, checkSaveLearning, type ImportResult } from '@moai/shared';
+import { GradeResult, MONTHLY_CREDITS, SaveLearningInput, checkSaveLearning, type CreditKind, type ImportResult } from '@moai/shared';
 import { z } from 'zod';
 import { pushToUser } from '../domain/push';
+import { availableSql, creditMonthStart, refundCredits, refundFailedJobsStatement, spendForJobStatement } from '../domain/credits';
 import { saveLearning } from '../domain/save-learning';
 import type { Env } from '../env';
 import { MINUTE_MS } from '../lib/kst';
@@ -43,8 +44,9 @@ const schemaFor = (kind: JobKind) =>
     : (importSchema ??= toOutputSchema(z.toJSONSchema(SaveLearningInput, { target: 'draft-2020-12', io: 'input' }) as Record<string, unknown>));
 
 /**
- * 작업을 만든다. 끝나지 않은 같은 종류 작업이 이미 MAX_PENDING개면 만들지 않고 null.
- * 세기와 넣기를 한 문장으로 해서, 동시에 여러 번 보내도 상한을 넘지 않는다.
+ * 작업을 만들고 그 크레딧을 쓴다. 끝나지 않은 같은 종류 작업이 이미 MAX_PENDING개면 'too_many', 크레딧이 모자라면 'no_credits'.
+ * 세기·넣기·쓰기를 한 batch(트랜잭션)로 해서, 동시에 여러 번 보내도 상한과 가진 크레딧을 넘지 않는다.
+ * 작업이 실패로 끝나면 크레딧을 돌려준다 (finish, runPendingJobs).
  */
 export async function createJob(
   env: Env,
@@ -53,16 +55,24 @@ export async function createJob(
   input: string,
   extra: { cardId?: string; inputHash?: string },
   now: number,
-): Promise<string | null> {
+  charge: { kind: CreditKind; amount: number },
+): Promise<{ id: string } | { error: 'too_many' | 'no_credits' }> {
   const id = crypto.randomUUID();
-  const inserted = await env.DB.prepare(
-    `INSERT INTO llm_jobs (id, user_id, kind, status, card_id, input, input_hash, created_at, updated_at)
-     SELECT ?1, ?2, ?3, 'queued', ?4, ?5, ?6, ?7, ?7
-      WHERE (SELECT count(*) FROM llm_jobs WHERE user_id = ?2 AND kind = ?3 AND status IN ('queued', 'running')) < ?8`,
-  )
-    .bind(id, userId, kind, extra.cardId ?? null, input, extra.inputHash ?? null, now, MAX_PENDING)
-    .run();
-  return inserted.meta.changes > 0 ? id : null;
+  const [inserted] = await env.DB.batch([
+    env.DB.prepare(
+      `INSERT INTO llm_jobs (id, user_id, kind, status, card_id, input, input_hash, created_at, updated_at)
+       SELECT ?1, ?2, ?3, 'queued', ?4, ?5, ?6, ?7, ?7
+        WHERE (SELECT count(*) FROM llm_jobs WHERE user_id = ?2 AND kind = ?3 AND status IN ('queued', 'running')) < ?8
+          AND ${availableSql('?2', '?9', '?10')} >= ?11`,
+    ).bind(id, userId, kind, extra.cardId ?? null, input, extra.inputHash ?? null, now, MAX_PENDING, creditMonthStart(now), MONTHLY_CREDITS, charge.amount),
+    spendForJobStatement(env, userId, charge.kind, charge.amount, id, now),
+  ]);
+  if (inserted!.meta.changes > 0) return { id };
+  // 왜 못 넣었는지: 기다리는 작업이 꽉 찼거나 크레딧이 모자라다
+  const pending = await env.DB.prepare("SELECT count(*) AS n FROM llm_jobs WHERE user_id = ?1 AND kind = ?2 AND status IN ('queued', 'running')")
+    .bind(userId, kind)
+    .first<number>('n');
+  return { error: (pending ?? 0) >= MAX_PENDING ? 'too_many' : 'no_credits' };
 }
 
 /** 비용 기록. 그사이 계정이 지워졌으면 'deleted'로 남긴다 (이번 달 합계는 맞아야 한다) */
@@ -103,6 +113,8 @@ async function finish(env: Env, id: string, outcome: { result: unknown } | { err
       .run();
   } else {
     await env.DB.prepare("UPDATE llm_jobs SET status = 'failed', error = ?2, input = NULL, updated_at = ?3 WHERE id = ?1").bind(id, outcome.error, now).run();
+    // AI 비용이 들지 않은 실패면 크레딧을 돌려준다
+    await refundCredits(env, id);
   }
 }
 
@@ -124,7 +136,7 @@ export async function runJob(env: Env, id: string, from: 'request' | 'cron' = 'c
   if (!job) return;
   try {
     if (!llmConfigured(env) || !job.input) return await finish(env, job.id, { error: 'unavailable' }, Date.now());
-    if (await overBudget(env, job.user_id, Date.now())) return await finish(env, job.id, { error: 'budget' }, Date.now());
+    if (await overBudget(env, Date.now())) return await finish(env, job.id, { error: 'budget' }, Date.now());
     if (job.kind === 'grade') await runGrade(env, job, from === 'request' ? TIMEOUT_MS.request : TIMEOUT_MS.grade);
     else await runImport(env, job);
   } catch (error) {
@@ -177,7 +189,7 @@ async function runImport(env: Env, job: JobRow): Promise<void> {
       );
       return;
     }
-    if (round === 1 || (await overBudget(env, job.user_id, Date.now()))) break;
+    if (round === 1 || (await overBudget(env, Date.now()))) break;
     user = repairInput(job.input!, result.text.slice(0, 40_000), problems);
   }
   await finish(env, job.id, { error: 'invalid_output' }, Date.now());
@@ -190,9 +202,10 @@ async function runImport(env: Env, job: JobRow): Promise<void> {
 export async function runPendingJobs(env: Env, now: number): Promise<void> {
   if (!llmConfigured(env)) {
     // 설정을 지웠으면 기다리던 작업은 끝내고 원문을 지운다
-    await env.DB.prepare("UPDATE llm_jobs SET status = 'failed', error = 'unavailable', input = NULL, updated_at = ?1 WHERE status IN ('queued', 'running')")
-      .bind(now)
-      .run();
+    await env.DB.batch([
+      env.DB.prepare("UPDATE llm_jobs SET status = 'failed', error = 'unavailable', input = NULL, updated_at = ?1 WHERE status IN ('queued', 'running')").bind(now),
+      refundFailedJobsStatement(env),
+    ]);
     return;
   }
   await env.DB.batch([
@@ -200,6 +213,8 @@ export async function runPendingJobs(env: Env, now: number): Promise<void> {
     env.DB.prepare("UPDATE llm_jobs SET status = 'queued', updated_at = ?2 WHERE status = 'running' AND kind = 'import' AND updated_at < ?1").bind(now - STALE_MS.import, now),
     // 되돌렸는데 이미 3번 했으면 실패로 끝낸다
     env.DB.prepare("UPDATE llm_jobs SET status = 'failed', error = 'api', input = NULL WHERE status = 'queued' AND attempts >= ?1").bind(MAX_ATTEMPTS),
+    // 한꺼번에 실패시킨 작업의 크레딧도 돌려준다
+    refundFailedJobsStatement(env),
   ]);
   // 채점은 요청이 바로 waitUntil로 돌리므로, 1분 넘게 남은 것만 이어 받는다. 가져오기는 Cron만 돌린다
   const next = await env.DB.prepare(

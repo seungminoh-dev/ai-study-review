@@ -7,3 +7,4 @@ export * from './search';
 export * from './llm';
 export * from './material';
 export * from './quests';
+export * from './credits';

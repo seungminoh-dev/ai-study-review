@@ -1,4 +1,5 @@
 import type { GradeResult, ReviewGrade } from '@moai/shared';
+import { CREDIT_COST } from '@moai/shared/client';
 import { useEffect, useRef, useState } from 'react';
 import { JOB_ERROR, aiStatus, forgetAiStatus, waitForJob } from '../ai';
 import { RequestError, errorMessage, request } from '../api';
@@ -26,6 +27,7 @@ export function AiGrade({ cardId, text, onSuggest }: { cardId: string; text: str
     setState({ step: 'waiting' });
     try {
       const { job_id } = await request<{ job_id: string }>(`/cards/${cardId}/grade-ai`, { method: 'POST', json: { answer: text } });
+      forgetAiStatus();
       // 25초 안에 못 끝나면 서버의 매분 작업이 이어 받는다. 그만큼 더 기다린다
       const job = await waitForJob(job_id, 150_000, abort.current.signal);
       if (job.status === 'done') {
@@ -47,7 +49,7 @@ export function AiGrade({ cardId, text, onSuggest }: { cardId: string; text: str
   if (state.step === 'idle') {
     return (
       <button type="button" className="button ai-button" disabled={!text.trim()} onClick={() => void grade()}>
-        {text.trim() ? 'AI에게 채점 받기' : 'AI 채점은 설명을 써야 받을 수 있어요'}
+        {text.trim() ? `AI에게 채점 받기 · ${CREDIT_COST.grade} 크레딧` : 'AI 채점은 설명을 써야 받을 수 있어요'}
       </button>
     );
   }

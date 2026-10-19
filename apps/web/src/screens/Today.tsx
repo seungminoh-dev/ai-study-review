@@ -1,9 +1,9 @@
 import type { LevelUp, MaterialSummary, McpTokenStatus, StatsResponse, SurveyStatus, TodayResponse } from '@moai/shared';
 import { QUEST_XP, isPdf } from '@moai/shared/client';
 import { useEffect, useState } from 'react';
-import { aiStatus } from '../ai';
+import { aiStatus, canUseAi } from '../ai';
 import { errorMessage, request } from '../api';
-import { NewBadges } from '../badges';
+import { NewAchievements, NewBadges } from '../badges';
 import { IconArrow, IconBook, IconCheck, IconFlame, IconHistory, IconSettings } from '../icons';
 import { Loading } from '../Loading';
 import { Mascot } from '../Mascot';
@@ -204,7 +204,9 @@ function WeekCard({ stats }: { stats: StatsResponse }) {
   return (
     <section className="card o-week" aria-labelledby="week-title">
       <div className="card-head">
-        <IconFlame />
+        <span className={stats.today.reviewed >= stats.goal ? 'flame lit' : 'flame'}>
+          <IconFlame />
+        </span>
         <h2 id="week-title">{stats.streak}일 연속</h2>
         <span className="aside">최고 {stats.best_streak}일</span>
       </div>
@@ -394,11 +396,11 @@ function LevelUpNotice() {
   );
 }
 
-/** 서버 AI가 있고 이번 달 면접 질문이 남았다 */
+/** 서버 AI가 있고 면접 질문 하나에 쓸 크레딧이 남았다 */
 export function useCanInterview(): boolean {
   const [can, setCan] = useState(false);
   useEffect(() => {
-    void aiStatus().then((status) => setCan(status.available && !status.over_budget && status.interview_left > 0));
+    void aiStatus().then((status) => setCan(canUseAi(status, 'interview')));
   }, []);
   return can;
 }
@@ -468,6 +470,7 @@ export function Today({ name }: { name: string }) {
           </div>
           {/* 첫 저장처럼 복습 밖에서 이룬 이정표는 여기서 축하한다 */}
           {stats ? <NewBadges badges={stats.badges} link className="o-badges" /> : null}
+          {stats ? <NewAchievements achievements={stats.achievements.earned} className="o-badges" /> : null}
           <LevelUpNotice />
           <SurveyCard />
           <Onboarding saved={data.sessions.length > 0} />

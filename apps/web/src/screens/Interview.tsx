@@ -1,4 +1,5 @@
 import type { ImportResult, InterviewResponse, InterviewSummary } from '@moai/shared';
+import { CREDIT_COST, creditsLeft } from '@moai/shared/client';
 import * as m from 'motion/react-m';
 import { Fragment, useEffect, useRef, useState, type FormEvent } from 'react';
 import { JOB_ERROR, forgetAiStatus, waitForJob } from '../ai';
@@ -42,7 +43,8 @@ export function Interview({ concept, category }: { concept: string | null; categ
         json: chain ? { keys: chain.keys, turns: sent } : { ...(concept ? { concept_key: concept } : {}), ...(category ? { category } : {}), turns: [] },
       });
       setChain({ keys: response.keys, names: response.names, total: response.total });
-      setLeft(response.left);
+      setLeft(creditsLeft(response.credits));
+      forgetAiStatus();
       setSummary(response.summary);
       setQuestion(response.question?.question ?? null);
     } catch (problem) {
@@ -179,7 +181,7 @@ export function Interview({ concept, category }: { concept: string | null; categ
               답하기
             </button>
           </div>
-          <p className="ask-foot">{left !== null ? `이번 달 남은 면접 질문 ${left}번 · ` : ''}AI가 묻고 정리해요. 틀릴 수 있어요</p>
+          <p className="ask-foot">{left !== null ? `질문 하나에 ${CREDIT_COST.interview} 크레딧 · 남은 크레딧 ${left} · ` : ''}AI가 묻고 정리해요. 틀릴 수 있어요</p>
           <p className="kbd-hint muted small">키보드: Ctrl+Enter 답하기</p>
         </form>
       ) : null}
@@ -221,7 +223,7 @@ function Summary({ summary, saving, onSave }: { summary: InterviewSummary; savin
       <div className="actions">
         {saving.state === 'idle' || saving.state === 'failed' ? (
           <button type="button" className="button" onClick={onSave}>
-            판정과 카드로 기록하기
+            판정과 카드로 기록하기 · {CREDIT_COST.cards} 크레딧
           </button>
         ) : null}
         <button type="button" className="button primary" onClick={leave}>

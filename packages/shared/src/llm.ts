@@ -1,3 +1,4 @@
+import type { CreditBalance } from './credits';
 import { z } from 'zod';
 
 // 서버 LLM (설계서 §11): 설명하기 AI 채점과 붙여넣기 가져오기의 입출력.
@@ -68,8 +69,8 @@ export type AskCardsBody = z.infer<typeof AskCardsBody>;
 
 export interface AskResponse {
   answer: string;
-  /** 이번 달 남은 질문 수 */
-  left: number;
+  /** 쓰고 남은 AI 크레딧 */
+  credits: CreditBalance;
 }
 
 /** 앱 안 모의면접 (MCP get_interview_chain과 같은 순서): 한 질문씩 주고받는다. 대화는 기기가 들고 있다가 함께 보낸다 */
@@ -99,26 +100,23 @@ export interface InterviewResponse {
   /** 다음 질문. 마지막 답을 보냈으면 null이고 summary가 온다 */
   question: { question: string; concept_key: string } | null;
   summary: InterviewSummary | null;
-  /** 이번 달 남은 면접 질문 수 */
-  left: number;
+  /** 쓰고 남은 AI 크레딧 */
+  credits: CreditBalance;
 }
 
 export interface AiStatus {
   /** 서버에 API 키와 모델이 설정되어 있다 */
   available: boolean;
-  /** 이번 달 한도에 닿았다 */
+  /** 서비스 전체의 이번 달 AI 비용 한도에 닿았다 (운영자 안전장치) */
   over_budget: boolean;
-  /** 이번 달 남은 개념 질문 수 */
-  ask_left: number;
-  /** 이번 달 남은 모의면접 질문 수 */
-  interview_left: number;
+  /** 내 AI 크레딧 */
+  credits: CreditBalance;
 }
 
 export interface UsageReport {
   month_start: number;
   total_usd: number;
   monthly_cap_usd: number;
-  user_cap_usd: number;
   by_user: { name: string; usd: number; calls: number }[];
   by_kind: { kind: string; usd: number; calls: number }[];
   by_model: { model: string; usd: number; calls: number; input_tokens: number; output_tokens: number }[];

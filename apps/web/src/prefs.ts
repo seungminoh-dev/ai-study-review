@@ -4,6 +4,7 @@ export type Theme = 'auto' | 'light' | 'dark';
 
 const THEME = 'moai:theme';
 const VIBRATE = 'moai:vibrate';
+const SOUND = 'moai:sound';
 /** index.html의 theme-color와 같다 (styles.css의 --bg) */
 const BAR_COLOR = { light: '#FBF7F0', dark: '#0F1626' };
 
@@ -48,6 +49,14 @@ export function vibrateOn(): boolean {
 
 export function setVibrate(on: boolean): void {
   write(VIBRATE, on ? 'on' : 'off');
+}
+
+export function soundOn(): boolean {
+  return read(SOUND) !== 'off';
+}
+
+export function setSound(on: boolean): void {
+  write(SOUND, on ? 'on' : 'off');
 }
 
 /** 짧은 진동. 설정에서 끈 기기와 진동을 못 하는 기기(iPhone)에서는 아무것도 하지 않는다 */

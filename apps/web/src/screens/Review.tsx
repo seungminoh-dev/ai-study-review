@@ -5,7 +5,7 @@ import { AnimatePresence } from 'motion/react';
 import * as m from 'motion/react-m';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { OfflineError, errorMessage, request } from '../api';
-import { NewBadges } from '../badges';
+import { NewAchievements, NewBadges } from '../badges';
 import { AiGrade } from '../cards/AiGrade';
 import { AskChat, AskSheet, useAsk, type AskMode } from '../cards/AskConcept';
 import { ConceptPanel, forgetConcepts } from '../cards/ConceptPanel';
@@ -30,6 +30,7 @@ import {
   takeLevelUps,
 } from '../offline/store';
 import { buzz } from '../prefs';
+import { play, type Sound } from '../sound';
 import { StreakGoal } from '../progress';
 import { materialReview, partView } from '../materials';
 import { Link, goTab, leave } from '../router';
@@ -288,6 +289,7 @@ function Session({ initial, offline, before, exam }: { initial: QueueCard[]; off
     setChosen(null);
     setPicked(choice);
     buzz(choice.correct ? 10 : [30, 40, 30]);
+    play(choice.correct ? 'right' : 'wrong');
   };
 
   /** 보기를 고른다. 확신도를 물을 때는 정답을 보여 주기 전에 확신도를 먼저 받는다 (연습은 묻지 않는다) */
@@ -337,6 +339,7 @@ function Session({ initial, offline, before, exam }: { initial: QueueCard[]; off
     if (!card || moving.current || stale()) return;
     moving.current = true;
     answeredAt.current = Date.now();
+    play(grade >= 2 ? 'right' : 'wrong');
     await record(card, grade, text.trim(), grade >= 2);
   };
 
@@ -551,7 +554,14 @@ function Session({ initial, offline, before, exam }: { initial: QueueCard[]; off
                       <div className="answer-head">
                         <Mascot mood={picked.correct ? 'cheer' : 'oops'} size={48} />
                         <div>
-                          <p className={picked.correct ? 'verdict right' : 'verdict wrong'}>{picked.correct ? '맞았어요' : '틀렸어요'}</p>
+                          <p className={picked.correct ? 'verdict right' : 'verdict wrong'}>
+                            {picked.correct ? '맞았어요' : '틀렸어요'}
+                            {picked.correct && !practice ? (
+                              <span className="xp-float" aria-hidden="true">
+                                +10 XP
+                              </span>
+                            ) : null}
+                          </p>
                           {picked.correct && confidence === 'guess' ? <p className="small muted">찍어서 맞혔으니 조금 일찍 다시 볼게요.</p> : null}
                           {/* 확신했는데 틀린 답은 따로 짚는다. 바로잡은 기억이 오래 남는다 */}
                           {!picked.correct && confidence === 'sure' ? <p className="small muted">확신했던 문제예요. 왜 그렇게 생각했는지 떠올려 보고 해설과 비교해 봐요.</p> : null}
@@ -672,6 +682,11 @@ function Summary({
   useEffect(() => {
     if (celebrate) buzz([20, 60, 20, 60, 40]);
   }, [celebrate]);
+  // 끝 화면 소리는 하나만: 무실수 > 레벨 업 > 오늘 목표 달성
+  const fanfare: Sound | null = practice ? null : perfect ? 'perfect' : levelUps.length > 0 ? 'levelup' : streakUp ? 'finish' : null;
+  useEffect(() => {
+    if (fanfare) play(fanfare);
+  }, [fanfare]);
   /** 설명하기를 스스로 통과로 매긴 개념 */
   const passed = practice ? [] : [...new Set(results.filter((result) => result.card.type === 'explain' && result.correct).map((result) => result.card.concept_name))];
   const title = exam ? `시험 끝! ${right}/${results.length}` : practice ? '다시 보기를 마쳤어요' : goalMet ? '오늘 목표 달성!' : wrong.length === 0 ? '다 맞혔어요!' : `${results.length}장을 끝냈어요`;
@@ -727,6 +742,7 @@ function Summary({
       ) : null}
       {stats && !practice ? <StreakGoal streak={stats.streak} /> : null}
       {stats && !practice ? <NewBadges badges={stats.badges} /> : null}
+      {stats && !practice ? <NewAchievements achievements={stats.achievements.earned} /> : null}
       {levelUps.length > 0 || passed.length > 0 ? (
         <section className="levelup" aria-labelledby="levelup-title">
           <div className="levelup-head">

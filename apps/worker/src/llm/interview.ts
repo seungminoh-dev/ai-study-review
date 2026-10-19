@@ -1,5 +1,6 @@
-import { InterviewQuestion, InterviewSummary, type InterviewBody, type InterviewResponse } from '@moai/shared';
+import { CREDIT_COST, InterviewQuestion, InterviewSummary, type InterviewBody, type InterviewResponse } from '@moai/shared';
 import { z } from 'zod';
+import { creditBalance, noCreditsMessage } from '../domain/credits';
 import { interviewChain } from '../domain/interview';
 import { learnerContext } from '../domain/learner-context';
 import type { Env } from '../env';
@@ -7,7 +8,7 @@ import { sha256Hex } from '../lib/crypto';
 import { parseJson } from './anthropic';
 import { overBudget } from './budget';
 import { createJob } from './jobs';
-import { fail, meteredCall, usesLeft, type Failure } from './metered';
+import { fail, meteredCall, type Failure } from './metered';
 import { INTERVIEW_SYSTEM, interviewInput } from './prompts';
 import { toOutputSchema } from './schema';
 
@@ -27,7 +28,6 @@ const schemaOf = (final: boolean) =>
     ? (summarySchema ??= toOutputSchema(z.toJSONSchema(InterviewSummary, { target: 'draft-2020-12' }) as Record<string, unknown>))
     : (questionSchema ??= toOutputSchema(z.toJSONSchema(InterviewQuestion, { target: 'draft-2020-12' }) as Record<string, unknown>));
 
-export const interviewLeft = (env: Env, userId: string, now: number) => usesLeft(env, userId, 'interview', now);
 
 /** 물을 개념 순서. 처음이면 정하고, 다음부터는 받은 key가 내 개념인지만 확인한다 */
 async function orderOf(env: Env, userId: string, body: InterviewBody, now: number): Promise<{ key: string; name: string }[]> {
@@ -54,10 +54,9 @@ export async function interviewTurn(env: Env, userId: string, body: InterviewBod
     'interview',
     { system: INTERVIEW_SYSTEM, user: interviewInput(order, context.text, body.turns.slice(0, total), final), schema: schemaOf(final), maxTokens: MAX_TOKENS, timeoutMs: TIMEOUT_MS },
     now,
-    '이번 달 모의면접 질문을 다 썼어요. 다음 달에 다시 할 수 있어요.',
   );
   if (!result.ok) return result;
-  const base = { ok: true as const, keys: order.map((item) => item.key), names: order.map((item) => item.name), total, left: await interviewLeft(env, userId, now) };
+  const base = { ok: true as const, keys: order.map((item) => item.key), names: order.map((item) => item.name), total, credits: await creditBalance(env, userId, now) };
   if (final) {
     const parsed = InterviewSummary.safeParse(parseJson(result.text));
     if (!parsed.success) return fail(502, 'invalid_output', 'AI 정리를 읽지 못했어요. 다시 해 주세요.');
@@ -87,8 +86,12 @@ export async function saveInterview(env: Env, userId: string, body: { keys: stri
     .bind(userId, hash)
     .first<string>('id');
   if (existing) return { ok: true, job_id: existing, duplicate: true };
-  if (await overBudget(env, userId, now, true)) return fail(429, 'budget', '이번 달 AI 한도에 닿았어요.');
-  const id = await createJob(env, userId, 'import', text, { inputHash: hash }, now);
-  if (!id) return fail(429, 'too_many', '정리하는 작업이 이미 3개 기다리고 있어요. 끝나면 다시 해 주세요.');
-  return { ok: true, job_id: id, duplicate: false };
+  if (await overBudget(env, now, true)) return fail(429, 'budget', '이번 달 서비스 전체 AI 한도에 닿았어요.');
+  const job = await createJob(env, userId, 'import', text, { inputHash: hash }, now, { kind: 'cards', amount: CREDIT_COST.cards });
+  if ('error' in job) {
+    return job.error === 'no_credits'
+      ? fail(429, 'no_credits', noCreditsMessage(CREDIT_COST.cards))
+      : fail(429, 'too_many', '정리하는 작업이 이미 3개 기다리고 있어요. 끝나면 다시 해 주세요.');
+  }
+  return { ok: true, job_id: job.id, duplicate: false };
 }

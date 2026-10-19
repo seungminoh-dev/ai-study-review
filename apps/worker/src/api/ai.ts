@@ -1,12 +1,30 @@
-import { AskBody, AskCardsBody, GradeAiBody, ImportBody, InterviewBody, InterviewSaveBody, type AiStatus, type AskResponse, type BetaMetrics, type InterviewResponse, type JobView, type UsageReport } from '@moai/shared';
+import {
+  AskBody,
+  AskCardsBody,
+  CREDIT_COST,
+  CreditGrantBody,
+  GradeAiBody,
+  ImportBody,
+  InterviewBody,
+  InterviewSaveBody,
+  type AiStatus,
+  type AskResponse,
+  type BetaMetrics,
+  type CreditAdminRow,
+  type CreditsResponse,
+  type InterviewResponse,
+  type JobView,
+  type UsageReport,
+} from '@moai/shared';
 import { Hono } from 'hono';
 import type { AppEnv } from '../context';
+import { creditBalance, creditsUsedThisMonth, grantStatement, noCreditsMessage } from '../domain/credits';
 import { sha256Hex } from '../lib/crypto';
 import { errorJson, readJson } from '../lib/http';
 import { DAY_MS, studyDayIndex, studyDayKey, studyWeekday } from '../lib/kst';
 import { llmConfigured } from '../llm/anthropic';
-import { askConcept, askLeft, askToCards } from '../llm/ask';
-import { interviewLeft, interviewTurn, saveInterview } from '../llm/interview';
+import { askConcept, askToCards } from '../llm/ask';
+import { interviewTurn, saveInterview } from '../llm/interview';
 import { caps, monthStart, overBudget } from '../llm/budget';
 import { createJob, runJob } from '../llm/jobs';
 import { requireOwner } from './account';
@@ -16,16 +34,27 @@ import { requireOwner } from './account';
 export const ai = new Hono<AppEnv>();
 
 const UNAVAILABLE = () => errorJson(503, 'ai_unavailable', '서버에 AI 설정이 없어요. 자가 채점으로 진행해요.');
-const OVER_BUDGET = () => errorJson(429, 'budget', '이번 달 AI 한도에 닿았어요. 자가 채점으로 진행해요.');
+const OVER_BUDGET = () => errorJson(429, 'budget', '이번 달 서비스 전체 AI 한도에 닿았어요. 자가 채점으로 진행해요.');
+const NO_CREDITS = (cost: number) => errorJson(429, 'no_credits', noCreditsMessage(cost));
 
 ai.get('/ai/status', async (c) => {
   const available = llmConfigured(c.env);
   const now = Date.now();
-  const [over, left, interview] = available
-    ? await Promise.all([overBudget(c.env, c.var.userId, now), askLeft(c.env, c.var.userId, now), interviewLeft(c.env, c.var.userId, now)])
-    : [false, 0, 0];
-  const body: AiStatus = { available, over_budget: over, ask_left: left, interview_left: interview };
+  const [over, credits] = await Promise.all([available ? overBudget(c.env, now) : false, creditBalance(c.env, c.var.userId, now)]);
+  const body: AiStatus = { available, over_budget: over, credits };
   return c.json(body);
+});
+
+/** 내 AI 크레딧과 최근 내역 (설정 화면) */
+ai.get('/credits', async (c) => {
+  const now = Date.now();
+  const [credits, history] = await Promise.all([
+    creditBalance(c.env, c.var.userId, now),
+    c.env.DB.prepare('SELECT kind, amount, note, created_at FROM credit_ledger WHERE user_id = ?1 ORDER BY created_at DESC LIMIT 20')
+      .bind(c.var.userId)
+      .all<CreditsResponse['history'][number]>(),
+  ]);
+  return c.json({ credits, history: history.results } satisfies CreditsResponse);
 });
 
 /** AI 개념 채팅: 틀린 카드의 개념을 묻는다. 답은 바로 돌려준다 */
@@ -34,7 +63,7 @@ ai.post('/cards/:id/ask', async (c) => {
   const body = await readJson(c, AskBody);
   if (body instanceof Response) return body;
   const outcome = await askConcept(c.env, c.var.userId, c.req.param('id'), body, Date.now());
-  return outcome.ok ? c.json({ answer: outcome.answer, left: outcome.left } satisfies AskResponse) : errorJson(outcome.status, outcome.code, outcome.message);
+  return outcome.ok ? c.json({ answer: outcome.answer, credits: outcome.credits } satisfies AskResponse) : errorJson(outcome.status, outcome.code, outcome.message);
 });
 
 /** AI 개념 채팅 2차: 그 대화로 카드를 만든다. 가져오기 작업으로 돌고, 끝나면 푸시로 알린다 */
@@ -57,13 +86,13 @@ ai.post('/cards/:id/grade-ai', async (c) => {
     .first<string>('id');
   if (!card) return errorJson(404, 'not_found', '설명하기 카드를 찾지 못했어요.');
   // 비용은 응답이 와야 기록된다. 끝나지 않은 작업은 예상 비용으로 더해서 한도를 본다
-  if (await overBudget(c.env, c.var.userId, now, true)) return OVER_BUDGET();
-  // 끝나지 않은 채점은 사람마다 3개까지 (세기와 넣기를 한 문장으로 한다)
-  const id = await createJob(c.env, c.var.userId, 'grade', body.answer, { cardId: card }, now);
-  if (!id) return errorJson(429, 'too_many', '채점이 이미 진행 중이에요. 끝나면 다시 해 주세요.');
+  if (await overBudget(c.env, now, true)) return OVER_BUDGET();
+  // 끝나지 않은 채점은 사람마다 3개까지, 크레딧을 쓴다 (세기·넣기·쓰기를 한 batch로 한다)
+  const job = await createJob(c.env, c.var.userId, 'grade', body.answer, { cardId: card }, now, { kind: 'grade', amount: CREDIT_COST.grade });
+  if ('error' in job) return job.error === 'no_credits' ? NO_CREDITS(CREDIT_COST.grade) : errorJson(429, 'too_many', '채점이 이미 진행 중이에요. 끝나면 다시 해 주세요.');
   // 응답을 보낸 뒤에도 돌린다 (30초까지). 끊기면 매분 Cron이 이어 받는다
-  c.executionCtx.waitUntil(runJob(c.env, id, 'request'));
-  return c.json({ job_id: id }, 202);
+  c.executionCtx.waitUntil(runJob(c.env, job.id, 'request'));
+  return c.json({ job_id: job.id }, 202);
 });
 
 /** 앱 안 모의면접: 다음 질문 하나, 마지막이면 정리. 대화는 기기가 들고 있다가 같이 보낸다 */
@@ -110,10 +139,10 @@ ai.post('/import', async (c) => {
     .bind(userId, hash)
     .first<string>('id');
   if (existing) return c.json({ job_id: existing, duplicate: true });
-  if (await overBudget(c.env, userId, now, true)) return OVER_BUDGET();
-  const id = await createJob(c.env, userId, 'import', body.text, { inputHash: hash }, now);
-  if (!id) return errorJson(429, 'too_many', '가져오기가 이미 3개 기다리고 있어요. 끝나면 다시 해 주세요.');
-  return c.json({ job_id: id, duplicate: false }, 202);
+  if (await overBudget(c.env, now, true)) return OVER_BUDGET();
+  const job = await createJob(c.env, userId, 'import', body.text, { inputHash: hash }, now, { kind: 'import', amount: CREDIT_COST.import });
+  if ('error' in job) return job.error === 'no_credits' ? NO_CREDITS(CREDIT_COST.import) : errorJson(429, 'too_many', '가져오기가 이미 3개 기다리고 있어요. 끝나면 다시 해 주세요.');
+  return c.json({ job_id: job.id, duplicate: false }, 202);
 });
 
 ai.get('/imports', async (c) => {
@@ -146,7 +175,6 @@ ai.get('/admin/usage', async (c) => {
     month_start: since,
     total_usd: usd(users.reduce((sum, row) => sum + row.cost, 0)),
     monthly_cap_usd: limit.monthly,
-    user_cap_usd: limit.user,
     by_user: users.map((row) => ({ name: row.name, usd: usd(row.cost), calls: row.calls })),
     by_kind: (byKind!.results as { kind: string; cost: number; calls: number }[]).map((row) => ({ kind: row.kind, usd: usd(row.cost), calls: row.calls })),
     by_model: (byModel!.results as { model: string; cost: number; calls: number; input_tokens: number; output_tokens: number }[]).map((row) => ({
@@ -159,6 +187,27 @@ ai.get('/admin/usage', async (c) => {
     jobs: jobs!.results as UsageReport['jobs'],
   };
   return c.json(body);
+});
+
+/** 사람마다 AI 크레딧 (운영자 화면) */
+ai.get('/admin/credits', async (c) => {
+  const now = Date.now();
+  const { results } = await c.env.DB.prepare('SELECT id, display_name AS name FROM users ORDER BY created_at').all<{ id: string; name: string }>();
+  const people: CreditAdminRow[] = await Promise.all(
+    results.map(async (person) => ({ ...person, credits: await creditBalance(c.env, person.id, now), used_month: await creditsUsedThisMonth(c.env, person.id, now) })),
+  );
+  return c.json({ people });
+});
+
+/** 보유 크레딧을 준다. 돈이 오가지 않는 앱 안 재화다 */
+ai.post('/admin/credits', async (c) => {
+  const body = await readJson(c, CreditGrantBody);
+  if (body instanceof Response) return body;
+  const exists = await c.env.DB.prepare('SELECT 1 FROM users WHERE id = ?1').bind(body.user_id).first();
+  if (!exists) return errorJson(404, 'not_found', '회원을 찾지 못했어요.');
+  await grantStatement(c.env, body.user_id, body.amount, 'grant', null, body.note || null, Date.now()).run();
+  console.log(JSON.stringify({ event: 'credits_granted', user_id: body.user_id, amount: body.amount }));
+  return c.body(null, 204);
 });
 
 /** 베타 지표 (설계서 §2.3, 기획서 §13): 주간 복습자, 카드 신고율, AI 비용, 14일 유지율, 저장 → 첫 복습, 2·5회차 정답률, 주간 설문 */

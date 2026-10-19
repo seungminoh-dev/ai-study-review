@@ -1,6 +1,6 @@
 import type { ConceptDetail } from '@moai/shared';
 import { useEffect, useState } from 'react';
-import { aiStatus } from '../ai';
+import { aiStatus, canUseAi } from '../ai';
 import { errorMessage, request } from '../api';
 import { STATE_LABEL } from '../concept-state';
 import { copyText } from '../copy';
@@ -23,7 +23,7 @@ export function Concept({ conceptKey }: { conceptKey: string }) {
   const [copied, setCopied] = useState<boolean | null>(null);
   const [canInterview, setCanInterview] = useState(false);
   useEffect(() => {
-    void aiStatus().then((status) => setCanInterview(status.available && !status.over_budget && status.interview_left > 0));
+    void aiStatus().then((status) => setCanInterview(canUseAi(status, 'interview')));
   }, []);
   if (error) return <div className="screen"><p className="notice bad">{error}</p></div>;
   if (!data) return <Loading />;

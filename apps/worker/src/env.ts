@@ -24,6 +24,5 @@ export interface Env {
   /** secret. 채점·가져오기에 쓸 모델 ID */
   GRADER_MODEL?: string;
   /** 사용자별·전체 이번 달 한도 (달러). 기본 6, 90 */
-  LLM_USER_CAP_USD?: string;
   LLM_MONTHLY_CAP_USD?: string;
 }

@@ -6980,3 +6980,256 @@ a.notice.link:active,
 .survey-card .text-button {
   align-self: flex-start;
 }
+
+/* AI 크레딧 (설정) */
+.credit-meter {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.credit-meter p {
+  margin: 0;
+}
+
+.credit-meter strong {
+  font-size: 1.125rem;
+}
+
+.credit-history summary {
+  cursor: pointer;
+  color: var(--accent-ink);
+  font-weight: 700;
+}
+
+/* 숨은 업적: 보석 모양 표시, 내 성장의 목록, 새로 찾았을 때의 축하 카드 */
+.achievement-gem {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  clip-path: polygon(50% 0, 100% 28%, 100% 72%, 50% 100%, 0 72%, 0 28%);
+  background: linear-gradient(150deg, #ffd166, var(--accent) 70%);
+  color: var(--accent-text);
+}
+
+.achievement-gem.hidden {
+  width: 28px;
+  height: 28px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-family: var(--mono);
+  font-weight: 800;
+}
+
+.achievement-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.achievement-list li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+  border-radius: 14px;
+}
+
+.achievement-list li.fresh {
+  background: var(--pen-soft);
+}
+
+.achievement-list p {
+  margin: 2px 0 0;
+}
+
+.achievement-reward {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  color: var(--accent-ink);
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.achievement-reward small {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.achievement-hidden {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 10px;
+}
+
+.achievement-hidden p {
+  margin: 0;
+}
+
+.achievement-hidden-gems {
+  display: flex;
+  flex: none;
+  gap: 2px;
+}
+
+.achievement-new {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px;
+  border: 2px solid #ffd166;
+  border-radius: 20px;
+  background: var(--surface);
+}
+
+.achievement-new .confetti {
+  top: 48px;
+}
+
+.achievement-new h2,
+.achievement-new p {
+  margin: 0;
+}
+
+.achievement-new h2 {
+  font-size: 1.125rem;
+}
+
+.achievement-new-kicker {
+  color: var(--accent-ink);
+  font-size: 0.8125rem;
+  font-weight: 800;
+}
+
+.achievement-new-reward {
+  align-self: flex-start;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--pen-soft);
+  color: var(--accent-ink);
+  font-weight: 800;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .achievement-new {
+    animation: rise 0.5s var(--ease-out) both;
+  }
+
+  .achievement-new .achievement-gem {
+    animation: badge-pop 0.55s var(--ease-out) both, gem-shine 2.4s ease-in-out 0.8s infinite;
+  }
+
+  .achievement-new-reward {
+    animation: badge-pop 0.55s var(--ease-out) 0.45s both;
+  }
+}
+
+@keyframes gem-shine {
+  0%,
+  100% {
+    filter: brightness(1);
+  }
+
+  50% {
+    filter: brightness(1.18);
+  }
+}
+
+/* 4단계 작은 움직임. 모두 동작 줄이기면 멈춘다 */
+.verdict {
+  position: relative;
+}
+
+.xp-float {
+  position: absolute;
+  left: calc(100% + 8px);
+  top: 0;
+  color: var(--accent-ink);
+  font-size: 0.8125rem;
+  font-weight: 800;
+  white-space: nowrap;
+  opacity: 0;
+}
+
+.flame {
+  display: inline-flex;
+  color: var(--muted);
+}
+
+.flame.lit {
+  color: var(--accent);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .xp-float {
+    animation: plus-one 1.4s var(--ease-out) 0.1s both;
+  }
+
+  /* 오늘 화면 카드가 차례로 올라온다 */
+  .today-col > :not(.today-pair),
+  .today-pair > * {
+    animation: rise 0.45s var(--ease-out) both;
+  }
+
+  .today-col > :nth-child(2),
+  .today-pair > :nth-child(2) {
+    animation-delay: 0.06s;
+  }
+
+  .today-col > :nth-child(3) {
+    animation-delay: 0.12s;
+  }
+
+  .today-col > :nth-child(n + 4) {
+    animation-delay: 0.18s;
+  }
+
+  /* 퀘스트 막대가 차오르고, 끝낸 퀘스트는 체크가 톡 튄다 */
+  .quest-list .bar > span {
+    animation: bar-fill 0.9s var(--ease-out) 0.25s both;
+  }
+
+  .quest-list li.done .quest-mark {
+    animation: badge-pop 0.5s var(--ease-spring) 0.7s both;
+  }
+
+  /* 오늘 목표를 채운 날은 불꽃이 살랑인다 */
+  .flame.lit svg {
+    transform-origin: 50% 90%;
+    animation: flicker 1.6s ease-in-out infinite;
+  }
+}
+
+@keyframes bar-fill {
+  from {
+    width: 0;
+  }
+}
+
+@keyframes flicker {
+  0%,
+  100% {
+    transform: scale(1) rotate(0);
+  }
+
+  30% {
+    transform: scale(1.06, 0.95) rotate(-3deg);
+  }
+
+  60% {
+    transform: scale(0.97, 1.05) rotate(2deg);
+  }
+}

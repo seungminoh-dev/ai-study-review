@@ -1,5 +1,5 @@
 import type { MapResponse, StatsResponse } from '@moai/shared';
-import { BadgeShelf } from '../badges';
+import { AchievementShelf, BadgeShelf } from '../badges';
 import { IconFlame } from '../icons';
 import { Loading } from '../Loading';
 import { Mascot } from '../Mascot';
@@ -56,6 +56,7 @@ export function Growth() {
         </section>
       </div>
       <BadgeShelf badges={stats.badges} />
+      <AchievementShelf achievements={stats.achievements} />
       <section className="card heat-card" aria-labelledby="heat-title">
         <div className="card-head">
           <h2 id="heat-title">최근 12주</h2>

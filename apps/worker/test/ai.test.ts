@@ -1,11 +1,12 @@
-import type { InterviewResponse, JobView } from '@moai/shared';
+import type { CreditsResponse, InterviewResponse, JobView, StatsResponse } from '@moai/shared';
 import { env } from 'cloudflare:workers';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import example from '../../../packages/shared/fixtures/immutable-object.json';
+import { creditBalance, creditMonthStart, spendCredits } from '../src/domain/credits';
 import { runJob, runPendingJobs } from '../src/llm/jobs';
 import { api, callTool, mcpUrl, newUser, type TestUser } from './helpers';
 
-// 돈이 드는 부분만 확인한다: 한도, 사용량 기록, 끝나면 원문 지우기. Anthropic API는 fetch를 바꿔 흉내 낸다.
+// 돈이 드는 부분만 확인한다: 한도, 크레딧, 사용량 기록, 끝나면 원문 지우기. Anthropic API는 fetch를 바꿔 흉내 낸다.
 
 let user: TestUser;
 beforeEach(async () => {
@@ -28,6 +29,15 @@ const GRADE = {
   coaching_question: '생성자에서 받은 리스트는 어떻게 다뤄야 할까요?',
   suggested_grade: 'hard',
 };
+
+const usageRow = (userId: string, kind: string, cost: number, at = Date.now()) =>
+  env.DB.prepare(
+    "INSERT INTO llm_usage (id, user_id, job_id, kind, model, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_micro_usd, created_at) VALUES (?1, ?2, 'x', ?3, 'm', 0, 0, 0, 0, ?4, ?5)",
+  ).bind(crypto.randomUUID(), userId, kind, cost, at);
+/** 이번 달 크레딧을 미리 써 둔다 */
+const spent = (userId: string, amount: number, at = Date.now()) =>
+  env.DB.prepare("INSERT INTO credit_ledger (id, user_id, amount, kind, ref, note, created_at) VALUES (?1, ?2, ?3, 'ask', NULL, NULL, ?4)").bind(crypto.randomUUID(), userId, -amount, at);
+const monthlyLeft = async (who: TestUser) => ((await (await api(who, '/credits')).json()) as CreditsResponse).credits.monthly;
 
 async function explainCardId(): Promise<string> {
   await callTool(await mcpUrl(user), 'save_learning', example);
@@ -60,15 +70,18 @@ describe('AI grading', () => {
     expect((await api(await newUser(), `/jobs/${job_id}`)).status).toBe(404);
   });
 
-  it('refuses new work once the user spent this month’s cap', async () => {
+  it('refuses new work once the whole service hit this month’s cap, whatever credits I have', async () => {
     const cardId = await explainCardId();
     const fetch = mockClaude(GRADE);
-    await env.DB.prepare("INSERT INTO llm_usage (id, user_id, job_id, kind, model, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_micro_usd, created_at) VALUES (?1, ?2, 'x', 'grade', 'm', 0, 0, 0, 0, 6000000, ?3)")
-      .bind(crypto.randomUUID(), user.id, Date.now())
-      .run();
-    expect((await api(user, `/cards/${cardId}/grade-ai`, { method: 'POST', json: { answer: '설명' } })).status).toBe(429);
-    expect(await (await api(user, '/ai/status')).json()).toEqual({ available: true, over_budget: true, ask_left: 50, interview_left: 80 });
-    expect(fetch).not.toHaveBeenCalled();
+    const row = usageRow('someone-else', 'grade', 90_000_000);
+    await row.run();
+    try {
+      expect((await api(user, `/cards/${cardId}/grade-ai`, { method: 'POST', json: { answer: '설명' } })).status).toBe(429);
+      expect(await (await api(user, '/ai/status')).json()).toMatchObject({ available: true, over_budget: true, credits: { monthly: 500, held: 0 } });
+      expect(fetch).not.toHaveBeenCalled();
+    } finally {
+      await env.DB.prepare("DELETE FROM llm_usage WHERE user_id = 'someone-else'").run();
+    }
   });
 
   it('never has more than three grading jobs in flight, even with requests sent at once', async () => {
@@ -101,7 +114,7 @@ describe('AI concept chat', () => {
     const fetch = mockClaude({ answer: '방어적 복사는 바깥과 나눠 쓰지 않으려고 복사하는 거예요.' });
     const response = await api(user, `/cards/${cardId}/ask`, { method: 'POST', json: { question: '내 답은 왜 틀렸어요?', picked: '얕은 복사' } });
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ answer: '방어적 복사는 바깥과 나눠 쓰지 않으려고 복사하는 거예요.', left: 49 });
+    expect(await response.json()).toMatchObject({ answer: '방어적 복사는 바깥과 나눠 쓰지 않으려고 복사하는 거예요.', credits: { monthly: 499, monthly_total: 500, held: 0 } });
     const sent = JSON.parse(String((fetch.mock.calls[0]![1] as RequestInit).body)) as { messages: { content: string }[] };
     expect(sent.messages[0]!.content).toContain('<card>');
     expect(sent.messages[0]!.content).toContain('사용자가 고른 답: 얕은 복사');
@@ -113,20 +126,16 @@ describe('AI concept chat', () => {
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
-  it('stops at the monthly limit without calling the API, even with requests sent at once', async () => {
+  it('stops when credits run out without calling the API, even with requests sent at once', async () => {
     const cardId = await mcqCardId();
     const fetch = mockClaude({ answer: '답' });
-    const now = Date.now();
-    await env.DB.batch(
-      Array.from({ length: 48 }, () =>
-        env.DB.prepare("INSERT INTO llm_usage (id, user_id, job_id, kind, model, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_micro_usd, created_at) VALUES (?1, ?2, 'x', 'ask', 'm', 0, 0, 0, 0, 0, ?3)").bind(crypto.randomUUID(), user.id, now),
-      ),
-    );
+    await spent(user.id, 498).run();
     const statuses = await Promise.all(Array.from({ length: 5 }, () => api(user, `/cards/${cardId}/ask`, { method: 'POST', json: { question: '왜요?' } }).then((r) => r.status)));
     expect(statuses.filter((status) => status === 200)).toHaveLength(2);
     expect(statuses.filter((status) => status === 429)).toHaveLength(3);
     expect(fetch).toHaveBeenCalledTimes(2);
-    expect(await askCount()).toBe(50);
+    expect(await askCount()).toBe(2);
+    expect(await monthlyLeft(user)).toBe(0);
   });
 
   it('turns the conversation into an import job for my own card only', async () => {
@@ -150,6 +159,8 @@ describe('AI concept chat', () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('overloaded', { status: 529 }));
     expect((await api(user, `/cards/${cardId}/ask`, { method: 'POST', json: { question: '왜요?' } })).status).toBe(502);
     expect(await askCount()).toBe(0);
+    // 쓴 크레딧도 돌려준다
+    expect(await monthlyLeft(user)).toBe(500);
   });
 });
 
@@ -158,16 +169,17 @@ describe('in-app mock interview', () => {
     await callTool(await mcpUrl(user), 'save_learning', example);
     const fetch = mockClaude({ question: '불변 객체는 왜 스레드 안전한가요?', concept_key: 'immutable-object', good: ['핵심을 먼저 말했어요'], fix: ['방어적 복사를 빠뜨렸어요'] });
     const first = (await (await api(user, '/interview', { method: 'POST', json: { concept_key: 'immutable-object' } })).json()) as InterviewResponse;
-    expect(first).toMatchObject({ question: { question: '불변 객체는 왜 스레드 안전한가요?' }, summary: null, left: 79 });
+    expect(first).toMatchObject({ question: { question: '불변 객체는 왜 스레드 안전한가요?' }, summary: null, credits: { monthly: 499 } });
     expect(first.keys[0]).toBe('immutable-object');
     const turns = Array.from({ length: first.total }, () => ({ question: '불변 객체는 왜 스레드 안전한가요?', answer: '상태가 안 바뀌어서요.' }));
     const last = (await (await api(user, '/interview', { method: 'POST', json: { keys: first.keys, turns } })).json()) as InterviewResponse;
-    expect(last).toMatchObject({ question: null, summary: { fix: ['방어적 복사를 빠뜨렸어요'] }, left: 78 });
+    expect(last).toMatchObject({ question: null, summary: { fix: ['방어적 복사를 빠뜨렸어요'] }, credits: { monthly: 498 } });
     expect(fetch).toHaveBeenCalledTimes(2);
     // 남의 개념 key로는 면접할 수 없다
     expect((await api(await newUser(), '/interview', { method: 'POST', json: { keys: first.keys } })).status).toBe(404);
     const saved = await api(user, '/interview/save', { method: 'POST', json: { keys: first.keys, turns } });
     expect(saved.status).toBe(202);
+    expect(await monthlyLeft(user)).toBe(493);
     const { job_id } = (await saved.json()) as { job_id: string };
     expect(await env.DB.prepare("SELECT input FROM llm_jobs WHERE id = ?1 AND kind = 'import'").bind(job_id).first<string>('input')).toContain('사용자: 상태가 안 바뀌어서요.');
     await env.DB.prepare('DELETE FROM llm_jobs WHERE id = ?1').bind(job_id).run();
@@ -201,5 +213,66 @@ describe('paste import', () => {
     expect(((await (await api(user, `/jobs/${job_id}`)).json()) as JobView)).toMatchObject({ status: 'failed', error: 'invalid_output' });
     expect(fetch.mock.calls.filter(([url]) => String(url).includes('anthropic')).length).toBe(2);
     expect(await env.DB.prepare('SELECT input FROM llm_jobs WHERE id = ?1').bind(job_id).first('input')).toBeNull();
+    // AI 비용이 든 실패라 크레딧은 돌려주지 않는다 (실패를 되풀이해 예산을 쓰지 못하게)
+    expect(await monthlyLeft(user)).toBe(490);
+  });
+
+  it('gives the credits back when a job fails without reaching the AI', async () => {
+    const { job_id } = (await (await api(user, '/import', { method: 'POST', json: { text: '대화 '.repeat(100) } })).json()) as { job_id: string };
+    expect(await monthlyLeft(user)).toBe(490);
+    // 서버 AI 설정을 지우면 매분 작업이 기다리던 작업을 실패로 끝낸다
+    await runPendingJobs({ ...env, ANTHROPIC_API_KEY: '' }, Date.now());
+    expect(((await (await api(user, `/jobs/${job_id}`)).json()) as JobView)).toMatchObject({ status: 'failed', error: 'unavailable' });
+    expect(await monthlyLeft(user)).toBe(500);
+  });
+
+  it('does not make the job when credits are short', async () => {
+    await spent(user.id, 495).run();
+    const response = await api(user, '/import', { method: 'POST', json: { text: '대화 '.repeat(100) } });
+    expect(response.status).toBe(429);
+    expect(await response.json()).toMatchObject({ error: { code: 'no_credits' } });
+    expect(await env.DB.prepare('SELECT count(*) AS n FROM llm_jobs WHERE user_id = ?1').bind(user.id).first<number>('n')).toBe(0);
+    expect(await monthlyLeft(user)).toBe(5);
+  });
+});
+
+describe('AI credits', () => {
+  const at = (month: number, day = 2) => Date.UTC(2026, month, day, 3);
+
+  it('refills the monthly credits on the 1st (KST), keeps held credits and spends monthly first', async () => {
+    expect(creditMonthStart(Date.UTC(2026, 9, 31, 15, 30))).toBe(Date.UTC(2026, 9, 31, 15)); // 11월 1일 0시 30분 KST는 11월
+    await env.DB.prepare("INSERT INTO credit_ledger (id, user_id, amount, kind, ref, note, created_at) VALUES (?1, ?2, 100, 'grant', NULL, NULL, ?3)").bind(crypto.randomUUID(), user.id, at(8)).run();
+    await spent(user.id, 550, at(8)).run();
+    expect(await creditBalance(env, user.id, at(8))).toMatchObject({ monthly: 0, held: 50 });
+    // 다음 달: 월간은 다시 500, 남은 보유 50은 그대로
+    expect(await creditBalance(env, user.id, at(9))).toMatchObject({ monthly: 500, held: 50 });
+    await spent(user.id, 120, at(9)).run();
+    expect(await creditBalance(env, user.id, at(9))).toMatchObject({ monthly: 380, held: 50 });
+    // 월간을 다 쓰면 보유에서 빠지고, 모자라면 쓰지 않는다
+    expect(await spendCredits(env, user.id, 'import', 400, 'r1', at(9, 3))).toBe(true);
+    expect(await creditBalance(env, user.id, at(9, 3))).toMatchObject({ monthly: 0, held: 30 });
+    expect(await spendCredits(env, user.id, 'import', 31, 'r2', at(9, 3))).toBe(false);
+    expect(await creditBalance(env, user.id, at(10))).toMatchObject({ monthly: 500, held: 30 });
+  });
+
+  it('lets only the owner grant held credits', async () => {
+    const owner = await newUser('오너', 'owner');
+    expect((await api(user, '/admin/credits', { method: 'POST', json: { user_id: user.id, amount: 1000 } })).status).toBe(403);
+    expect((await api(owner, '/admin/credits', { method: 'POST', json: { user_id: user.id, amount: 300, note: '베타 감사' } })).status).toBe(204);
+    const { credits, history } = (await (await api(user, '/credits')).json()) as CreditsResponse;
+    expect(credits).toMatchObject({ monthly: 500, held: 300 });
+    expect(history[0]).toMatchObject({ kind: 'grant', amount: 300, note: '베타 감사' });
+  });
+
+  it('gives a hidden achievement and its credits only once, even when stats load at once', async () => {
+    await env.DB.batch(Array.from({ length: 30 }, () => usageRow(user.id, 'ask', 0)));
+    const loads = await Promise.all([api(user, '/stats'), api(user, '/stats')]);
+    for (const load of loads) expect(load.status).toBe(200);
+    const stats = (await (await api(user, '/stats')).json()) as StatsResponse;
+    expect(stats.achievements.earned.map((item) => item.id)).toEqual(['curious']);
+    expect(stats.achievements.total).toBeGreaterThan(1);
+    const grants = await env.DB.prepare("SELECT count(*) AS n, sum(amount) AS total FROM credit_ledger WHERE user_id = ?1 AND kind = 'achievement'").bind(user.id).first();
+    expect(grants).toEqual({ n: 1, total: 30 });
+    expect(((await (await api(user, '/credits')).json()) as CreditsResponse).credits.held).toBe(30);
   });
 });

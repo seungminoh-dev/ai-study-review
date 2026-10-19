@@ -1,7 +1,7 @@
-import type { ImportResult, JobView } from '@moai/shared';
-import { MAX_IMPORT_CHARS } from '@moai/shared/client';
+import type { AiStatus, ImportResult, JobView } from '@moai/shared';
+import { CREDIT_COST, MAX_IMPORT_CHARS, creditsLeft } from '@moai/shared/client';
 import { useEffect, useState, type FormEvent } from 'react';
-import { JOB_ERROR, aiStatus } from '../ai';
+import { JOB_ERROR, aiStatus, canUseAi, forgetAiStatus } from '../ai';
 import { errorMessage, request } from '../api';
 import { BackLink, Link } from '../router';
 import { formatDateTime, useApi } from '../useApi';
@@ -13,13 +13,13 @@ const STATUS: Record<JobView['status'], string> = { queued: '기다리는 중', 
 
 export function Import() {
   const { data, reload } = useApi<{ jobs: JobView[] }>('/imports');
-  const [available, setAvailable] = useState<boolean | null>(null);
+  const [status, setStatus] = useState<AiStatus | null>(null);
   const [text, setText] = useState('');
   const [message, setMessage] = useState<{ text: string; tone: 'good' | 'bad' } | null>(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    void aiStatus().then((status) => setAvailable(status.available && !status.over_budget));
+    void aiStatus().then(setStatus);
   }, []);
   // 기다리는 작업이 있으면 10초마다 다시 본다
   const waiting = data?.jobs.some((job) => job.status === 'queued' || job.status === 'running');
@@ -38,6 +38,8 @@ export function Import() {
       setMessage({ text: result.duplicate ? '이미 가져온 대화예요.' : '받았어요. 1~3분 뒤에 카드가 생기면 알림으로 알려 드려요.', tone: 'good' });
       setText('');
       reload();
+      forgetAiStatus();
+      void aiStatus().then(setStatus);
     } catch (error) {
       setMessage({ text: errorMessage(error), tone: 'bad' });
     } finally {
@@ -54,7 +56,12 @@ export function Import() {
       <p className="muted small">
         커넥터를 못 쓰는 곳에서 공부한 대화를 통째로 붙여 넣으면 카드로 만들어요. 대화에 있는 내용만 쓰고, 원문은 카드를 만든 뒤 지워요.
       </p>
-      {available === false ? <p className="notice warn">지금은 서버 AI를 쓸 수 없어요 (설정이 없거나 이번 달 한도에 닿았어요).</p> : null}
+      {status && (!status.available || status.over_budget) ? <p className="notice warn">지금은 서버 AI를 쓸 수 없어요 (설정이 없거나 이번 달 한도에 닿았어요).</p> : null}
+      {status && status.available && !status.over_budget && !canUseAi(status, 'import') ? (
+        <p className="notice warn">
+          AI 크레딧이 모자라요 ({CREDIT_COST.import} 필요, 남은 {creditsLeft(status.credits)}). 월간 크레딧은 매달 1일에 다시 채워져요.
+        </p>
+      ) : null}
       <form onSubmit={(event) => void submit(event)}>
         <textarea
           className="answer-input"
@@ -71,8 +78,8 @@ export function Import() {
         </p>
         {message ? <p className={`notice ${message.tone}`}>{message.text}</p> : null}
         <div className="actions">
-          <button type="submit" className="button primary" disabled={busy || available === false || text.trim().length < 200}>
-            {busy ? '보내는 중…' : '카드로 만들기'}
+          <button type="submit" className="button primary" disabled={busy || (status !== null && !canUseAi(status, 'import')) || text.trim().length < 200}>
+            {busy ? '보내는 중…' : `카드로 만들기 · ${CREDIT_COST.import} 크레딧`}
           </button>
         </div>
       </form>
