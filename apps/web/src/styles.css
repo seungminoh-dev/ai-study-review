@@ -509,6 +509,13 @@ textarea {
   transform: scale(0.92);
 }
 
+.icon-button:disabled {
+  opacity: 0.3;
+  background: none;
+  cursor: default;
+  transform: none;
+}
+
 .actions {
   display: flex;
   gap: 10px;
@@ -1443,38 +1450,7 @@ html[data-nav='tab']::view-transition-new(page) {
   margin: 0;
 }
 
-/* 복습: 방금 기록한 답 되돌리기. 카드 자리를 밀지 않게 진행 막대 아래에 떠 있다 */
-.toast {
-  position: fixed;
-  top: calc(max(16px, env(safe-area-inset-top)) + 52px);
-  left: 50%;
-  z-index: 30;
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  translate: -50% 0;
-  padding: 8px 8px 8px 16px;
-  border-radius: 999px;
-  background: var(--pen);
-  color: var(--pen-text);
-  font-size: 0.875rem;
-  font-weight: 600;
-  white-space: nowrap;
-  box-shadow: 0 8px 24px -10px rgba(15, 22, 38, 0.6);
-}
 
-.toast button {
-  min-height: 36px;
-  padding: 0 14px;
-  border: 0;
-  border-radius: 999px;
-  /* 토스트 바탕과 뒤집은 색. 다크에서는 바탕이 주황이라 주황 버튼이 묻힌다 */
-  background: var(--pen-text);
-  color: var(--pen);
-  font: inherit;
-  font-weight: 700;
-  cursor: pointer;
-}
 
 /* 오프라인일 때 화면 위 한 줄 */
 .offline-bar {

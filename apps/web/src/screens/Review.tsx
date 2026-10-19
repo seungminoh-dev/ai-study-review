@@ -222,8 +222,6 @@ function Session({ initial, offline, before, exam }: { initial: QueueCard[]; off
   /** 컴퓨터 개념 패널에서 보고 있는 탭 */
   const [panelTab, setPanelTab] = useState<'concept' | 'ask'>('concept');
   const askButton = useRef<HTMLButtonElement>(null);
-  /** 되돌리기 토스트를 보여 줄 답 */
-  const [toast, setToast] = useState<string | null>(null);
   const wide = useWide();
   /** 두 번 탭해도 한 번만 기록한다 */
   const moving = useRef(false);
@@ -255,18 +253,12 @@ function Session({ initial, offline, before, exam }: { initial: QueueCard[]; off
     askButton.current?.focus();
   };
   const choices = useMemo(() => (card ? choicesOf(card) : []), [card]);
-  /** 답을 본 카드 수. 지금 카드도 답을 봤으면 센다 */
-  const done = index + (picked ? 1 : 0);
+  /** 지금 푸는 카드 번호. 위 막대와 숫자가 같은 값을 쓴다 (6/10이면 막대도 60%) */
+  const position = index + 1;
 
   useEffect(() => {
     shownAt.current = Date.now();
   }, [index, cards]);
-
-  useEffect(() => {
-    if (!toast) return;
-    const timer = setTimeout(() => setToast(null), 6000);
-    return () => clearTimeout(timer);
-  }, [toast]);
 
   const advance = () => {
     setPicked(null);
@@ -327,7 +319,6 @@ function Session({ initial, offline, before, exam }: { initial: QueueCard[]; off
       });
       await forgetAnswered([current.id]);
       setLast({ reviewId: id, card: current });
-      setToast(id);
     }
     setResults((list) => [...list, { card: current, correct, confidentMiss: !correct && level === 'sure' }]);
     advance();
@@ -464,35 +455,30 @@ function Session({ initial, offline, before, exam }: { initial: QueueCard[]; off
         <button type="button" className="icon-button" aria-label="그만하기" onClick={leave}>
           ✕
         </button>
-        <div className="progress" role="progressbar" aria-label="진행" aria-valuemin={0} aria-valuemax={cards.length} aria-valuenow={done}>
-          <div style={{ width: `${(done / cards.length) * 100}%` }} />
+        <div className="progress" role="progressbar" aria-label="진행" aria-valuemin={0} aria-valuemax={cards.length} aria-valuenow={position}>
+          <div style={{ width: `${(position / cards.length) * 100}%` }} />
         </div>
         <span className="muted count">
-          {index + 1}/{cards.length}
+          {position}/{cards.length}
         </span>
+        {/* 방금 기록한 답은 다음 카드에서 고르기 전까지 여기서 되돌린다. 매번 뜨는 알림 대신 자리를 지키는 버튼이다 */}
+        {practice ? null : (
+          <button
+            type="button"
+            className="icon-button"
+            aria-label="방금 답 되돌리기"
+            title="방금 답 되돌리기"
+            disabled={!last || busy || picked !== null || chosen !== null}
+            onClick={() => void undo()}
+          >
+            ↶
+          </button>
+        )}
       </header>
       <div className="review-body">
         <div className="review-main">
           {offline ? <p className="notice">오프라인이에요. 답은 저장해 두었다가 연결되면 보내요.</p> : null}
           {practice ? <p className="notice">{exam ? '랜덤 시험이에요. 기록하지 않아서 복습 일정은 그대로예요.' : '다시 보기는 연습이라 기록하지 않아요. 틀린 카드는 곧 다시 나와요.'}</p> : null}
-          {/* 방금 기록한 답은 다음 카드에서 고르기 전까지, 길어야 6초 동안 되돌릴 수 있다. 그 뒤에는 끝 화면에서 되돌린다 */}
-          <AnimatePresence>
-            {last && toast === last.reviewId && !picked && !chosen ? (
-              <m.div
-                key={last.reviewId}
-                className="toast"
-                role="status"
-                initial={{ opacity: 0, y: -12 }}
-                animate={{ opacity: 1, y: 0, transition: SOFT }}
-                exit={{ opacity: 0, y: -8, transition: LEAVE }}
-              >
-                <span>답을 기록했어요</span>
-                <button type="button" disabled={busy} onClick={() => void undo()}>
-                  되돌리기
-                </button>
-              </m.div>
-            ) : null}
-          </AnimatePresence>
           {/* 다음 카드로 넘어갈 때 앞 카드가 왼쪽으로 빠지고 새 카드가 오른쪽에서 들어온다 */}
           <AnimatePresence mode="wait" initial={false}>
             <Presence

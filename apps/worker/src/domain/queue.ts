@@ -134,7 +134,8 @@ export async function loadTodayQueue(env: Env, userId: string, now: number, filt
 }
 
 /**
- * 자료 하나를 푼다 ("이 자료 풀기"). 그 자료에서 만든 카드 중 지금 풀 수 있는 것을, 이미 푼 것(복습할 때가 된 것) → 아직 안 푼 것 순으로 준다.
+ * 자료 하나를 학습한다 (학습 탭, "이 자료 풀기"). 그 자료에서 만든 카드 중 아직 한 번도 안 푼 것만 저장한 순서대로 준다.
+ * 한 번 푼 카드는 확신도나 정답과 상관없이 복습으로 간다. 틀려서 곧 다시 볼 때가 돼도 학습에는 다시 나오지 않는다.
  * 사용자가 직접 고른 학습이라 하루 새 카드 상한과 "같은 개념 하루 1장"은 적용하지 않는다. 사다리(잠긴 단계)는 그대로다.
  */
 export async function loadMaterialQueue(
@@ -147,15 +148,15 @@ export async function loadMaterialQueue(
   part: string | null = null,
 ): Promise<{ cards: QueueCard[]; remaining: number }> {
   const from = `FROM cards c JOIN concepts k ON k.id = c.concept_id JOIN learning_sessions s ON s.id = c.session_id
-      WHERE c.user_id = ?1 AND s.user_id = ?1 AND s.material = ?2 AND c.status = 'active' AND c.due <= ?3${part === null ? '' : " AND coalesce(s.material_part, '') = ?4"}`;
-  const binds = part === null ? [userId, material, now] : [userId, material, now, part];
+      WHERE c.user_id = ?1 AND s.user_id = ?1 AND s.material = ?2 AND c.status = 'active' AND c.state = 0${part === null ? '' : " AND coalesce(s.material_part, '') = ?3"}`;
+  const binds = part === null ? [userId, material] : [userId, material, part];
   const [rows, count] = await env.DB.batch([
     env.DB.prepare(
       `SELECT c.id, c.concept_id, c.state, c.due, c.created_at, c.type, c.rung, c.prompt, c.code, c.answer, c.options, c.explain,
               c.checklist, c.stability, c.difficulty, c.elapsed_days, c.scheduled_days, c.learning_steps, c.reps, c.lapses,
               c.last_review, k.key AS concept_key, k.name AS concept_name, k.final_answer
          ${from}
-        ORDER BY (c.state = 0), c.due, s.created_at, c.created_at
+        ORDER BY s.created_at, c.created_at
         LIMIT ?${binds.length + 1}`,
     ).bind(...binds, size),
     env.DB.prepare(`SELECT count(*) AS n ${from}`).bind(...binds),

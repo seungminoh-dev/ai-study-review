@@ -2,7 +2,7 @@ import type { MapResponse, MaterialSummary, QueueResponse } from '@moai/shared';
 import { env } from 'cloudflare:workers';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { repairLibrary } from '../src/domain/categories';
-import { loadTodayQueue } from '../src/domain/queue';
+import { loadMaterialQueue, loadTodayQueue } from '../src/domain/queue';
 import { api, callTool, mcpUrl, newUser, type TestUser } from './helpers';
 
 // 자료(PDF)는 풀기 전까지 내 지식이 아니다. 분류는 저장할 때 모양을 맞춰 기존 분류에 붙인다.
@@ -47,6 +47,13 @@ describe('materials', () => {
     expect((await concept('pod'))!.adopted_at).not.toBeNull();
     const after = (await (await api(user, '/materials')).json()) as { materials: MaterialSummary[] };
     expect(after.materials[0]).toMatchObject({ solved: 1, adopted: 1 });
+
+    // 한 번 푼 카드는 학습에 다시 나오지 않고 복습으로 간다. 틀려서 곧 다시 볼 때가 돼도
+    const second = queue.cards[1]!.id;
+    await api(user, '/reviews', { method: 'POST', json: { reviews: [{ id: crypto.randomUUID(), card_id: second, grade: 1, reviewed_at: Date.now() }] } });
+    const later = Date.now() + 30 * 60_000;
+    expect(await loadMaterialQueue(env, user.id, '쿠버네티스 입문.pdf', later, 10)).toEqual({ cards: [], remaining: 0 });
+    expect((await loadTodayQueue(env, user.id, later)).map((card) => card.id)).toContain(second);
   });
 
   it('can be studied in chat, and a study chat about the concept adopts it too', async () => {

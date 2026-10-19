@@ -105,6 +105,8 @@ export function Interview({ concept, category }: { concept: string | null; categ
 
   const done = turns.length;
   const total = chain?.total ?? 0;
+  /** 지금 묻는 질문 번호(끝나면 전체). 위 막대와 숫자가 같은 값을 쓴다 */
+  const position = Math.min(done + (summary ? 0 : 1), total);
   return (
     <div className="interview">
       {/* 머리는 위에 붙어 있다. 대화가 길어져도 어디까지 왔는지 보인다 */}
@@ -113,10 +115,10 @@ export function Interview({ concept, category }: { concept: string | null; categ
           <button type="button" className="icon-button" aria-label="그만하기" onClick={quit}>
             ✕
           </button>
-          <div className="progress" role="progressbar" aria-label="진행" aria-valuemin={0} aria-valuemax={total} aria-valuenow={done}>
-            <div style={{ width: total ? `${(done / total) * 100}%` : '0%' }} />
+          <div className="progress" role="progressbar" aria-label="진행" aria-valuemin={0} aria-valuemax={total} aria-valuenow={position}>
+            <div style={{ width: total ? `${(position / total) * 100}%` : '0%' }} />
           </div>
-          <span className="muted count">{total ? `${Math.min(done + (summary ? 0 : 1), total)}/${total}` : ''}</span>
+          <span className="muted count">{total ? `${position}/${total}` : ''}</span>
         </header>
         <div className="interview-head">
           <Mascot mood={waiting ? 'think' : summary ? 'cheer' : 'study'} size={44} />
