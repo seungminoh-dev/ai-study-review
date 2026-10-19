@@ -32,7 +32,7 @@ beforeEach(async () => {
 describe('today and queue', () => {
   it('starts empty', async () => {
     const today = (await (await api(user, '/today')).json()) as TodayResponse;
-    expect(today).toEqual({ remaining: 0, minutes: 0, parts: { wrong: 0, fresh: 0 }, mistakes: 0, reviewed_today: 0, sessions: [], followups: [], reminders_set: false });
+    expect(today).toEqual({ remaining: 0, minutes: 0, parts: { wrong: 0, fresh: 0 }, mistakes: 0, reviewed_today: 0, sessions: [], followups: [], reminders_set: false, push_lost: false });
   });
 
   it('serves one card per concept with answers for on-device grading', async () => {

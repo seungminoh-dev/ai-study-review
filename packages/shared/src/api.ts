@@ -466,6 +466,8 @@ export interface TodayResponse {
   sessions: SessionSummary[];
   followups: OpenFollowup[];
   reminders_set: boolean;
+  /** 알림 시간은 있는데 어느 기기에도 푸시 구독이 없다 (알림이 조용히 끊겼다) */
+  push_lost: boolean;
 }
 
 export interface SessionCard {

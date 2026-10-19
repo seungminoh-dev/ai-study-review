@@ -526,6 +526,10 @@ export function Today({ name }: { name: string }) {
             <Link className="notice link o-reminder" href="/settings">
               알림 시간을 정하면 복습할 때 알려 드려요 →
             </Link>
+          ) : data.push_lost ? (
+            <Link className="notice warn link o-badges" href="/settings">
+              복습 알림이 꺼졌어요. 이 기기에서 다시 켜 주세요 →
+            </Link>
           ) : null}
         </div>
         <div className="today-col">

@@ -11,7 +11,7 @@ import { Mascot } from './Mascot';
 import { SNAPPY } from './motion';
 import { ErrorBoundary } from './ErrorBoundary';
 import { claimDevice, releaseDevice } from './offline/store';
-import { dropLocalPush } from './push';
+import { dropLocalPush, resyncPush } from './push';
 import { TabLink, navigate, useLocation } from './router';
 import { Join } from './screens/Join';
 import { Landing } from './screens/Landing';
@@ -202,6 +202,8 @@ export function App() {
         await claim(me);
         rememberMe(me);
         setAuth({ state: 'in', me });
+        // 이 기기의 푸시 구독을 하루 한 번 서버와 다시 맞춘다 (끊긴 알림 되살리기)
+        void resyncPush().catch(() => undefined);
       } catch (error) {
         if (error instanceof RequestError && error.status === 401) {
           setAuth(await loggedOut());

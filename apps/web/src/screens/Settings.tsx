@@ -1,7 +1,7 @@
 import type { AuthOptions, BetaMetrics, CreditAdminRow, InviteSummary, LoginCode, McpTokenStatus, Me, MemberSummary, Reminder, UsageReport } from '@moai/shared';
 import { MAX_REMINDERS } from '@moai/shared/client';
 import { useEffect, useState, type FormEvent } from 'react';
-import { errorMessage, request } from '../api';
+import { RequestError, errorMessage, request } from '../api';
 import { COACH_INSTRUCTIONS } from '../coach';
 import { forgetAiStatus } from '../ai';
 import { copyText } from '../copy';
@@ -95,8 +95,16 @@ function PushSection() {
               className="button"
               onClick={() =>
                 void run(async () => {
-                  const result = await request<{ sent: number; failed: number }>('/push/test', { method: 'POST' });
-                  setMessage({ text: `테스트 알림을 보냈어요 (기기 ${result.sent}대).`, tone: 'good' });
+                  try {
+                    const result = await request<{ sent: number; failed: number }>('/push/test', { method: 'POST' });
+                    setMessage({ text: `테스트 알림을 보냈어요 (기기 ${result.sent}대).`, tone: 'good' });
+                  } catch (error) {
+                    // 서버에 이 기기의 구독이 없다(끊겼다): 다시 켠다
+                    if (error instanceof RequestError && error.status === 409) {
+                      setState(await enablePush());
+                      setMessage({ text: '알림이 끊겨 있어서 다시 켰어요. 테스트 알림을 한 번 더 눌러 보세요.', tone: 'good' });
+                    } else throw error;
+                  }
                 })
               }
             >

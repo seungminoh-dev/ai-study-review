@@ -51,6 +51,33 @@ function keyBytes(base64url: string): Uint8Array<ArrayBuffer> {
   return bytes;
 }
 
+const SYNCED = 'moai:push-synced';
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * 하루 한 번, 이 기기에 남은 구독을 서버에 다시 보낸다 (서버는 같은 주소면 덮어쓴다).
+ * 서버가 실패한 구독을 지웠거나 기기를 바꿨어도 알림이 다시 이어진다. 화면은 '알림 받음'인데 실제로는 끊긴 상태를 막는다
+ */
+export async function resyncPush(now = Date.now()): Promise<void> {
+  if (inAppBrowser() || !('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) return;
+  if (Notification.permission !== 'granted') return;
+  try {
+    if (now - Number(localStorage.getItem(SYNCED) ?? 0) < DAY_MS) return;
+  } catch {
+    // 저장소를 못 쓰면 매번 보낸다 (덮어쓰기라 괜찮다)
+  }
+  const registration = await navigator.serviceWorker.getRegistration();
+  const subscription = await registration?.pushManager.getSubscription();
+  if (!subscription) return;
+  const json = subscription.toJSON();
+  await request('/push/subscriptions', { method: 'POST', json: { endpoint: json.endpoint, keys: json.keys } });
+  try {
+    localStorage.setItem(SYNCED, String(now));
+  } catch {
+    // 다음에 다시 보낸다
+  }
+}
+
 export async function enablePush(): Promise<PushState> {
   const permission = await Notification.requestPermission();
   if (permission !== 'granted') return permission === 'denied' ? 'denied' : 'off';

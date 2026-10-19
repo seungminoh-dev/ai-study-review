@@ -29,10 +29,12 @@ review.get('/today', async (c) => {
           GROUP BY f.concept_id, f.question ORDER BY created_at DESC LIMIT 5`,
       ).bind(userId),
       c.env.DB.prepare('SELECT count(*) AS n FROM reminder_slots WHERE user_id = ?1 AND enabled = 1').bind(userId),
+      c.env.DB.prepare('SELECT count(*) AS n FROM push_subscriptions WHERE user_id = ?1').bind(userId),
     ]),
     loadMistakes(c.env, userId, now, 0),
   ]);
-  const [followups, reminders] = rest;
+  const [followups, reminders, subscriptions] = rest;
+  const remindersSet = ((reminders!.results[0] as { n: number } | undefined)?.n ?? 0) > 0;
   const body: TodayResponse = {
     remaining: queue.length,
     minutes: estimateMinutes(queue.length),
@@ -44,7 +46,9 @@ review.get('/today', async (c) => {
     reviewed_today: reviewedToday,
     sessions: sessions satisfies SessionSummary[],
     followups: followups!.results as unknown as OpenFollowup[],
-    reminders_set: ((reminders!.results[0] as { n: number } | undefined)?.n ?? 0) > 0,
+    reminders_set: remindersSet,
+    // 알림 시간은 있는데 어느 기기에도 구독이 없다: 서버가 끊긴 구독을 지웠거나 기기를 바꿨다
+    push_lost: remindersSet && ((subscriptions!.results[0] as { n: number } | undefined)?.n ?? 0) === 0,
   };
   return c.json(body);
 });

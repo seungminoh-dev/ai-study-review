@@ -41,6 +41,24 @@ self.addEventListener('push', (event) => {
   );
 });
 
+/** 브라우저가 구독을 바꾸면 새 구독을 서버에 알린다. 그러지 않으면 알림이 조용히 끊긴다 (로그인 쿠키가 같이 간다) */
+const keyBytes = (base64url: string) => Uint8Array.from(atob(base64url.replaceAll('-', '+').replaceAll('_', '/').padEnd(Math.ceil(base64url.length / 4) * 4, '=')), (char) => char.charCodeAt(0));
+
+self.addEventListener('pushsubscriptionchange', (event) => {
+  const change = event as ExtendableEvent & { oldSubscription?: PushSubscription | null; newSubscription?: PushSubscription | null };
+  change.waitUntil(
+    (async () => {
+      let subscription = change.newSubscription ?? null;
+      if (!subscription) {
+        const key = change.oldSubscription?.options.applicationServerKey ?? keyBytes(((await (await fetch('/api/push/config')).json()) as { vapid_public_key: string }).vapid_public_key);
+        subscription = await self.registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
+      }
+      const json = subscription.toJSON();
+      await fetch('/api/push/subscriptions', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ endpoint: json.endpoint, keys: json.keys }) });
+    })().catch(() => undefined),
+  );
+});
+
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const target = new URL((event.notification.data as { url?: string } | null)?.url ?? '/', self.location.origin).href;
