@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { aiStatus, canUseAi } from '../ai';
 import { errorMessage, request } from '../api';
 import { NewAchievements, NewBadges } from '../badges';
+import { CreditChip } from '../credits';
 import { IconArrow, IconBook, IconCheck, IconFlame, IconHistory, IconSettings } from '../icons';
 import { Loading } from '../Loading';
 import { Mascot } from '../Mascot';
@@ -486,9 +487,12 @@ export function Today({ name }: { name: string }) {
           </p>
           <h1>오늘도 조금씩 모아요</h1>
         </div>
-        <Link className="icon-link" href="/settings" aria-label="설정">
-          <IconSettings />
-        </Link>
+        <div className="today-tools">
+          <CreditChip />
+          <Link className="icon-link" href="/settings" aria-label="설정">
+            <IconSettings />
+          </Link>
+        </div>
       </header>
 
       <div className="today-cols">

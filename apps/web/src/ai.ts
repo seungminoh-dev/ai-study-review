@@ -15,9 +15,13 @@ export function aiStatus(): Promise<AiStatus> {
   return status;
 }
 
+/** 크레딧이 바뀌었다는 알림. 엽전 칩이 듣고 다시 묻는다 (credits.tsx) */
+export const CREDITS_CHANGED = 'moai:credits';
+
 /** 크레딧을 쓰거나 받은 뒤에 부른다. 다음에 다시 물어본다 */
 export function forgetAiStatus(): void {
   status = null;
+  window.dispatchEvent(new Event(CREDITS_CHANGED));
 }
 
 /** AI가 켜져 있고 그 일에 쓸 크레딧이 남았다 */

@@ -3,6 +3,7 @@ import * as m from 'motion/react-m';
 import { Suspense, lazy, useEffect, useState, type ComponentType, type ReactNode } from 'react';
 import { OfflineError, RequestError, errorMessage, onUnauthorized, request } from './api';
 import { forgetSeenBadges } from './badges';
+import { CreditChip } from './credits';
 import { forgetMaterial } from './materials';
 import { IconBook, IconGrowth, IconHistory, IconHome, IconMap, IconOffline, IconSettings } from './icons';
 import { Loading, Splash } from './Loading';
@@ -53,7 +54,8 @@ const Interview = lazyScreen(() => import('./screens/Interview').then((module) =
 const Learn = lazyScreen(() => import('./screens/Learn').then((module) => module.Learn));
 const Reviews = lazyScreen(() => import('./screens/Reviews').then((module) => module.Reviews));
 const Categories = lazyScreen(() => import('./screens/Categories').then((module) => module.Categories));
-const LATER = [Review, Sessions, SessionDetail, MapScreen, Concept, Growth, Import, Materials, MaterialDetail, Settings, Welcome, Interview, Learn, Reviews, Categories];
+const Credits = lazyScreen(() => import('./screens/Credits').then((module) => module.Credits));
+const LATER = [Review, Sessions, SessionDetail, MapScreen, Concept, Growth, Import, Materials, MaterialDetail, Settings, Welcome, Interview, Learn, Reviews, Categories, Credits];
 // 개인정보 처리방침·약관은 로그인 전에도 열고, 가끔만 보니 미리 받지 않는다
 const Legal = lazyScreen(() => import('./screens/Legal').then((module) => module.Legal));
 const legalDoc = (path: string) => (path === '/privacy' ? 'privacy' : path === '/terms' ? 'terms' : null);
@@ -84,7 +86,7 @@ type Section = 'today' | 'learn' | 'reviews' | 'map' | 'growth' | 'settings';
 
 /** 지금 화면이 어느 메뉴에 속하는지. 상세 화면은 부모 메뉴를 밝힌다. 자료는 학습, 공부한 대화는 복습에 속한다 */
 function sectionOf(path: string): Section | null {
-  if (path === '/') return 'today';
+  if (path === '/' || path === '/credits') return 'today';
   if (path === '/learn' || path === '/materials' || path.startsWith('/materials/')) return 'learn';
   if (path === '/reviews' || path.startsWith('/sessions') || path === '/import') return 'reviews';
   if (path === '/map' || path.startsWith('/concepts/') || path === '/categories') return 'map';
@@ -138,6 +140,7 @@ function Sidebar({ current }: { current: Section | null }) {
         {SIDE.map(link)}
       </nav>
       <nav className="side-nav side-bottom" aria-label="설정">
+        <CreditChip className="side-credit" unit />
         {link({ href: '/settings', label: '설정', section: 'settings' })}
       </nav>
     </aside>
@@ -299,6 +302,7 @@ export function App() {
   else if (path === '/learn') screen = <Learn key={query.get('title') ?? ''} title={query.get('title')} />;
   else if (path === '/reviews') screen = <Reviews />;
   else if (path === '/categories') screen = <Categories />;
+  else if (path === '/credits') screen = <Credits />;
   else if (path === '/sessions') screen = <Sessions />;
   else if (sessionMatch) screen = <SessionDetail id={sessionMatch[1]!} />;
   else if (path === '/map') screen = <MapScreen />;
@@ -325,7 +329,7 @@ export function App() {
 
   // 복습, 모의면접, 시작 가이드는 메뉴 없이 집중한다. 오늘·성장·지도는 컴퓨터에서 넓게 쓴다
   const focus = path === '/review' || path === '/interview' || path === '/welcome';
-  const wide = path === '/' || path === '/learn' || path === '/growth' || path === '/map' || path === '/materials/detail';
+  const wide = path === '/' || path === '/learn' || path === '/credits' || path === '/growth' || path === '/map' || path === '/materials/detail';
   const section = sectionOf(path);
   return (
     <div className={focus ? 'shell focus' : 'shell'}>

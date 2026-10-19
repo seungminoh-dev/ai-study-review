@@ -2610,10 +2610,13 @@ a.notice.link:active,
   font-weight: 600;
 }
 
-.today-head.hills .icon-link {
+.today-head.hills .today-tools {
   position: absolute;
   top: 10px;
   right: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .hills-art {
@@ -2655,7 +2658,7 @@ a.notice.link:active,
     border-radius: 0;
   }
 
-  .today-head.hills .icon-link {
+  .today-head.hills .today-tools {
     top: calc(max(16px, env(safe-area-inset-top)) - 6px);
     right: max(10px, env(safe-area-inset-right));
   }
@@ -2670,7 +2673,8 @@ a.notice.link:active,
     font-size: 1.875rem;
   }
 
-  .today-head .icon-link {
+  /* 컴퓨터는 사이드바에 엽전 칩과 설정이 있다 */
+  .today-head.hills .today-tools {
     display: none;
   }
 
@@ -7280,29 +7284,204 @@ a.notice.link:active,
   align-self: flex-start;
 }
 
-/* AI 크레딧 (설정) */
-.credit-meter {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 14px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface);
+/* AI 크레딧 도트 (6단계 시안): 엽전·보석 그림(credits.tsx), 엽전 칩, 크레딧 화면 */
+.pixel {
+  display: block;
+  flex-shrink: 0;
 }
 
-.credit-meter p {
+.px-o {
+  fill: var(--mascot-line);
+}
+
+.px-y {
+  fill: #ffbd4a;
+}
+
+.px-w {
+  fill: #fff6e3;
+}
+
+.px-d {
+  fill: #e8962e;
+}
+
+.px-g {
+  fill: #78c98c;
+}
+
+.px-l {
+  fill: #b6e8c3;
+}
+
+.px-k {
+  fill: #2c7a45;
+}
+
+.px-e {
+  fill: var(--surface-2);
+}
+
+.px-s {
+  fill: var(--border-strong);
+}
+
+.credit-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 12px 0 8px;
+  border: 2px solid var(--text);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 3px 0 var(--text);
+  font-family: var(--mono);
+  font-size: 0.9375rem;
+  font-weight: 800;
+  text-decoration: none;
+  white-space: nowrap;
+  transition:
+    transform 0.12s var(--ease-out),
+    box-shadow 0.12s var(--ease-out);
+}
+
+.credit-chip:active {
+  transform: translateY(3px);
+  box-shadow: 0 0 0 var(--text);
+}
+
+/* 컴퓨터 사이드바: 설정 바로 위 */
+.side-credit {
+  align-self: stretch;
+  justify-content: center;
+  margin-bottom: 8px;
+}
+
+.credits-screen {
+  gap: 16px;
+}
+
+.credits-screen h1 {
   margin: 0;
 }
 
-.credit-meter strong {
-  font-size: 1.125rem;
+.credits-cols,
+.credits-col {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
-.credit-history summary {
-  cursor: pointer;
-  color: var(--accent-ink);
+.credits-hero {
+  flex-direction: row;
+  align-items: center;
+  gap: 18px;
+}
+
+.credits-total {
+  display: block;
+  font-family: var(--mono);
+  font-size: 2.5rem;
+  line-height: 1;
+}
+
+.credits-num {
+  font-family: var(--mono);
   font-weight: 700;
+}
+
+.coin-row {
+  display: flex;
+  gap: 2px;
+  margin: 4px 0 8px;
+}
+
+.credits-held {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 14px;
+}
+
+.credits-held .grow {
+  flex: 1;
+  min-width: 0;
+}
+
+.credits-held p,
+.credits-screen .card > p {
+  margin: 0;
+}
+
+.gem-pile {
+  display: flex;
+  gap: 2px;
+}
+
+.cost-list {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px 12px;
+  margin: 8px 0 10px;
+  font-size: 0.875rem;
+}
+
+.cost-list dd {
+  margin: 0;
+  font-family: var(--mono);
+  font-weight: 800;
+}
+
+.credit-log {
+  display: flex;
+  flex-direction: column;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.credit-log li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--surface-2);
+  font-size: 0.875rem;
+}
+
+.credit-log li:last-child {
+  border-bottom: 0;
+}
+
+.credit-log .grow {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.credit-plus {
+  color: var(--good);
+}
+
+.credit-minus {
+  color: var(--muted);
+}
+
+.credits-tip {
+  color: var(--text);
+  text-decoration: none;
+}
+
+@media (min-width: 1024px) {
+  .credits-cols {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 24px;
+    align-items: start;
+  }
 }
 
 /* 숨은 업적: 보석 모양 표시, 내 성장의 목록, 새로 찾았을 때의 축하 카드 */

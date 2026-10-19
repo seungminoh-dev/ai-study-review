@@ -1,5 +1,5 @@
-import type { AuthOptions, BetaMetrics, CreditAdminRow, CreditsResponse, InviteSummary, LoginCode, McpTokenStatus, Me, MemberSummary, Reminder, UsageReport } from '@moai/shared';
-import { CREDIT_COST, MAX_REMINDERS } from '@moai/shared/client';
+import type { AuthOptions, BetaMetrics, CreditAdminRow, InviteSummary, LoginCode, McpTokenStatus, Me, MemberSummary, Reminder, UsageReport } from '@moai/shared';
+import { MAX_REMINDERS } from '@moai/shared/client';
 import { useEffect, useState, type FormEvent } from 'react';
 import { errorMessage, request } from '../api';
 import { COACH_INSTRUCTIONS } from '../coach';
@@ -27,7 +27,6 @@ export function Settings({ me, onLogout }: { me: Me; onLogout: () => void }) {
       <GoalSection initial={me.daily_goal} />
       <ConfidenceSection />
       <ScreenSection />
-      <CreditsSection />
       <ConnectorSection />
       <AccountSection me={me} onLogout={onLogout} />
       <CoachSection />
@@ -586,55 +585,6 @@ function UsageSection() {
             .map((job) => `${job.kind} ${job.error ?? ''} ${job.n}건`)
             .join(', ')}
         </p>
-      ) : null}
-    </section>
-  );
-}
-
-const CREDIT_KIND: Record<string, string> = {
-  grant: '받은 크레딧',
-  achievement: '숨은 업적',
-  ask: '개념 물어보기',
-  interview: '모의면접 질문',
-  grade: 'AI 채점',
-  cards: '대화로 카드 만들기',
-  import: '대화 붙여넣기',
-};
-
-/** AI 크레딧 (설계서 §11.8): 앱 안 재화. 월간은 매달 1일에 다시 채우고, 보유는 숨은 업적·운영자 지급으로 받아 계속 남는다 */
-function CreditsSection() {
-  const { data } = useApi<CreditsResponse>('/credits');
-  if (!data) return null;
-  const { credits, history } = data;
-  return (
-    <section>
-      <h2>AI 크레딧</h2>
-      <div className="credit-meter">
-        <p className="small">
-          월간 <strong>{credits.monthly}</strong> / {credits.monthly_total} · {formatDate(credits.refill_at)}에 다시 채워져요
-        </p>
-        <span className="bar" role="progressbar" aria-label="남은 월간 크레딧" aria-valuemin={0} aria-valuemax={credits.monthly_total} aria-valuenow={credits.monthly}>
-          <span style={{ width: `${(credits.monthly / Math.max(1, credits.monthly_total)) * 100}%` }} />
-        </span>
-        <p className="small">
-          보유 <strong>{credits.held}</strong> · 숨은 업적으로 받고, 다음 달에도 남아요
-        </p>
-      </div>
-      <p className="muted small">
-        월간부터 써요. 개념 물어보기·모의면접 질문·AI 채점 {CREDIT_COST.ask}, 대화로 카드 만들기 {CREDIT_COST.cards}, 대화 붙여넣기 {CREDIT_COST.import}. AI 서버에 닿지 못해 실패하면 돌려줘요. 돈으로
-        사거나 바꿀 수 없는 앱 안 재화예요.
-      </p>
-      {history.length > 0 ? (
-        <details className="credit-history">
-          <summary className="small">최근 기록</summary>
-          <ul className="list">
-            {history.map((row, index) => (
-              <li key={index} className="small">
-                {CREDIT_KIND[row.kind] ?? row.kind}{row.note ? ` (${row.note})` : ''} · {row.amount > 0 ? `+${row.amount}` : row.amount} · <span className="muted">{formatDateTime(row.created_at)}</span>
-              </li>
-            ))}
-          </ul>
-        </details>
       ) : null}
     </section>
   );
