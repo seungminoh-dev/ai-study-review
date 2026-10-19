@@ -102,10 +102,13 @@ export const GET_INTERVIEW_CHAIN_DESCRIPTION = `꼬리물기 모의면접을 위
 topic이나 concept_key로 시작 개념을 정할 수 있다. 둘 다 없으면 최근에 많이 틀린 개념에서 시작한다.
 결과의 최종 버전이나 정답을 먼저 말하지 않는다. 과거에 틀린 지점을 파고드는 질문을 만드는 데 쓴다.`;
 
-export const GET_CATEGORIES_DESCRIPTION = `사용자의 개념 분류를 정리하려고 지금 분류 목록(개념 수), 분류 없는 개념, 남겨 둔 옛 이름을 가져온다.
+export const GET_CATEGORIES_DESCRIPTION = `사용자의 개념 분류를 정리하려고 지금 분류 목록, 분류 없는 개념, 남겨 둔 옛 이름을 가져온다.
+분류마다 공부한 개념 수(concepts)와 아직 안 푼 자료 개념 수(material)를 따로 준다. 분류를 옮기면 자료 개념도 함께 옮겨진다.
 사용자가 "분류 정리해줘"라고 하면 먼저 이것을 부르고, 합칠 분류와 분류를 채울 개념을 표로 제안한다.`;
 
 export const UPDATE_CATEGORIES_DESCRIPTION = `개념 분류를 바꾼다. 반드시 바꿀 내용을 사용자에게 먼저 보여 주고 확인을 받은 뒤 부른다.
 - assign: 개념마다 분류 경로를 정한다 (예: { concept_key: "pod", category: "인프라/Kubernetes" }). null이면 분류를 지운다.
 - rename: 분류와 그 아래를 새 이름으로 옮긴다 (예: { from: "K8s", to: "인프라/Kubernetes" }). 옛 이름은 남겨서 다음에 옛 이름으로 저장해도 새 분류로 간다.
-분류는 큰 분류부터 "/"로 잇고 3단계까지다.`;
+- dry_run: true면 바꾸지 않고 옮길 내용(moves, merged)만 돌려준다. rename이 있으면 먼저 dry_run으로 불러 본다.
+분류는 큰 분류부터 "/"로 잇고 3단계까지다. 옮긴 뒤 3단계를 넘으면 넘는 단계가 잘려 위 분류로 합쳐진다 (예: "Java"를 "백엔드/Java"로 옮기면 "Java/Spring/JPA"가 "백엔드/Java/Spring"이 된다). 이런 이동은 merged로 따로 온다.
+합쳐지는 이동이 있으면 바꾸기 전에 사용자에게 알리고 다시 확인을 받는다.`;

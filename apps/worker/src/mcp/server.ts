@@ -99,6 +99,7 @@ const UpdateCategoriesInput = z.object({
     .array(z.object({ from: z.string().min(1).max(80), to: z.string().min(1).max(80) }))
     .max(20)
     .default([]),
+  dry_run: z.boolean().optional(),
 });
 
 // 요청마다 CPU를 쓰는 준비 작업은 모듈 범위(isolate 시작)에서 미리 해 둔다. 이 시간은 요청 CPU에 들어가지 않는다.
@@ -308,7 +309,7 @@ function buildServer(deps: McpDeps): McpServer {
       const overview = await categoryOverview(deps.env, deps.userId);
       const lines = [
         `분류 ${overview.categories.length}개:`,
-        ...overview.categories.map((item) => `- ${item.path} (${item.concepts})`),
+        ...overview.categories.map((item) => `- ${item.path} (공부 ${item.concepts}${item.material > 0 ? `, 자료 ${item.material}` : ''})`),
         '',
         overview.unclassified.length > 0
           ? `분류 없는 개념 ${overview.unclassified.length}개: ${overview.unclassified.map((item) => `${item.name}(\`${item.key}\`)`).join(', ')}`
@@ -331,8 +332,14 @@ function buildServer(deps: McpDeps): McpServer {
     },
     async (input) => {
       const result = await updateCategories(deps.env, deps.userId, input, Date.now());
-      const lines = [`개념 ${result.assigned}개의 분류를 정하고, ${result.renamed}개를 새 분류로 옮겼어요.`];
-      if (result.moves.length > 0) lines.push(...result.moves.slice(0, 50).map((move) => `- ${move.from} → ${move.to}`));
+      const merged = new Set(result.merged.map((move) => move.from));
+      const lines = [
+        result.dry_run
+          ? `미리보기예요. 아직 바꾸지 않았어요. 분류 ${result.moves.length}개를 옮겨요.`
+          : `개념 ${result.assigned}개의 분류를 정하고, ${result.renamed}개를 새 분류로 옮겼어요.`,
+      ];
+      if (result.moves.length > 0) lines.push(...result.moves.slice(0, 50).map((move) => `- ${move.from} → ${move.to}${merged.has(move.from) ? ' (합쳐짐)' : ''}`));
+      if (result.merged.length > 0) lines.push('', `3단계를 넘어 마지막 단계가 위 분류로 합쳐지는 이동이 ${result.merged.length}개 있어요.${result.dry_run ? ' 바꾸기 전에 사용자에게 알리세요.' : ''}`);
       return { content: text(lines.join('\n')), structuredContent: { ...result } };
     },
   );

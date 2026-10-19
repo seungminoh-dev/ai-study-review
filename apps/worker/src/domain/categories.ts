@@ -51,16 +51,12 @@ export function resolveCategories(
   }
   for (const path of normalized) {
     let target = path;
-    // 옛 이름은 가장 긴 앞부분부터 바꾼다: "devops/k8s/helm"에서 "devops"가 옛 이름이면 그 부분만 바뀐다
-    const segments = target.split('/');
-    for (let depth = segments.length; depth >= 1; depth--) {
-      const alias = aliasOf.get(segments.slice(0, depth).join('/').toLowerCase());
-      // 이미 새 이름 아래에 있는 경로는 다시 바꾸지 않는다 ("Kubernetes" → "Kubernetes/기본"일 때 "Kubernetes/기본/기본"이 되지 않게)
-      if (alias && isUnder(target, alias)) break;
-      if (alias) {
-        target = [alias, ...segments.slice(depth)].join('/');
-        break;
-      }
+    // 이름을 여러 번 바꿨으면 옛 이름을 이어서 따라간다 ("Java" → "백엔드/Java", 그다음 "백엔드/Java/Spring" → "백엔드/Spring").
+    // 서로 가리키는 옛 이름이 있어도 멈추게 5번까지만 따라간다
+    for (let round = 0; round < 5; round++) {
+      const next = followAlias(target, aliasOf);
+      if (next === target) break;
+      target = next;
     }
     const parts = target.split('/');
     for (let depth = parts.length; depth >= 1; depth--) {
@@ -73,6 +69,19 @@ export function resolveCategories(
     resolved.set(path, target.split('/').slice(0, 3).join('/'));
   }
   return resolved;
+}
+
+/** 옛 이름을 한 번 바꾼다. 가장 긴 앞부분부터 본다: "devops/k8s/helm"에서 "devops"가 옛 이름이면 그 부분만 바뀐다 */
+function followAlias(path: string, aliasOf: Map<string, string>): string {
+  const segments = path.split('/');
+  for (let depth = segments.length; depth >= 1; depth--) {
+    const alias = aliasOf.get(segments.slice(0, depth).join('/').toLowerCase());
+    if (!alias) continue;
+    // 이미 새 이름 아래에 있는 경로는 다시 바꾸지 않는다 ("Kubernetes" → "Kubernetes/기본"일 때 "Kubernetes/기본/기본"이 되지 않게).
+    // 자기 자신을 가리키는 옛 이름도 여기서 멈춘다
+    return isUnder(path, alias) ? path : [alias, ...segments.slice(depth)].join('/');
+  }
+  return path;
 }
 
 /** path가 parent이거나 그 아래면 true. 대소문자는 가리지 않는다 */
@@ -88,20 +97,25 @@ export function resolvedCategory(resolved: Map<string, string>, input: string | 
 }
 
 export interface CategoryOverview {
-  categories: CategoryCount[];
+  /** concepts: 공부한 개념 수, material: 아직 안 푼 자료 개념 수. 옮기면 둘 다 옮겨진다 */
+  categories: (CategoryCount & { material: number })[];
   unclassified: { key: string; name: string }[];
   aliases: { alias: string; path: string }[];
 }
 
-/** 분류 정리용: 분류와 개념 수, 분류 없는 개념, 남겨 둔 옛 이름 */
+/** 분류 정리용: 분류와 개념 수(공부한 것, 자료), 분류 없는 개념, 남겨 둔 옛 이름 */
 export async function categoryOverview(env: Env, userId: string): Promise<CategoryOverview> {
   const [categories, unclassified, aliases] = await env.DB.batch([
-    categoriesQuery(env, userId, 300),
+    env.DB.prepare(
+      `SELECT domain AS path, sum(adopted_at IS NOT NULL) AS concepts, sum(adopted_at IS NULL) AS material FROM concepts
+        WHERE user_id = ?1 AND domain IS NOT NULL
+        GROUP BY domain ORDER BY count(*) DESC, domain LIMIT 300`,
+    ).bind(userId),
     env.DB.prepare('SELECT key, name FROM concepts WHERE user_id = ?1 AND domain IS NULL AND adopted_at IS NOT NULL ORDER BY updated_at DESC LIMIT 150').bind(userId),
     env.DB.prepare('SELECT alias, path FROM category_aliases WHERE user_id = ?1 ORDER BY created_at DESC LIMIT 50').bind(userId),
   ]);
   return {
-    categories: categories!.results as unknown as CategoryCount[],
+    categories: categories!.results as unknown as CategoryOverview['categories'],
     unclassified: unclassified!.results as { key: string; name: string }[],
     aliases: aliases!.results as { alias: string; path: string }[],
   };
@@ -114,14 +128,15 @@ export interface CategoryMove {
 
 /**
  * 분류를 고친다. assign: 개념마다 분류를 정한다(null이면 지운다). rename: 분류(와 그 아래)를 새 이름으로 옮기고 옛 이름을 남긴다.
- * 옮긴 뒤에도 3단계를 넘지 않게 자른다. 무엇을 어디로 옮겼는지 돌려준다.
+ * 옮긴 뒤에도 3단계를 넘지 않게 자른다. 잘려서 단계가 합쳐진 이동은 merged로 따로 돌려준다 ("Java/Spring/JPA" → "백엔드/Java/Spring").
+ * 무엇을 어디로 옮겼는지 돌려준다. dryRun이면 바꾸지 않고 옮길 내용만 돌려준다.
  */
 export async function updateCategories(
   env: Env,
   userId: string,
-  change: { assign: { concept_key: string; category: string | null }[]; rename: { from: string; to: string }[] },
+  change: { assign: { concept_key: string; category: string | null }[]; rename: { from: string; to: string }[]; dry_run?: boolean },
   now: number,
-): Promise<{ assigned: number; renamed: number; moves: CategoryMove[] }> {
+): Promise<{ assigned: number; renamed: number; moves: CategoryMove[]; merged: CategoryMove[]; dry_run?: true }> {
   const [existing, aliasRows] = await env.DB.batch(categoryLookupQueries(env, userId));
   const domains = existing!.results as { domain: string }[];
   const aliases = aliasRows!.results as { alias: string; path: string }[];
@@ -142,6 +157,8 @@ export async function updateCategories(
   }
   /** 저장된 분류(그대로의 철자) → 옮길 분류 */
   const moves = new Map<string, string>();
+  /** 3단계에서 잘려 위 단계로 합쳐지는 저장된 분류 */
+  const merging = new Set<string>();
   for (const rename of change.rename) {
     const from = normalizeCategory(rename.from);
     const input = normalizeCategory(rename.to);
@@ -152,7 +169,12 @@ export async function updateCategories(
     // 0006 전에 저장한 분류도 모양을 맞춰서 비교한다
     for (const { domain } of domains) {
       const shaped = normalizeCategory(domain);
-      if (shaped && isUnder(shaped, from)) moves.set(domain, normalizeCategory(to + shaped.slice(from.length))!);
+      if (!shaped || !isUnder(shaped, from)) continue;
+      const moved = to + shaped.slice(from.length);
+      const target = normalizeCategory(moved)!;
+      moves.set(domain, target);
+      if (target.split('/').length < moved.split('/').length) merging.add(domain);
+      else merging.delete(domain);
     }
     // 새 이름은 이제 살아 있는 분류다. 그 이름을 다른 곳으로 보내던 옛 이름은 지운다
     statements.push(env.DB.prepare('DELETE FROM category_aliases WHERE user_id = ?1 AND alias = ?2').bind(userId, to.toLowerCase()));
@@ -178,6 +200,8 @@ export async function updateCategories(
     }
   }
   const moveRows = [...moves].filter(([from, to]) => from !== to).map(([from, to]) => ({ from, to }));
+  const merged = moveRows.filter((move) => merging.has(move.from));
+  if (change.dry_run) return { assigned: 0, renamed: 0, moves: moveRows, merged, dry_run: true };
   if (moveRows.length > 0) {
     statements.push(
       env.DB.prepare(
@@ -186,11 +210,11 @@ export async function updateCategories(
       ).bind(userId, JSON.stringify(moveRows), now),
     );
   }
-  if (statements.length === 0) return { assigned: 0, renamed: 0, moves: [] };
+  if (statements.length === 0) return { assigned: 0, renamed: 0, moves: [], merged: [] };
   const results = await env.DB.batch(statements);
   const assigned = change.assign.length > 0 ? results[0]!.meta.changes : 0;
   const renamed = moveRows.length > 0 ? results.at(-1)!.meta.changes : 0;
-  return { assigned, renamed, moves: moveRows };
+  return { assigned, renamed, moves: moveRows, merged };
 }
 
 /**

@@ -644,6 +644,7 @@ XP, 스트릭, 리그는 따로 저장하지 않고 `review_logs`와 `learning_s
 - 서버는 `normalizeCategory`로 모양을 맞춘다: 구분자(`/ > › |`), 공백, 흔한 줄임말(k8s → Kubernetes 등). 그다음 `category_aliases`(합치면서 남긴 옛 이름)를 따르고, 대소문자만 다른 기존 분류의 철자를 따른다.
 - 이미 분류가 있는 개념은 다시 저장해도 분류를 바꾸지 않는다. 바꾸는 것은 앱의 개념 화면이나 채팅의 `get_categories` → `update_categories`(사용자 확인 뒤)로 한다. 합치면 옛 이름을 별칭으로 남긴다.
   `update_categories`는 `destructiveHint: true`라 "Always allow"를 권하지 않는다. 옮기면 그 이름을 가리키던 별칭을 지우거나 새 자리로 돌린다.
+  `get_categories`는 공부한 개념 수와 자료 개념 수를 따로 보여 준다(옮기면 둘 다 옮겨진다). 별칭은 이름을 여러 번 바꿨어도 끝까지(5번까지) 따라간다. 옮긴 뒤 3단계를 넘어 합쳐지는 이동은 `merged`로 따로 돌려주고, `dry_run`으로 먼저 보여 준 뒤 사용자 확인을 받는다.
 - 매시 Cron이 0006 전에 저장한 분류의 모양을 맞추고, 분류 필터는 대소문자를 가리지 않는다.
 - 쓰는 곳: 지식 지도의 큰 분류 필터, 오늘 화면의 "분류별로 복습"(`/api/queue?category=`), 채팅 퀴즈와 모의면접의 `category`.
 

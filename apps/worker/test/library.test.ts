@@ -117,7 +117,7 @@ describe('category tools', () => {
       assign: [{ concept_key: 'jvm', category: '백엔드 / java' }],
       rename: [{ from: 'Kubernetes', to: '인프라/Kubernetes' }],
     });
-    expect(updated.structuredContent).toEqual({ assigned: 1, renamed: 1, moves: [{ from: 'Kubernetes/기본', to: '인프라/Kubernetes/기본' }] });
+    expect(updated.structuredContent).toEqual({ assigned: 1, renamed: 1, moves: [{ from: 'Kubernetes/기본', to: '인프라/Kubernetes/기본' }], merged: [] });
     expect((await concept('jvm'))!.domain).toBe('백엔드/Java');
     expect((await concept('pod'))!.domain).toBe('인프라/Kubernetes/기본');
     // 옛 이름으로 저장해도 새 분류로 간다
@@ -144,6 +144,26 @@ describe('category tools', () => {
     expect((await concept('ingress'))!.domain).toBe('Kubernetes');
     const aliases = await env.DB.prepare('SELECT alias, path FROM category_aliases WHERE user_id = ?1').bind(user.id).all();
     expect(aliases.results).toEqual([{ alias: 'kubernetes/기본', path: 'Kubernetes' }]);
+  });
+
+  it('counts material concepts, follows renamed names in a chain and warns before levels merge', async () => {
+    await save2('jpa', 'Java/Spring/JPA');
+    await callTool(url, 'save_learning', pdf('1장', 'node'));
+    const { categories } = (await callTool(url, 'get_categories', {})).structuredContent;
+    expect(categories).toEqual(expect.arrayContaining([{ path: 'Java/Spring/JPA', concepts: 1, material: 0 }, { path: '인프라/Kubernetes', concepts: 0, material: 1 }]));
+
+    // 미리보기는 바꾸지 않고, 3단계를 넘어 합쳐지는 이동을 따로 알린다
+    const rename = { assign: [], rename: [{ from: 'Java', to: '백엔드/Java' }] };
+    const merged = [{ from: 'Java/Spring/JPA', to: '백엔드/Java/Spring' }];
+    expect((await callTool(url, 'update_categories', { ...rename, dry_run: true })).structuredContent).toMatchObject({ dry_run: true, merged });
+    expect((await concept('jpa'))!.domain).toBe('Java/Spring/JPA');
+    expect((await callTool(url, 'update_categories', rename)).structuredContent).toMatchObject({ renamed: 1, merged });
+    expect((await concept('jpa'))!.domain).toBe('백엔드/Java/Spring');
+
+    // 두 번 바꾼 이름도 끝까지 따라간다: Java/Spring → 백엔드/Java/Spring → 백엔드/Spring
+    await callTool(url, 'update_categories', { assign: [], rename: [{ from: '백엔드/Java/Spring', to: '백엔드/Spring' }] });
+    await save2('bean', 'Java/Spring');
+    expect((await concept('bean'))!.domain).toBe('백엔드/Spring');
   });
 
   it('repairs categories saved before normalization and concepts saved during the deploy gap', async () => {

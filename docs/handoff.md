@@ -190,6 +190,7 @@
   - `find_concepts`, `save_learning`, `get_learner_context`
   - `get_review_queue`, `submit_review`, `get_interview_chain`
   - `get_categories`, `update_categories` (`destructiveHint: true`라 Always allow를 권하지 않는다)
+    - `get_categories`는 분류마다 공부한 수(`concepts`)와 자료 수(`material`)를 따로 준다. `update_categories`의 `dry_run`은 바꾸지 않고 옮길 내용을 주고, 3단계에서 잘려 합쳐지는 이동은 `merged`로 따로 준다. 옛 이름은 바뀌지 않을 때까지 5번까지 이어서 따른다 (2026-10-19)
 - **복습 엔진** (ts-fsrs 5.4.2, [설계서 §9](design.md#9-복습-엔진)):
   - 오늘 큐: 학습 → 복습 → 새 카드 순서다. 하루 상한이 있고, 같은 개념은 하루 1장이다.
   - 카드 사다리: 1~3단계다 (1 떠올리기, 2 빈칸·코드, 3 설명하기). 열린 단계의 카드가 모두 안정도 7일 이상이면 다음 단계가 열린다. 열리면 `level_ups`에 실린다.
