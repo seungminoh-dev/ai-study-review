@@ -18,11 +18,12 @@ async function fillAccount(user: TestUser): Promise<void> {
   // 통계를 보면 첫 저장·첫 복습 배지가 생긴다
   await api(user, '/stats');
   expect(await env.DB.prepare('SELECT count(*) AS n FROM badges WHERE user_id = ?1').bind(user.id).first<number>('n')).toBeGreaterThan(0);
-  expect((await api(user, '/shared-questions', { method: 'POST', json: { concept_name: '깊은 복사', question: '깊은 복사는 언제 필요할까요?' } })).status).toBe(204);
   const now = Date.now();
   await env.DB.batch([
     env.DB.prepare("INSERT INTO user_identities (provider, subject, user_id, login, created_at) VALUES ('github', ?1, ?2, 'gone', ?3)").bind(crypto.randomUUID(), user.id, now),
     env.DB.prepare("INSERT INTO streak_freezes (user_id, day) VALUES (?1, '2026-10-01')").bind(user.id),
+    // 질문 은행 API는 지웠지만 예전에 공유한 질문은 남아 있다
+    env.DB.prepare("INSERT INTO shared_questions (id, user_id, concept_name, question, created_at) VALUES (?1, ?2, '깊은 복사', '깊은 복사는 언제 필요할까요?', ?3)").bind(crypto.randomUUID(), user.id, now),
     env.DB.prepare("INSERT INTO llm_jobs (id, user_id, kind, status, created_at, updated_at) VALUES (?1, ?2, 'grade', 'done', ?3, ?3)").bind(crypto.randomUUID(), user.id, now),
     env.DB.prepare(
       "INSERT INTO llm_usage (id, user_id, job_id, kind, model, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_micro_usd, created_at) VALUES (?1, ?2, 'j', 'grade', 'm', 1, 1, 0, 0, 1234, ?3)",

@@ -33,12 +33,6 @@ export function studyWeekday(index: number): number {
   return (((index + 3) % 7) + 7) % 7;
 }
 
-/** 이번 주(월요일 04:00 KST부터)의 시작 시각 */
-export function studyWeekStart(now: number): number {
-  const today = studyDayIndex(now);
-  return (today - studyWeekday(today)) * DAY_MS - STUDY_DAY_SHIFT_MS;
-}
-
 /** SQL에서 복습 하루 번호를 셀 때 더하는 값: (reviewed_at + 이 값) / DAY_MS */
 export const STUDY_DAY_SHIFT = STUDY_DAY_SHIFT_MS;
 

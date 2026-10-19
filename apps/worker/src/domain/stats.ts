@@ -1,9 +1,9 @@
-import type { LeagueEntry, StatsResponse } from '@moai/shared';
+import type { StatsResponse } from '@moai/shared';
 import type { Env } from '../env';
 import { badgeReads, settleBadges } from './badges';
-import { DAY_MS, STUDY_DAY_SHIFT, studyDayIndex, studyDayKey, studyWeekStart, studyWeekday } from '../lib/kst';
+import { DAY_MS, STUDY_DAY_SHIFT, studyDayIndex, studyDayKey, studyWeekday } from '../lib/kst';
 
-// 스트릭·XP·리그 (설계서 §9.6). 따로 저장하지 않고 review_logs와 learning_sessions에서 센다. 프리즈만 저장한다.
+// 스트릭·XP (설계서 §9.6). 따로 저장하지 않고 review_logs와 learning_sessions에서 센다. 프리즈만 저장한다.
 
 /** XP: 정답 10, 오답 2, 설명하기 완료 20, 학습 세션 저장 30 */
 const REVIEW_XP = `CASE WHEN c.type = 'explain' THEN 20 WHEN r.grade >= 2 THEN 10 ELSE 2 END`;
@@ -103,23 +103,4 @@ export async function loadStats(env: Env, userId: string, now: number): Promise<
     history: Array.from({ length: 84 }, (_, i) => dayOf(monday - 77 + i)),
     badges,
   };
-}
-
-/** 이번 주 XP 순위. 친구끼리만 쓰는 서비스라 모든 사용자의 이름과 XP를 보여 준다 */
-export async function loadLeague(env: Env, userId: string, now: number): Promise<{ week_start: number; entries: LeagueEntry[] }> {
-  const start = studyWeekStart(now);
-  const [users, reviews, sessions] = await env.DB.batch([
-    env.DB.prepare('SELECT id, display_name FROM users'),
-    env.DB.prepare(
-      `SELECT r.user_id, sum(${REVIEW_XP}) AS xp FROM review_logs r JOIN cards c ON c.id = r.card_id WHERE r.reviewed_at >= ?1 GROUP BY r.user_id`,
-    ).bind(start),
-    env.DB.prepare('SELECT user_id, count(*) AS n FROM learning_sessions WHERE created_at >= ?1 GROUP BY user_id').bind(start),
-  ]);
-  const xp = new Map<string, number>();
-  for (const row of reviews!.results as { user_id: string; xp: number }[]) xp.set(row.user_id, row.xp);
-  for (const row of sessions!.results as { user_id: string; n: number }[]) xp.set(row.user_id, (xp.get(row.user_id) ?? 0) + row.n * SESSION_XP);
-  const entries = (users!.results as { id: string; display_name: string }[])
-    .map((row) => ({ name: row.display_name, xp: xp.get(row.id) ?? 0, me: row.id === userId }))
-    .sort((a, b) => b.xp - a.xp || a.name.localeCompare(b.name, 'ko'));
-  return { week_start: start, entries };
 }

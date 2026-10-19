@@ -245,7 +245,7 @@ claude.ai에서 공부하다가 "정리해줘"라고 하면, 대화 중인 Claud
 | 채팅 복습 도구 | 완료 | `get_review_queue`(정답 없는 문제, 카드·날마다 정해지는 보기 글자), `submit_review`(서버 채점, 같은 FSRS 기록). 설명하기는 기준을 먼저 받고 등급을 정해 다시 부르면 기록한다 |
 | 확신도 | 완료 | 고른 뒤 정답을 보기 전에 확실/반반/찍음. 찍거나 반반으로 맞히면 Hard(틀림으로 세지 않는다). 확신했는데 틀린 답은 따로 짚는다 (`review_logs.confidence`, 0004) |
 | 꼬리물기 체인·모의면접 | 완료 | `get_interview_chain`: 최근에 많이 틀린 개념(또는 주제·key)에서 시작해 연결선(꼬리질문 → 비교 → 선행)을 따라 2~5개를 고르고 과거 기록을 준다 |
-| 질문 은행 공유 | 완료 | 친구끼리 질문과 개념 이름만 공유한다. 답과 판정은 공유하지 않는다 (`shared_questions`, 0005) |
+| 질문 은행 공유 | 뺐다 | 화면은 2026-10-18, API는 2026-10-19에 뺐다. `shared_questions` 테이블(0005)과 데이터는 남겨서 내보내기·계정 지우기에 들어간다 |
 | 베타 지표 | 완료 | 오너 설정 화면: 주간 복습자 비율, 카드 신고율, 이번 달 AI 비용 (§2.3 끝났다는 기준) |
 | 자동 분류 | 완료 | 저장할 때 Claude가 기존 분류에서 고르고 서버가 모양·철자를 맞춘다. 지도·복습·모의면접 필터, 채팅 분류 정리 도구 (§5.6) |
 | PDF 자료 | 완료 | claude.ai에 PDF 첨부 또는 `/moai:pdf`. 장별로 나눠 저장하고, 풀기 전까지 내 지식과 분리한다 (§5.6). 앱에서 PDF를 올리는 방식은 만들지 않기로 했다 (2026-10-19) |
@@ -880,7 +880,7 @@ export const SaveLearningInput = z.object({
 | 1.5 | `POST /api/auth/logout` | 이 기기의 세션만 끝내기 |
 | 1.5 | `GET /api/invites`, `POST /api/invites`, `DELETE /api/invites/:id` | 초대 목록, 만들기(코드는 이때 한 번만), 안 쓴 초대 지우기 (오너만) |
 | 2 | `GET /api/map`, `GET /api/concepts/:key` | 지식 지도, 개념 상세 |
-| 2 | `GET /api/stats`, `GET /api/league` | 스트릭·XP·목표, 이번 주 친구 리그 |
+| 2 | `GET /api/stats` | 스트릭·XP·목표 |
 | 2 | `POST /api/cards/:id/report`, `PATCH /api/cards/:id` | 카드 신고(즉시 정지), 카드 수정 |
 | 2 | `POST /api/reviews/:id/undo` | 마지막 채점 되돌리기 |
 | 2 | `POST /api/cards/:id/grade-ai`, `GET /api/jobs/:id` | AI 채점 요청(202)과 결과 확인 |
@@ -1021,7 +1021,7 @@ PWA 쪽:
 
 - XP: 복습 정답 10, 오답 2, 설명하기 완료 20, 학습 세션 저장 30. `review_logs`와 `learning_sessions`에서 계산한다.
 - 스트릭: 하루(04:00 KST 경계)에 `daily_goal`(기본 5장) 이상 복습한 날이 이어진 수. 빠진 날이 있으면 그 주의 프리즈 1회를 자동으로 쓴다 (`streak_freezes`).
-- 주간 리그: 월요일 04:00 KST에 시작해서 친구 전체를 XP 순으로 보여 준다.
+- 주간 리그는 2026-10-19에 뺐다. 다른 회원의 이름과 XP는 보이지 않는다.
 
 ### 9.7 개념 상태와 지식 지도 (MVP 2)
 

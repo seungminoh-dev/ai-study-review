@@ -182,12 +182,6 @@ export interface Badge {
   target: number;
 }
 
-export interface LeagueEntry {
-  name: string;
-  xp: number;
-  me: boolean;
-}
-
 /** 개념 상태 (설계서 §9.7): 아직 안 배움(점선) · 익숙함(초록) · 흔들림(노랑) · 자료(아직 안 푼 자료, 내 지식 아님) */
 export type ConceptStateKey = 'unlearned' | 'familiar' | 'shaky' | 'material';
 
@@ -290,24 +284,6 @@ export interface CategoryNode {
 
 export const ConceptCategoryBody = z.object({ category: z.string().trim().max(80).nullable() });
 export const MaterialBody = z.object({ title: z.string().trim().min(1).max(120) });
-
-/** 질문 은행에 질문 하나 공유하기. 질문과 개념 이름만 보낸다 */
-export const ShareQuestionBody = z.object({
-  concept_name: z.string().trim().min(1).max(60),
-  question: z.string().trim().min(5).max(300),
-});
-
-export interface SharedQuestion {
-  id: string;
-  concept_name: string;
-  question: string;
-  /** 공유한 친구 이름 */
-  by: string;
-  mine: boolean;
-  created_at: number;
-  /** claude.ai에 붙여 넣을 프롬프트 */
-  prompt: string;
-}
 
 /** 베타 지표 (설계서 §2.3 끝났다는 기준) */
 export interface BetaMetrics {

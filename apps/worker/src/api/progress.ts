@@ -2,16 +2,14 @@ import { DailyGoalBody } from '@moai/shared';
 import { Hono } from 'hono';
 import type { AppEnv } from '../context';
 import { loadConcept, loadMap } from '../domain/map';
-import { loadLeague, loadStats } from '../domain/stats';
+import { loadStats } from '../domain/stats';
 import { errorJson, readJson } from '../lib/http';
 
-// 스트릭·XP·리그, 지식 지도와 개념 상세 (설계서 §9.6, §9.7)
+// 스트릭·XP, 지식 지도와 개념 상세 (설계서 §9.6, §9.7)
 
 export const progress = new Hono<AppEnv>();
 
 progress.get('/stats', async (c) => c.json(await loadStats(c.env, c.var.userId, Date.now())));
-
-progress.get('/league', async (c) => c.json(await loadLeague(c.env, c.var.userId, Date.now())));
 
 progress.put('/goal', async (c) => {
   const body = await readJson(c, DailyGoalBody);
