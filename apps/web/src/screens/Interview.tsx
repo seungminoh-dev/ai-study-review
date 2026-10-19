@@ -1,8 +1,9 @@
 import type { ImportResult, InterviewResponse, InterviewSummary } from '@moai/shared';
-import { CREDIT_COST, creditsLeft } from '@moai/shared/client';
+import { CREDIT_COST } from '@moai/shared/client';
 import * as m from 'motion/react-m';
 import { Fragment, useEffect, useRef, useState, type FormEvent } from 'react';
 import { JOB_ERROR, forgetAiStatus, waitForJob } from '../ai';
+import { AiNotice, useAiNotice } from '../cards/AskConcept';
 import { RequestError, errorMessage, request } from '../api';
 import { Mascot } from '../Mascot';
 import { SOFT } from '../motion';
@@ -25,7 +26,6 @@ export function Interview({ concept, category }: { concept: string | null; categ
   const [turns, setTurns] = useState<Turn[]>([]);
   const [question, setQuestion] = useState<string | null>(null);
   const [summary, setSummary] = useState<InterviewSummary | null>(null);
-  const [left, setLeft] = useState<number | null>(null);
   const [waiting, setWaiting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [text, setText] = useState('');
@@ -42,7 +42,6 @@ export function Interview({ concept, category }: { concept: string | null; categ
         json: chain ? { keys: chain.keys, turns: sent } : { ...(concept ? { concept_key: concept } : {}), ...(category ? { category } : {}), turns: [] },
       });
       setChain({ keys: response.keys, names: response.names, total: response.total });
-      setLeft(creditsLeft(response.credits));
       forgetAiStatus();
       setSummary(response.summary);
       setQuestion(response.question?.question ?? null);
@@ -66,8 +65,10 @@ export function Interview({ concept, category }: { concept: string | null; categ
     if (question) input.current?.focus({ preventScroll: true });
   }, [turns.length, question, waiting, summary, error]);
 
+  const notice = useAiNotice();
   const answer = (value: string) => {
     if (!question || waiting) return;
+    notice.dismiss();
     const sent = [...turns, { question, answer: value.trim() }];
     setTurns(sent);
     setQuestion(null);
@@ -127,6 +128,7 @@ export function Interview({ concept, category }: { concept: string | null; categ
       </div>
 
       <div className="interview-log" aria-live="polite">
+        {notice.show ? <AiNotice onDismiss={notice.dismiss} /> : null}
         {turns.map((turn, index) => (
           <Fragment key={index}>
             <p className="bubble ai">{turn.question}</p>
@@ -183,7 +185,6 @@ export function Interview({ concept, category }: { concept: string | null; categ
               답하기
             </button>
           </div>
-          <p className="ask-foot">{left !== null ? `질문 하나에 ${CREDIT_COST.interview} 크레딧 · 남은 크레딧 ${left} · ` : ''}AI가 묻고 정리해요. 틀릴 수 있어요</p>
           <p className="kbd-hint muted small">키보드: Ctrl+Enter 답하기</p>
         </form>
       )}

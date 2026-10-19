@@ -32,7 +32,7 @@ import {
 import { buzz } from '../prefs';
 import { play, type Sound } from '../sound';
 import { StreakGoal } from '../progress';
-import { materialReview, partView } from '../materials';
+import { currentMaterial, materialReview, partView, rememberMaterial } from '../materials';
 import { Link, goTab, leave } from '../router';
 
 // 복습 세션 (설계서 §12.1, §12.2). 카드 한 장씩: 답 고르기 → 맞음·틀림과 해설 → 다음.
@@ -111,6 +111,11 @@ export function Review({
   exam?: boolean;
 }) {
   const [load, setLoad] = useState<Load>({ state: 'loading' });
+
+  // 자료를 풀기 시작하면 그 자료를 기억한다. 학습 탭과 오늘 화면이 이 자료로 이어서 연다 (시험은 빼고)
+  useEffect(() => {
+    if (material && !exam) rememberMaterial(material);
+  }, [material, exam]);
 
   useEffect(() => {
     let cancelled = false;
@@ -668,7 +673,7 @@ function Summary({
         const [next, materials] = await Promise.all([request<StatsResponse>('/stats'), request<{ materials: MaterialSummary[] }>('/materials').catch(() => null)]);
         if (cancelled) return;
         setStats(next);
-        setLearnNext(materials?.materials.find((material) => material.next !== null) ?? null);
+        setLearnNext(materials ? (currentMaterial(materials.materials, true) ?? null) : null);
       } catch {
         // 오프라인이면 숫자 없이 보여 준다
       }

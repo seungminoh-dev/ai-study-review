@@ -1,3 +1,4 @@
+import type { MaterialSummary } from '@moai/shared';
 import { splitPart } from '@moai/shared/client';
 
 // 자료 화면들이 같이 쓰는 주소와 표시 도우미
@@ -30,4 +31,49 @@ export function partView(part: string, index: number, label?: string): { no: str
   const lead = /^(\d{1,3})[.)]\s+(\S.*)$/.exec(name);
   // 사용자가 바꾼 이름이 있으면 이름만 바꾸고 번호와 쪽수는 원래 것을 쓴다
   return { no: (lead ? lead[1]! : String(index + 1)).padStart(2, '0'), name: label || (lead ? lead[2]! : name || '이름 없는 섹션'), pages };
+}
+
+const PICK = 'moai:material';
+
+/** 이 기기에서 고르거나 풀기 시작한 자료를 적어 둔다. 학습 탭, 오늘 화면, 복습 끝 화면이 이 자료로 이어서 연다 */
+export function rememberMaterial(title: string): void {
+  try {
+    localStorage.setItem(PICK, JSON.stringify({ title, at: Date.now() }));
+  } catch {
+    // 못 적으면 마지막으로 푼 자료를 따른다
+  }
+}
+
+/** 로그아웃하면 지운다. 같은 기기의 다음 사람에게 남기지 않는다 */
+export function forgetMaterial(): void {
+  try {
+    localStorage.removeItem(PICK);
+  } catch {
+    // 저장소를 못 쓰면 지울 것도 없다
+  }
+}
+
+function readPick(): { title: string; at: number } | null {
+  try {
+    const value = JSON.parse(localStorage.getItem(PICK) ?? 'null') as { title?: unknown; at?: unknown } | null;
+    return value && typeof value.title === 'string' && typeof value.at === 'number' ? { title: value.title, at: value.at } : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 지금 이어서 볼 자료: 이 기기에서 마지막으로 고른 자료와 (어느 기기에서든) 마지막으로 푼 자료 중 더 최근 것.
+ * 둘 다 없으면 새 카드가 남은 첫 자료. withNext면 새 카드가 남은 자료만 고른다 (오늘 화면, 복습 끝 화면)
+ */
+export function currentMaterial(materials: MaterialSummary[], withNext = false): MaterialSummary | undefined {
+  const usable = withNext ? materials.filter((material) => material.next !== null) : materials;
+  const pick = readPick();
+  const picked = pick ? usable.find((material) => material.title === pick.title) : undefined;
+  const studied = usable.reduce<MaterialSummary | undefined>(
+    (best, material) => (material.studied_at !== null && material.studied_at > (best?.studied_at ?? 0) ? material : best),
+    undefined,
+  );
+  if (picked && pick && pick.at >= (studied?.studied_at ?? 0)) return picked;
+  return studied ?? materials.find((material) => material.next !== null) ?? (withNext ? undefined : materials[0]);
 }

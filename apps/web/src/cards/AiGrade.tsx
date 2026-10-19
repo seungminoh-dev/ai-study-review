@@ -1,8 +1,8 @@
 import type { GradeResult, ReviewGrade } from '@moai/shared';
-import { CREDIT_COST } from '@moai/shared/client';
 import { useEffect, useRef, useState } from 'react';
 import { JOB_ERROR, aiStatus, forgetAiStatus, waitForJob } from '../ai';
 import { RequestError, errorMessage, request } from '../api';
+import { AiNotice, useAiNotice } from './AskConcept';
 
 // 설명하기 AI 채점 (설계서 §11.2): 문장별 판정, 빠진 항목, 두괄식, 질문 하나. 모범답안은 보여 주지 않는다.
 // 등급은 AI가 제안만 하고, 사용자가 눌러야 기록된다.
@@ -14,6 +14,7 @@ type State = { step: 'idle' } | { step: 'waiting' } | { step: 'done'; result: Gr
 export function AiGrade({ cardId, text, onSuggest }: { cardId: string; text: string; onSuggest: (grade: ReviewGrade) => void }) {
   const [available, setAvailable] = useState(false);
   const [state, setState] = useState<State>({ step: 'idle' });
+  const notice = useAiNotice();
   const abort = useRef(new AbortController());
 
   useEffect(() => {
@@ -24,6 +25,7 @@ export function AiGrade({ cardId, text, onSuggest }: { cardId: string; text: str
 
   if (!available) return null;
   const grade = async () => {
+    notice.dismiss();
     setState({ step: 'waiting' });
     try {
       const { job_id } = await request<{ job_id: string }>(`/cards/${cardId}/grade-ai`, { method: 'POST', json: { answer: text } });
@@ -48,9 +50,12 @@ export function AiGrade({ cardId, text, onSuggest }: { cardId: string; text: str
 
   if (state.step === 'idle') {
     return (
-      <button type="button" className="button ai-button" disabled={!text.trim()} onClick={() => void grade()}>
-        {text.trim() ? `AI에게 채점 받기 · ${CREDIT_COST.grade} 크레딧` : 'AI 채점은 설명을 써야 받을 수 있어요'}
-      </button>
+      <>
+        {notice.show ? <AiNotice onDismiss={notice.dismiss} /> : null}
+        <button type="button" className="button ai-button" disabled={!text.trim()} onClick={() => void grade()}>
+          {text.trim() ? 'AI에게 채점 받기' : 'AI 채점은 설명을 써야 받을 수 있어요'}
+        </button>
+      </>
     );
   }
   if (state.step === 'waiting') return <p className="notice">AI가 채점하는 중이에요… (보통 5~20초, 길면 2분). 기다리지 않고 자가 채점해도 돼요.</p>;

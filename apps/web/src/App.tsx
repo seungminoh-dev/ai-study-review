@@ -3,6 +3,7 @@ import * as m from 'motion/react-m';
 import { Suspense, lazy, useEffect, useState, type ComponentType, type ReactNode } from 'react';
 import { OfflineError, RequestError, errorMessage, onUnauthorized, request } from './api';
 import { forgetSeenBadges } from './badges';
+import { forgetMaterial } from './materials';
 import { IconBook, IconGrowth, IconHistory, IconHome, IconMap, IconOffline, IconSettings } from './icons';
 import { Loading, Splash } from './Loading';
 import { Mascot } from './Mascot';
@@ -159,6 +160,7 @@ async function claim(me: Me): Promise<void> {
 async function loggedOut(): Promise<Auth> {
   rememberMe(null);
   forgetSeenBadges();
+  forgetMaterial();
   const options = await request<AuthOptions>('/auth/options').catch((): AuthOptions => ({ setup_available: false, github: false }));
   return options.setup_available ? { state: 'setup' } : { state: 'out', github: options.github };
 }

@@ -259,6 +259,8 @@ export interface MaterialSummary {
   /** 풀어서 내 지식이 된 개념 */
   adopted: number;
   created_at: number;
+  /** 이 자료의 카드를 마지막으로 푼 시각 (어느 기기든). 안 풀었으면 null */
+  studied_at: number | null;
   /** 이어서 풀 섹션: 안 푼 열린 카드가 남은 첫 섹션 */
   next: { part: string; unsolved_open: number } | null;
   /** 섹션 원래 이름 → 사용자가 바꾼 이름. 바꾼 섹션만 있다 */

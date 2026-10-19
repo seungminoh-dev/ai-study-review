@@ -7,7 +7,7 @@ import { NewAchievements, NewBadges } from '../badges';
 import { IconArrow, IconBook, IconCheck, IconFlame, IconHistory, IconSettings } from '../icons';
 import { Loading } from '../Loading';
 import { Mascot } from '../Mascot';
-import { materialReview, partView } from '../materials';
+import { currentMaterial, materialReview, partView } from '../materials';
 import { cachedQueue, peekLevelUps, takeLevelUps } from '../offline/store';
 import { GoalRing, StreakGoal, WeekDays, todayLabel } from '../progress';
 import { isStandalone, pushState } from '../push';
@@ -176,7 +176,7 @@ export function ReviewHero({ data, className = '' }: { data: TodayResponse; clas
 
 /** 학습 카드: 이어서 풀 자료의 다음 섹션. 자료가 없거나 다 풀었으면 학습 탭으로 안내한다 */
 function LearnCard({ materials }: { materials: MaterialSummary[] }) {
-  const material = materials.find((item) => item.next !== null);
+  const material = currentMaterial(materials, true);
   return (
     <section className="card learn-card o-learn" aria-label="학습">
       <div className="card-head">

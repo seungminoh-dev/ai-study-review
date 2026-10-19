@@ -33,6 +33,7 @@ interface TotalsRow {
   concepts: number;
   adopted: number;
   created_at: number;
+  studied_at: number | null;
 }
 
 interface PartRow {
@@ -51,7 +52,8 @@ const TOTALS = `SELECT s.material AS title, min(s.created_at) AS created_at,
             sum(EXISTS (SELECT 1 FROM review_logs r WHERE r.card_id = c.id)) AS solved,
             sum(c.state = 0 AND c.status = 'active') AS unsolved_open,
             count(DISTINCT c.concept_id) AS concepts,
-            count(DISTINCT CASE WHEN k.adopted_at IS NOT NULL THEN c.concept_id END) AS adopted
+            count(DISTINCT CASE WHEN k.adopted_at IS NOT NULL THEN c.concept_id END) AS adopted,
+            max((SELECT max(r.reviewed_at) FROM review_logs r WHERE r.card_id = c.id)) AS studied_at
        FROM learning_sessions s JOIN cards c ON c.session_id = s.id JOIN concepts k ON k.id = c.concept_id
       WHERE s.user_id = ?1 AND s.material IS NOT NULL`;
 

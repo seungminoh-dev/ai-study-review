@@ -1,5 +1,5 @@
 import type { AskResponse, ImportResult, QueueCard } from '@moai/shared';
-import { CREDIT_COST, creditsLeft } from '@moai/shared/client';
+import { CREDIT_COST, MONTHLY_CREDITS, creditsLeft } from '@moai/shared/client';
 import { AnimatePresence } from 'motion/react';
 import * as m from 'motion/react-m';
 import { Fragment, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
@@ -36,6 +36,45 @@ const INTRO: Record<AskMode, string> = {
   right: '맞혔어요. 더 알고 싶은 게 있으면 고르거나 직접 물어봐요.',
   explain: '내 설명과 비교해서 궁금한 걸 물어봐요.',
 };
+
+const AI_NOTICE = 'moai:ai-notice';
+
+/**
+ * AI 기능을 처음 쓸 때 한 번만 보이는 안내 (크레딧, 틀릴 수 있음). "알겠어요"를 누르거나 처음 물어보면
+ * 이 기기에서는 다시 보이지 않는다. 개념 물어보기, 모의면접, AI 채점이 같이 쓴다
+ */
+export function useAiNotice(): { show: boolean; dismiss: () => void } {
+  const [show, setShow] = useState(() => {
+    try {
+      return localStorage.getItem(AI_NOTICE) === null;
+    } catch {
+      return false;
+    }
+  });
+  const dismiss = () => {
+    setShow(false);
+    try {
+      localStorage.setItem(AI_NOTICE, '1');
+    } catch {
+      // 못 적으면 다음에 한 번 더 보인다
+    }
+  };
+  return { show, dismiss };
+}
+
+export function AiNotice({ onDismiss }: { onDismiss: () => void }) {
+  return (
+    <div className="notice warn ai-notice" role="note">
+      <p>
+        <strong>처음 한 번만 알려 드려요.</strong> AI에게 묻는 질문 하나(모의면접 질문, AI 채점도)에 크레딧 {CREDIT_COST.ask}을 써요. 월간 크레딧{' '}
+        {MONTHLY_CREDITS}은 매달 1일에 다시 채워지고, AI 답은 틀릴 수 있어요.
+      </p>
+      <button type="button" className="text-button" onClick={onDismiss}>
+        알겠어요
+      </button>
+    </div>
+  );
+}
 
 /** 2차: 이 대화로 카드 만들기 */
 type Making = { state: 'idle' } | { state: 'making' } | { state: 'done'; summary: string; sessionId: string } | { state: 'failed'; message: string };
@@ -128,10 +167,16 @@ export function AskChat({ card, mode, picked, ask }: { card: QueueCard; mode: As
     if (element) element.scrollTop = element.scrollHeight;
   }, [ask.turns.length, ask.pending]);
 
+  const notice = useAiNotice();
+  const send = (question: string) => {
+    notice.dismiss();
+    void ask.ask(question);
+  };
+
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (ask.pending || ask.left < CREDIT_COST.ask || !text.trim()) return;
-    void ask.ask(text);
+    send(text);
     setText('');
   };
 
@@ -144,6 +189,7 @@ export function AskChat({ card, mode, picked, ask }: { card: QueueCard; mode: As
             {card.prompt} · {mode === 'explain' ? `내 설명: ${picked || '(머릿속으로)'}` : `내 답: ${card.type === 'ox' ? picked : `“${picked}”`}`}
           </span>
         </p>
+        {notice.show ? <AiNotice onDismiss={notice.dismiss} /> : null}
         <p className="bubble ai">{INTRO[mode]}</p>
         {ask.turns.map((turn, index) => (
           <Fragment key={index}>
@@ -169,7 +215,7 @@ export function AskChat({ card, mode, picked, ask }: { card: QueueCard; mode: As
         {!ask.pending && ask.left >= CREDIT_COST.ask ? (
           <div className="ask-suggest">
             {SUGGESTIONS[mode].filter((question) => !asked.has(question)).map((question) => (
-              <button key={question} type="button" className="ask-chip" onClick={() => void ask.ask(question)}>
+              <button key={question} type="button" className="ask-chip" onClick={() => send(question)}>
                 {question}
               </button>
             ))}
@@ -195,9 +241,6 @@ export function AskChat({ card, mode, picked, ask }: { card: QueueCard; mode: As
             <IconArrow />
           </button>
         </div>
-        <p className="ask-foot">
-          질문 한 번에 {CREDIT_COST.ask} 크레딧 · 남은 크레딧 {ask.left} · AI 답은 틀릴 수 있어요
-        </p>
       </form>
     </div>
   );

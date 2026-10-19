@@ -2,12 +2,12 @@ import type { MaterialDetail as Detail, MaterialPart } from '@moai/shared';
 import { materialLabel } from '@moai/shared/client';
 import { AnimatePresence } from 'motion/react';
 import * as m from 'motion/react-m';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { errorMessage, request } from '../api';
 import { IconChevron, IconExternal } from '../icons';
 import { Loading } from '../Loading';
 import { Mascot } from '../Mascot';
-import { materialReview, partView } from '../materials';
+import { materialReview, partView, rememberMaterial } from '../materials';
 import { LEAVE, Presence, SNAPPY, SOFT } from '../motion';
 import { Ring } from '../progress';
 import { EditableTitle } from '../EditableTitle';
@@ -44,6 +44,10 @@ function statusOf(part: MaterialPart): string {
 
 export function MaterialDetail({ title }: { title: string }) {
   const { data, error, reload } = useApi<Detail>(`/materials/detail?${new URLSearchParams({ title })}`);
+  // 자료를 눌러 들어오면 그 자료를 기억한다. 학습 탭이 이 자료로 열린다
+  useEffect(() => {
+    rememberMaterial(title);
+  }, [title]);
   const [filter, setFilter] = useState<Filter>('all');
   /** 휴대폰에서 펼친 섹션, 컴퓨터에서 고른 섹션 */
   const [open, setOpen] = useState<string | null>(null);

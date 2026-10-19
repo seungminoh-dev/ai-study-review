@@ -6,7 +6,7 @@ import { EditableTitle } from '../EditableTitle';
 import { IconArrow, IconBook, IconCheck, IconChevron } from '../icons';
 import { Loading } from '../Loading';
 import { Mascot } from '../Mascot';
-import { examHref, materialHref, materialReview, partView } from '../materials';
+import { currentMaterial, examHref, materialHref, materialReview, partView, rememberMaterial } from '../materials';
 import { Link } from '../router';
 import { useApi } from '../useApi';
 
@@ -22,6 +22,10 @@ const two = (n: number) => String(n).padStart(2, '0');
 
 export function Learn({ title }: { title: string | null }) {
   const { data, error } = useApi<{ materials: MaterialSummary[] }>('/materials');
+  // 고른 자료를 기억해 둔다. 아래 탭으로 다시 와도 이 자료가 열린다
+  useEffect(() => {
+    if (title) rememberMaterial(title);
+  }, [title]);
   if (error) {
     return (
       <div className="screen learn-screen">
@@ -45,8 +49,8 @@ export function Learn({ title }: { title: string | null }) {
       </div>
     );
   }
-  // 고른 자료, 없으면 이어서 풀 자료, 그것도 없으면 첫 자료
-  const material = data.materials.find((item) => item.title === title) ?? data.materials.find((item) => item.next) ?? data.materials[0]!;
+  // 고른 자료, 없으면 마지막으로 고르거나 푼 자료, 그것도 없으면 이어서 풀 자료나 첫 자료
+  const material = data.materials.find((item) => item.title === title) ?? currentMaterial(data.materials) ?? data.materials[0]!;
   return <MaterialPath key={material.title} material={material} materials={data.materials} />;
 }
 
