@@ -89,6 +89,34 @@ function Onboarding({ saved }: { saved: boolean }) {
   );
 }
 
+/** 오늘 화면 머리의 픽셀 하늘과 언덕 (5단계 배경 C). 96×38 그림을 4배로 키워 가로로 이어 붙인다. 색은 styles.css의 --sky, --hill-* */
+function Hills() {
+  return (
+    <svg className="hills-art" aria-hidden="true" shapeRendering="crispEdges">
+      <defs>
+        <pattern id="hills-tile" width="96" height="38" patternUnits="userSpaceOnUse" patternTransform="scale(4)">
+          <rect className="sky" width="96" height="38" />
+          <rect className="star" x="12" y="6" width="2" height="2" />
+          <rect className="star" x="44" y="4" width="2" height="2" />
+          <rect className="star" x="78" y="8" width="2" height="2" />
+          <rect className="spark" x="64" y="3" width="1" height="1" />
+          <rect className="far" x="0" y="24" width="96" height="14" />
+          <rect className="far" x="0" y="20" width="22" height="4" />
+          <rect className="far" x="4" y="17" width="14" height="3" />
+          <rect className="far" x="30" y="22" width="30" height="2" />
+          <rect className="far" x="36" y="19" width="18" height="3" />
+          <rect className="far" x="66" y="21" width="30" height="3" />
+          <rect className="far" x="72" y="16" width="18" height="5" />
+          <rect className="near" x="0" y="30" width="96" height="8" />
+          <rect className="near" x="10" y="28" width="26" height="2" />
+          <rect className="near" x="58" y="27" width="30" height="3" />
+        </pattern>
+      </defs>
+      <rect width="100%" height="100%" fill="url(#hills-tile)" />
+    </svg>
+  );
+}
+
 /** 복습 카드: 남은 장수와 나누기(틀린 것·다시 볼 때·대화에서 온 새 카드), 시작 버튼. 복습 탭도 같이 쓴다 */
 export function ReviewHero({ data, className = '' }: { data: TodayResponse; className?: string }) {
   const empty = data.remaining === 0;
@@ -448,9 +476,10 @@ export function Today({ name }: { name: string }) {
 
   return (
     <div className="today">
-      <header className="today-head">
+      <header className="today-head hills">
+        <Hills />
         {/* 할 카드가 있으면 휴대폰을 흔들고, 오늘 다 했으면 쉰다 (사용자 시트의 복습 알림·휴식) */}
-        <Mascot mood={data.remaining > 0 ? 'alarm' : data.reviewed_today > 0 ? 'sleep' : 'happy'} size={40} />
+        <Mascot mood={data.remaining > 0 ? 'alarm' : data.reviewed_today > 0 ? 'sleep' : 'happy'} size={56} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <p>
             {todayLabel()} · {name}님

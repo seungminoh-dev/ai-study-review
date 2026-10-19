@@ -323,7 +323,7 @@ export function App() {
 
   // 복습, 모의면접, 시작 가이드는 메뉴 없이 집중한다. 오늘·성장·지도는 컴퓨터에서 넓게 쓴다
   const focus = path === '/review' || path === '/interview' || path === '/welcome';
-  const wide = path === '/' || path === '/growth' || path === '/map' || path === '/materials/detail';
+  const wide = path === '/' || path === '/learn' || path === '/growth' || path === '/map' || path === '/materials/detail';
   const section = sectionOf(path);
   return (
     <div className={focus ? 'shell focus' : 'shell'}>
