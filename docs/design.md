@@ -984,6 +984,7 @@ export const SaveLearningInput = z.object({
   - `/.well-known/oauth-protected-resource`, `/.well-known/oauth-authorization-server`: 메타데이터. `/mcp`가 401을 줄 때 `WWW-Authenticate`로 앞의 주소를 알려 준다.
   - `/oauth/register`: 동적 클라이언트 등록. Client ID Metadata Document(주소가 client_id인 방식)도 받는다 (`global_fetch_strictly_public` 플래그가 내부 주소로 가는 fetch를 막는다).
   - `/authorize`: 허용 화면 (`auth/authorize.ts`). `/oauth/token`: 토큰 발급(PKCE).
+- 연결할 수 있는 앱 (2026-10-20, 개선점 P0): 리디렉트 주소는 https의 `claude.ai`·`claude.com`, 또는 이 컴퓨터(`localhost`, `127.0.0.1`, `[::1]`)만 받는다. 등록(`clientRegistrationCallback`)에서 하나라도 밖이면 거절하고, 허용 화면 GET·POST에서도 다시 본다(예전에 저장된 클라이언트 대비). 주소로 된 client_id(CIMD)는 `claude.ai`·`claude.com`만, 라이브러리가 그 주소를 읽기 전에 거른다. 아무 주소나 받으면 피싱 한 번으로 회원 데이터를 읽고 쓰는 토큰이 남의 서버로 가기 때문이다.
 - 권한은 하나(`moai`): 이 사람의 모아이를 읽고 쓴다. 액세스 토큰 1시간, 리프레시 토큰 60일(60일 안 쓰면 만료).
 - 허용 화면:
   - 서버가 그리는 HTML이고 스크립트가 없다. CSP `default-src 'none'`, `frame-ancestors 'none'`, `no-store`. 클라이언트 이름 같은 값은 모두 이스케이프한다.

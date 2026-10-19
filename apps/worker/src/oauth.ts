@@ -1,6 +1,6 @@
-import { OAuthProvider, type OAuthProviderOptions } from '@cloudflare/workers-oauth-provider';
+import { OAuthProvider, getOAuthApi, type OAuthHelpers, type OAuthProviderOptions } from '@cloudflare/workers-oauth-provider';
 import { app } from './app';
-import { OAUTH_SCOPE } from './auth/authorize';
+import { CLIENT_NOT_ALLOWED, OAUTH_SCOPE, allowedRedirect } from './auth/authorize';
 import type { Env } from './env';
 import { serveMcp } from './mcp/route';
 
@@ -27,6 +27,12 @@ function options(env: Env): OAuthProviderOptions<Env> {
     tokenEndpoint: '/oauth/token',
     clientRegistrationEndpoint: '/oauth/register',
     clientIdMetadataDocumentEnabled: true,
+    // 등록할 때부터 리디렉트 주소를 Claude와 이 컴퓨터로 묶는다 (허용 화면도 한 번 더 본다)
+    clientRegistrationCallback: ({ clientMetadata }) => {
+      const uris = clientMetadata.redirect_uris;
+      const ok = Array.isArray(uris) && uris.length > 0 && uris.every((uri) => typeof uri === 'string' && allowedRedirect(uri));
+      return ok ? undefined : { description: CLIENT_NOT_ALLOWED };
+    },
     scopesSupported: [OAUTH_SCOPE],
     requiredScopes: [OAUTH_SCOPE],
     resourceMetadata: { resource: `${env.APP_ORIGIN}/mcp`, authorization_servers: [env.APP_ORIGIN], resource_name: '모아이' },
@@ -39,6 +45,9 @@ function options(env: Env): OAuthProviderOptions<Env> {
 
 /** 주소(APP_ORIGIN)는 실행할 때 env로 알 수 있어서 처음 요청 때 만든다 */
 const providers = new Map<string, OAuthProvider<Env>>();
+
+/** 요청 밖(테스트)에서 쓰는 OAuth 도우미 */
+export const oauthHelpers = (env: Env): OAuthHelpers => getOAuthApi(options(env), env);
 
 export function oauthProvider(env: Env): OAuthProvider<Env> {
   let provider = providers.get(env.APP_ORIGIN);

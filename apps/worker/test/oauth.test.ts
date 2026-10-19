@@ -2,6 +2,7 @@ import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
 import example from '../../../packages/shared/fixtures/immutable-object.json';
 import { base64url, sha256 } from '../src/lib/crypto';
+import { oauthHelpers } from '../src/oauth';
 import { ORIGIN, api, newUser, readRpc, workerFetch } from './helpers';
 
 // OAuth 커넥터 인증은 로그인과 같은 무게라 흐름 전체를 본다: 등록 → (로그인 확인) → 허용 → 토큰 → MCP → 끊기
@@ -42,6 +43,30 @@ const mcpCall = (token: string) =>
   });
 
 describe('OAuth connector', () => {
+  it('only connects Claude and programs on this computer', async () => {
+    const registerWith = (redirect_uris: string[]) =>
+      workerFetch(`${ORIGIN}/oauth/register`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ client_name: 'Claude', redirect_uris, token_endpoint_auth_method: 'none' }),
+      });
+    expect((await registerWith(['https://evil.example/callback'])).status).toBe(400);
+    expect((await registerWith([REDIRECT, 'https://claude.ai.evil.example/cb'])).status).toBe(400);
+    expect((await registerWith(['http://localhost:51234/callback'])).status).toBe(201);
+    expect((await registerWith(['https://claude.com/api/mcp/auth_callback'])).status).toBe(201);
+
+    const user = await newUser('피싱 대상');
+    // 등록을 거치지 않은 앱(주소로 된 client_id)도 Claude 주소가 아니면 허용 화면을 보여 주지 않는다
+    const forged = new URLSearchParams({ response_type: 'code', client_id: 'https://evil.example/client.json', redirect_uri: 'https://evil.example/cb', state: 's', code_challenge: 'x'.repeat(43), code_challenge_method: 'S256', scope: 'moai' });
+    const page = await workerFetch(`${ORIGIN}/authorize?${forged}`, { headers: { cookie: user.cookie } });
+    expect(page.status).toBe(400);
+    expect(await page.text()).toContain('Claude(claude.ai·claude.com)');
+    // 예전에 저장된 다른 주소의 클라이언트도 허용 화면에서 막는다
+    const old = await oauthHelpers(env).createClient({ redirectUris: ['https://evil.example/cb'], clientName: '옛 앱', tokenEndpointAuthMethod: 'none' });
+    const legacy = new URLSearchParams({ response_type: 'code', client_id: old.clientId, redirect_uri: 'https://evil.example/cb', state: 's', code_challenge: 'x'.repeat(43), code_challenge_method: 'S256', scope: 'moai' });
+    expect((await workerFetch(`${ORIGIN}/authorize?${legacy}`, { headers: { cookie: user.cookie } })).status).toBe(400);
+  });
+
   it('points an unauthenticated MCP client at the authorization server', async () => {
     const response = await workerFetch(`${ORIGIN}/mcp`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
     expect(response.status).toBe(401);

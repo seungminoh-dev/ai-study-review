@@ -12,6 +12,35 @@ export const authorize = new Hono<AppEnv>();
 /** 권한은 하나다: 이 사람의 모아이를 읽고 쓴다 */
 export const OAUTH_SCOPE = 'moai';
 
+// 연결할 수 있는 앱은 Claude(claude.ai·claude.com)와 이 컴퓨터의 프로그램(Claude Code)뿐이다.
+// 아무 리디렉트 주소나 받으면, 피싱 한 번으로 회원의 학습 데이터를 읽고 쓰는 토큰이 남의 서버로 간다.
+const CLAUDE_HOSTS = new Set(['claude.ai', 'claude.com']);
+const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
+export const CLIENT_NOT_ALLOWED = '모아이는 Claude(claude.ai·claude.com)와 이 컴퓨터의 프로그램(Claude Code)만 연결할 수 있어요.';
+
+function parseUrl(value: string): URL | null {
+  try {
+    return new URL(value);
+  } catch {
+    return null;
+  }
+}
+
+/** 권한(코드)을 보내도 되는 주소: https의 Claude 주소, 또는 이 컴퓨터(loopback) */
+export function allowedRedirect(value: string): boolean {
+  const url = parseUrl(value);
+  if (!url || url.username || url.password) return false;
+  if (LOOPBACK_HOSTS.has(url.hostname)) return url.protocol === 'http:' || url.protocol === 'https:';
+  return url.protocol === 'https:' && CLAUDE_HOSTS.has(url.hostname);
+}
+
+/** client_id가 주소(CIMD)면 Claude 주소만 받는다. 등록해서 받은 id(주소가 아닌 값)는 그대로 둔다 */
+export function allowedClientId(value: string): boolean {
+  if (!/^https?:/i.test(value)) return true;
+  const url = parseUrl(value);
+  return url !== null && url.protocol === 'https:' && CLAUDE_HOSTS.has(url.hostname);
+}
+
 const escape = (value: string) => value.replace(/[&<>"']/g, (char) => `&#${char.charCodeAt(0)};`);
 
 /** 허용 화면은 남의 사이트 안에 넣지 못하게 하고, 스크립트 없이 인라인 스타일만 쓴다 */
@@ -100,12 +129,16 @@ function handleError(c: Context<AppEnv>, error: unknown): Response {
 authorize.get('/', async (c) => {
   const oauth = c.env.OAUTH_PROVIDER;
   if (!oauth) return errorPage(c, '서버 설정이 끝나지 않았어요.');
+  // 주소로 된 client_id는 라이브러리가 그 주소를 읽어 오기 전에 거른다
+  const clientId = new URL(c.req.url).searchParams.get('client_id');
+  if (clientId !== null && !allowedClientId(clientId)) return errorPage(c, CLIENT_NOT_ALLOWED);
   let request: AuthRequest;
   try {
     request = await oauth.parseAuthRequest(c.req.raw);
   } catch (error) {
     return handleError(c, error);
   }
+  if (!allowedClientId(request.clientId) || !allowedRedirect(request.redirectUri)) return errorPage(c, CLIENT_NOT_ALLOWED);
   const session = await currentSession(c, Date.now());
   if (!session) {
     // 로그인하고 나면 이 주소로 돌아온다 (Login 화면이 /authorize?로 시작하는 next만 따른다)
@@ -146,6 +179,7 @@ authorize.post('/', async (c) => {
       return new Response(null, { status: 302, headers: denied.headers });
     }
     const approved = await oauth.approveConsent(c.req.raw, handle, { scope: [OAUTH_SCOPE] });
+    if (!allowedClientId(approved.request.clientId) || !allowedRedirect(approved.request.redirectUri)) return errorPage(c, CLIENT_NOT_ALLOWED);
     const { redirectTo } = await oauth.completeAuthorization({
       request: approved.request,
       userId: session.user_id,
