@@ -8,6 +8,26 @@ import { RequestError, request } from '../api';
 const store = createStore('moai', 'kv');
 const OUTBOX = 'outbox';
 const QUEUE = 'queue';
+/** 이 기기의 답과 큐를 남긴 사람의 id */
+const OWNER = 'owner';
+
+/** 이번 실행에서 서버로 로그인을 확인한 사람. 확인하기 전에는 답을 보내지 않는다. 앞사람의 답이 새 사람 쿠키로 가지 않게 */
+let confirmed: string | null = null;
+
+/**
+ * 로그인한 사람을 이 기기 데이터의 주인으로 적고 밀린 답을 보낸다.
+ * 세션이 끝난 뒤 다른 사람이 로그인했으면 앞사람이 남긴 답과 큐를 지우고 true. 같은 사람이면 못 보낸 답을 이어서 보낸다.
+ */
+export async function claimDevice(userId: string): Promise<boolean> {
+  const owner = await get<string>(OWNER, store);
+  // 주인을 적기 전 버전이 남긴 데이터는 지금 사람의 것으로 본다
+  const switched = owner !== undefined && owner !== userId;
+  if (switched) await clear(store);
+  if (owner !== userId) await set(OWNER, userId, store);
+  confirmed = userId;
+  void flushReviews();
+  return switched;
+}
 
 export async function enqueueReview(review: ReviewItem): Promise<void> {
   await update<ReviewItem[]>(OUTBOX, (items) => [...(items ?? []), review], store);
@@ -21,6 +41,7 @@ export async function pendingCount(): Promise<number> {
 
 /** 로그아웃할 때 이 기기에 남은 답과 큐를 지운다. 다음에 로그인한 사람에게 섞이지 않게 한다 */
 export async function clearDeviceData(): Promise<void> {
+  confirmed = null;
   await clear(store);
 }
 
@@ -65,6 +86,7 @@ export function takeLevelUps(): LevelUp[] {
 
 /** outbox를 20건씩 보낸다. 실패하면 남겨 두고 다음 기회(online 이벤트, 다음 실행)에 다시 보낸다. */
 export function flushReviews(): Promise<void> {
+  if (!confirmed) return Promise.resolve();
   flushing ??= (async () => {
     try {
       for (;;) {

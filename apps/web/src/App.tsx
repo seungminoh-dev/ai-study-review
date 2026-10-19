@@ -7,6 +7,8 @@ import { IconBook, IconGrowth, IconHome, IconMap, IconRecords, IconSettings } fr
 import { Loading, Splash } from './Loading';
 import { Mascot } from './Mascot';
 import { SNAPPY } from './motion';
+import { claimDevice } from './offline/store';
+import { dropLocalPush } from './push';
 import { TabLink, navigate, useLocation } from './router';
 import { Join } from './screens/Join';
 import { Landing } from './screens/Landing';
@@ -138,6 +140,16 @@ function Sidebar({ current }: { current: Section | null }) {
 /** 로그인 전 화면. 아래 탭이 없다 */
 const Bare = ({ children }: { children: ReactNode }) => <main className="app no-tabs">{children}</main>;
 
+/** 이 기기를 로그인한 사람의 것으로 정한다. 앞사람이 남긴 것이면 답·큐를 지우고, 앞사람 알림이 오던 구독도 끊는다 */
+async function claim(me: Me): Promise<void> {
+  try {
+    if (await claimDevice(me.id)) await dropLocalPush();
+  } catch {
+    // 기기 저장소를 못 쓰면 남은 데이터도 없다
+  }
+}
+
+/** 세션이 끝나도(401) 기기의 답·큐는 남긴다. 같은 사람이 다시 로그인하면 이어서 보내고, 다른 사람이면 claim이 지운다 */
 async function loggedOut(): Promise<Auth> {
   rememberMe(null);
   forgetSeenBadges();
@@ -149,7 +161,8 @@ export function App() {
   const [auth, setAuth] = useState<Auth>({ state: 'loading' });
   const { path, query } = useLocation();
 
-  const signedIn = (me: Me, to = '/') => {
+  const signedIn = async (me: Me, to = '/') => {
+    await claim(me);
     rememberMe(me);
     setAuth({ state: 'in', me });
     navigate(to, { replace: true, direction: 'tab' });
@@ -159,6 +172,7 @@ export function App() {
     (async () => {
       try {
         const me = await request<Me>('/me');
+        await claim(me);
         rememberMe(me);
         setAuth({ state: 'in', me });
       } catch (error) {
@@ -166,7 +180,9 @@ export function App() {
           setAuth(await loggedOut());
         } else if (error instanceof OfflineError && rememberedMe()) {
           // 오프라인이어도 저장해 둔 큐로 복습할 수 있다
-          setAuth({ state: 'in', me: rememberedMe()! });
+          const me = rememberedMe()!;
+          await claim(me);
+          setAuth({ state: 'in', me });
         } else {
           setAuth({ state: 'error', message: errorMessage(error) });
         }

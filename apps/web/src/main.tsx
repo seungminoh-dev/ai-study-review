@@ -18,8 +18,7 @@ createRoot(document.getElementById('root')!).render(
   </StrictMode>,
 );
 
-// 밀린 답안은 앱을 열 때, 다시 연결될 때, 앱으로 돌아올 때 보낸다 (설계서 §9.5)
-void flushReviews();
+// 밀린 답안은 앱을 열어 로그인을 확인했을 때(App의 claim), 다시 연결될 때, 앱으로 돌아올 때 보낸다 (설계서 §9.5)
 window.addEventListener('online', () => void flushReviews());
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') void flushReviews();
