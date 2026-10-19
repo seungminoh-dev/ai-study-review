@@ -18,7 +18,7 @@ export function Growth() {
   const diff = stats.week.xp - stats.last_week_xp;
   const studied = stats.history.filter((day) => day.reviewed > 0).length;
   return (
-    <div className="today">
+    <div className="today growth">
       <header className="today-head">
         <Mascot size={40} mood={stats.streak > 0 ? 'happy' : 'think'} />
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -56,7 +56,7 @@ export function Growth() {
         </section>
       </div>
       <BadgeShelf badges={stats.badges} />
-      <section className="card" aria-labelledby="heat-title">
+      <section className="card heat-card" aria-labelledby="heat-title">
         <div className="card-head">
           <h2 id="heat-title">최근 12주</h2>
           <span className="aside">{studied}일 공부</span>

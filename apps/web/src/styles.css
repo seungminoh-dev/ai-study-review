@@ -1778,7 +1778,9 @@ a.chip {
     display: none;
   }
 
+  /* 그리드 칸에서 margin: auto면 내용 폭으로 줄어든다. 화면마다 폭이 달라지지 않게 칸을 채우고 max-width에서 멈춘다 */
   .app {
+    width: 100%;
     max-width: 760px;
     padding: 32px 40px 48px;
   }
@@ -2724,6 +2726,48 @@ a.notice.link:active,
   width: 12px;
   height: 12px;
   border-radius: 3px;
+}
+
+@media (min-width: 1024px) {
+  /* 최근 12주는 오른쪽 칸 폭에 맞춰 날짜 칸을 키운다 (휴대폰은 14px 그대로) */
+  .heatmap {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+  }
+
+  .heatmap .heat {
+    width: auto;
+    height: auto;
+    aspect-ratio: 1;
+  }
+
+  /* 내 성장: 오늘 화면처럼 왼쪽(이정표, 분류별 진행)과 오른쪽(최근 12주) 두 칸 */
+  .growth {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr);
+    align-items: start;
+    gap: 24px;
+  }
+
+  .growth > .today-head,
+  .growth > .stat-grid {
+    grid-column: 1 / -1;
+  }
+
+  .growth > .stat-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .growth > .heat-card {
+    grid-column: 2;
+    grid-row: 3 / span 2;
+  }
+
+  /* 왼쪽 칸에서 이정표 11개가 6·5개로 나뉘게 조금 좁힌다 (92px이면 1280px에서 5·5·1) */
+  .growth .badge-shelf {
+    grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
+  }
 }
 
 /* 복습 끝 */
