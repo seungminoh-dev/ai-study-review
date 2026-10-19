@@ -1,7 +1,7 @@
 import type { LevelUp, ReviewItem, ReviewsResponse } from '@moai/shared';
 import type { Env } from '../env';
 import { nextFsrsFields, pickFsrsFields, type FsrsFields } from './fsrs';
-import { cardsToUnlock, type LadderCard } from './ladder';
+import { cardsToUnlock, stuckCards, type LadderCard } from './ladder';
 
 // 답안 기록 (설계서 §9.5)
 
@@ -119,6 +119,13 @@ export async function recordReviews(
 
   // 사다리는 기록이 모두 들어간 뒤의 상태로만 연다. 기록이 밀린 답을 근거로 카드를 열지 않는다
   const unlock = cardsToUnlock([...rows.values()]);
+  // 열린 단계 아래에 갇힌 카드도 같이 연다 (LEVEL UP은 아니다)
+  const stuck = stuckCards([...rows.values()]);
+  if (stuck.length > 0) {
+    await env.DB.prepare("UPDATE cards SET status = 'active', due = ?3 WHERE user_id = ?1 AND status = 'locked' AND id IN (SELECT value FROM json_each(?2))")
+      .bind(userId, JSON.stringify(stuck), now)
+      .run();
+  }
   const levelUps: LevelUp[] = [];
   if (unlock.length > 0) {
     // 끝 화면의 LEVEL UP: 개념마다 새로 열린 단계 하나 (한 번에 한 단계만 열린다)
@@ -133,20 +140,20 @@ export async function recordReviews(
       levelUps.push({ concept_key: concept.key, concept_name: concept.name, rung: opened.get(concept.id)! });
     }
   }
-  return { recorded, skipped: items.length - recorded, unlocked: unlock.length, level_ups: levelUps, conflicted: false };
+  return { recorded, skipped: items.length - recorded, unlocked: unlock.length + stuck.length, level_ups: levelUps, conflicted: false };
 }
 
 /**
  * 카드를 끄거나 다시 켠다.
  * 끄면 그 개념의 사다리를 다시 검사한다. 맨 아래 카드를 끄면 다음 단계가 열린다.
- * 다시 켜면 사다리를 따른다: 지금 열린 단계 이하면 active, 더 높으면 locked로 돌아간다. 설명하기는 언제나 locked다.
+ * 다시 켜면 사다리를 따른다: 지금 열린 단계 이하면 active, 더 높으면 locked로 돌아간다 (설명하기도 같다).
  */
 export async function setCardSuspended(env: Env, userId: string, cardId: string, suspended: boolean, now: number): Promise<boolean> {
   const { results } = await env.DB.prepare(
-    'SELECT id, concept_id, rung, status, stability, origin, state, type FROM cards WHERE user_id = ?2 AND concept_id = (SELECT concept_id FROM cards WHERE id = ?1 AND user_id = ?2)',
+    'SELECT id, concept_id, rung, status, stability, origin, state FROM cards WHERE user_id = ?2 AND concept_id = (SELECT concept_id FROM cards WHERE id = ?1 AND user_id = ?2)',
   )
     .bind(cardId, userId)
-    .all<LadderCard & { type: string }>();
+    .all<LadderCard>();
   const target = results.find((card) => card.id === cardId);
   if (!target) return false;
 
@@ -156,15 +163,13 @@ export async function setCardSuspended(env: Env, userId: string, cardId: string,
     status = 'suspended';
   } else if (target.status !== 'suspended') {
     return true;
-  } else if (target.type === 'explain') {
-    status = 'locked';
   } else {
     const open = others.filter((card) => card.status === 'active').reduce((max, card) => Math.max(max, card.rung), 0);
     status = target.rung <= open ? 'active' : 'locked';
   }
   const cards = [...others, { ...target, status }];
   // 잠긴 채로 돌아왔거나 맨 아래 카드를 껐으면, 사다리 규칙으로 열 단계를 다시 고른다
-  const unlock = cardsToUnlock(cards);
+  const unlock = [...cardsToUnlock(cards), ...stuckCards(cards)];
   const statements = [env.DB.prepare('UPDATE cards SET status = ?3 WHERE id = ?1 AND user_id = ?2').bind(cardId, userId, status)];
   if (unlock.length > 0) {
     statements.push(

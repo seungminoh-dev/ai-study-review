@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cardsToUnlock, initialStatus, type LadderCard } from '../src/domain/ladder';
+import { cardsToUnlock, initialStatus, stuckCards, type LadderCard } from '../src/domain/ladder';
 import { pickTopicConcepts } from '../src/domain/learner-context';
 import { selectQueue, type QueueCandidate, type QueueLimits } from '../src/domain/queue';
 
@@ -82,7 +82,14 @@ describe('cardsToUnlock (설계서 §9.4)', () => {
     expect(initialStatus(1, 1)).toBe('active');
     expect(initialStatus(2, 1)).toBe('locked');
     expect(initialStatus(2, 2)).toBe('active');
-    expect(initialStatus(3, 3)).toBe('locked');
+    // 설명하기는 그 개념의 설명하기 단계가 이미 열렸을 때만 바로 연다
+    expect(initialStatus(3, 2)).toBe('locked');
+    expect(initialStatus(3, 3)).toBe('active');
+  });
+
+  it('frees cards locked at or below the open rung, which the ladder would never open', () => {
+    expect(stuckCards([ladder('a', 'x', 3, 'active', 8), ladder('b', 'x', 3, 'locked', 0), ladder('c', 'y', 3, 'locked', 0), ladder('d', 'y', 2, 'active', 1)])).toEqual(['b']);
+    expect(stuckCards([ladder('a', 'x', 1, 'active', 8), ladder('b', 'x', 2, 'suspended', 0), ladder('c', 'x', 2, 'locked', 0)])).toEqual([]);
   });
 });
 
