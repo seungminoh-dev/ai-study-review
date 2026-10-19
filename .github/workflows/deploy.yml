@@ -43,6 +43,10 @@ jobs:
 
       - if: steps.check.outputs.skip != 'true'
         run: npm ci
+      # CI를 기다리지 않고 바로 배포하므로, 테스트가 지나지 않는 경로의 타입 오류도 여기서 막는다
+      - name: Typecheck
+        if: steps.check.outputs.skip != 'true'
+        run: npm run typecheck
       - name: Build PWA
         if: steps.check.outputs.skip != 'true'
         run: npm run build

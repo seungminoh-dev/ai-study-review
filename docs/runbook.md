@@ -181,8 +181,19 @@ claude.ai 계정으로 로그인한 Claude Code면 claude.ai의 모아이 커넥
 
 ### 배포
 
-- 작업 브랜치에서 CI(타입 검사, PWA 빌드, 테스트)가 통과하면 `main`에 머지한다. 🤖 Deploy가 마이그레이션 → 빌드 → 배포를 한다.
+- `main`에 push하면 🤖 Deploy가 타입 검사 → 빌드 → 테스트 → D1 bookmark 기록 → 마이그레이션 → 배포 → 운영 확인을 한다. CI(타입 검사, 빌드, 테스트)는 따로 돌고, Deploy는 CI를 기다리지 않아서 같은 검사를 스스로 한다.
 - 급할 때는 GitHub Actions → Deploy → Run workflow로 직접 돌린다.
+
+### 배포가 잘못 나갔을 때
+
+"Check production"이 실패했거나 배포 뒤 화면·API가 깨졌으면 Worker를 앞 버전으로 되돌린다 (모두 `apps/worker`에서):
+
+1. `npx wrangler deployments list`로 앞 버전 id를 확인한다.
+2. `npx wrangler rollback <앞 버전 id>` (id를 빼면 바로 앞 버전). 몇 초 안에 바뀐다.
+3. 원인을 고쳐 `main`에 다시 push한다. 롤백한 상태는 다음 배포가 덮어쓴다.
+
+- 마이그레이션은 열·테이블을 **더하기만** 해서, DB는 그대로 두고 코드만 되돌려도 안전하다. 데이터가 잘못 바뀐 경우만 위 "되돌리기 (D1 Time Travel)"를 쓴다.
+- 롤백은 Worker 코드와 정적 파일을 같이 되돌린다. 열려 있던 앱은 다음에 새로 받을 때 앞 버전이 된다.
 
 ### 비용
 
