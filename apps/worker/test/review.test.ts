@@ -52,9 +52,12 @@ describe('today and queue', () => {
   it('records answers once and keeps the rest of a reviewed concept for another day', async () => {
     await saveExample();
     const { cards } = (await (await api(user, '/queue')).json()) as QueueResponse;
-    const reviews = cards.map((card) => answer(card.id, 3));
+    const runId = crypto.randomUUID();
+    const reviews = cards.map((card) => ({ ...answer(card.id, 3), run_id: runId }));
     const first = await api(user, '/reviews', { method: 'POST', json: { reviews } });
     expect(await first.json()).toEqual({ recorded: 3, skipped: 0, rejected: 0, unlocked: 0, level_ups: [] });
+    // 무실수 보너스를 세는 복습 묶음이 기록에 남는다
+    expect(await env.DB.prepare('SELECT count(*) AS n FROM review_logs WHERE user_id = ?1 AND run_id = ?2').bind(user.id, runId).first('n')).toBe(3);
     const again = await api(user, '/reviews', { method: 'POST', json: { reviews } });
     expect(await again.json()).toEqual({ recorded: 0, skipped: 3, rejected: 0, unlocked: 0, level_ups: [] });
 

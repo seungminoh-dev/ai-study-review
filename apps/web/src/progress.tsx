@@ -38,6 +38,48 @@ export function Ring({ value, max, size = 96, label, children, tone = 'card' }: 
   );
 }
 
+/** 연속 학습 목표 단계. 지금 연속보다 큰 첫 단계가 다음 목표다 */
+const STREAK_GOALS = [3, 7, 14, 30, 60, 100, 365];
+
+/** 다음 연속 목표까지 남은 날. 14일까지는 하루씩 칸으로, 그 뒤로는 앞 단계부터 막대로 보여 준다. steps는 단계 칩 4개를 같이 그린다 */
+export function StreakGoal({ streak, steps = false }: { streak: number; steps?: boolean }) {
+  const index = STREAK_GOALS.findIndex((goal) => goal > streak);
+  if (index < 0) return <p className="streak-goal-top small">연속 목표를 모두 넘었어요. 대단해요!</p>;
+  const next = STREAK_GOALS[index]!;
+  const from = index > 0 ? STREAK_GOALS[index - 1]! : 0;
+  const cells = next <= 14;
+  const shown = STREAK_GOALS.slice(Math.max(0, Math.min(index - 1, STREAK_GOALS.length - 4)), Math.max(0, Math.min(index - 1, STREAK_GOALS.length - 4)) + 4);
+  return (
+    <div className="streak-goal">
+      <p className="streak-goal-top small">
+        <strong>다음 목표 {next}일</strong>
+        <span className="streak-goal-left">{next - streak}일 남았어요</span>
+      </p>
+      {cells ? (
+        <div className="streak-cells" role="img" aria-label={`${next}일 중 ${streak}일 채움`}>
+          {Array.from({ length: next }, (_, i) => (
+            <span key={i} className={i < streak ? 'on' : undefined} />
+          ))}
+        </div>
+      ) : (
+        <div className="bar streak-bar" role="img" aria-label={`${next}일 중 ${streak}일 채움`}>
+          <div style={{ width: `${((streak - from) / (next - from)) * 100}%` }} />
+        </div>
+      )}
+      {steps ? (
+        <ol className="streak-steps">
+          {shown.map((goal) => (
+            <li key={goal} className={goal <= streak ? 'done' : goal === next ? 'next' : undefined}>
+              {goal <= streak ? <IconCheck size={12} /> : null}
+              {goal}일
+            </li>
+          ))}
+        </ol>
+      ) : null}
+    </div>
+  );
+}
+
 const WEEKDAYS = ['월', '화', '수', '목', '금', '토', '일'];
 
 /** 오늘은 아직 지나지 않은 날 중 마지막 날이다 */

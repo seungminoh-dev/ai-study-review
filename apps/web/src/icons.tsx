@@ -91,6 +91,13 @@ export const IconCheck = ({ size = 18 }: Props) => (
   </Icon>
 );
 
+/** 무실수 보너스 */
+export const IconStar = ({ size = 22 }: Props) => (
+  <Icon size={size} strokeWidth={2.4}>
+    <path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.4l-5.3 3 1.2-6-4.5-4.1 6-.7z" />
+  </Icon>
+);
+
 /** 프리즈로 지킨 날 */
 export const IconSnow = ({ size = 16 }: Props) => (
   <Icon size={size} strokeWidth={2.2}>

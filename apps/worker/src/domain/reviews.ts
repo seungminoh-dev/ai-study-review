@@ -68,6 +68,7 @@ export async function recordReviews(
       elapsed_ms: review.elapsed_ms ?? null,
       reviewed_at: reviewedAt,
       prev_card: JSON.stringify(prev),
+      run_id: review.run_id ?? null,
       read_reps: readReps.get(row.id),
     });
   }
@@ -77,10 +78,10 @@ export async function recordReviews(
     // 기록과 카드 갱신은 둘 다 "읽은 뒤로 카드가 그대로일 때"만 쓴다. 같은 트랜잭션이라 둘의 판단이 같다
     const [inserted, updated] = await env.DB.batch([
       env.DB.prepare(
-        `INSERT OR IGNORE INTO review_logs (id, user_id, card_id, grade, response, confidence, elapsed_ms, reviewed_at, prev_card)
+        `INSERT OR IGNORE INTO review_logs (id, user_id, card_id, grade, response, confidence, elapsed_ms, reviewed_at, prev_card, run_id)
          SELECT json_extract(j.value, '$.id'), ?1, c.id, json_extract(j.value, '$.grade'),
                 json_extract(j.value, '$.response'), json_extract(j.value, '$.confidence'), json_extract(j.value, '$.elapsed_ms'),
-                json_extract(j.value, '$.reviewed_at'), json_extract(j.value, '$.prev_card')
+                json_extract(j.value, '$.reviewed_at'), json_extract(j.value, '$.prev_card'), json_extract(j.value, '$.run_id')
            FROM json_each(?2) AS j
            JOIN cards c ON c.id = json_extract(j.value, '$.card_id') AND c.user_id = ?1 AND c.reps = json_extract(j.value, '$.read_reps')`,
       ).bind(userId, JSON.stringify(logs)),

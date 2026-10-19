@@ -1,6 +1,6 @@
 import type { LevelUp, QueueCard, QueueResponse, ReportReason, ReviewGrade, StatsResponse } from '@moai/shared';
 import type { Confidence } from '@moai/shared/client';
-import { MAX_ELAPSED_MS, gradeAnswer } from '@moai/shared/client';
+import { MAX_ELAPSED_MS, PERFECT_MIN_ANSWERS, PERFECT_XP, gradeAnswer } from '@moai/shared/client';
 import { AnimatePresence } from 'motion/react';
 import * as m from 'motion/react-m';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
@@ -12,12 +12,13 @@ import { ConceptPanel, forgetConcepts } from '../cards/ConceptPanel';
 import { ExplainCard } from '../cards/ExplainCard';
 import { QuestionCard, choicesOf, type Choice } from '../cards/QuestionCard';
 import { Confetti } from '../Confetti';
-import { IconChat, IconFlame } from '../icons';
+import { IconChat, IconFlame, IconStar } from '../icons';
 import { Loading } from '../Loading';
 import { Mascot } from '../Mascot';
 import { LEAVE, Presence, SOFT, useCountUp } from '../motion';
 import { cacheQueue, cachedQueue, enqueueReview, flushReviews, forgetAnswered, pendingCardIds, pendingCount, removeFromOutbox, takeLevelUps } from '../offline/store';
 import { buzz } from '../prefs';
+import { StreakGoal } from '../progress';
 import { goTab, leave } from '../router';
 
 // 복습 세션 (설계서 §12.1, §12.2). 카드 한 장씩: 답 고르기 → 맞음·틀림과 해설 → 다음.
@@ -185,6 +186,8 @@ function Session({ initial, offline, before }: { initial: QueueCard[]; offline: 
   const moving = useRef(false);
   const shownAt = useRef(Date.now());
   const answeredAt = useRef(0);
+  /** 이번 복습의 답 묶음. 서버가 무실수 보너스를 센다 */
+  const runId = useRef(crypto.randomUUID());
 
   const card = cards[index];
   /** 지금 보이는 카드 자리. 사라지는 중인 카드의 버튼은 예전 렌더의 함수라 이 값과 달라서 무시한다 */
@@ -276,6 +279,7 @@ function Session({ initial, offline, before }: { initial: QueueCard[]; offline: 
         ...(level ? { confidence: level } : {}),
         elapsed_ms: elapsed,
         reviewed_at: answeredAt.current,
+        run_id: runId.current,
       });
       await forgetAnswered([current.id]);
       setLast({ reviewId: id, card: current });
@@ -586,6 +590,8 @@ function Summary({
 }) {
   const wrong = results.filter((result) => !result.correct).map((result) => result.card);
   const right = results.length - wrong.length;
+  /** 무실수 보너스: 서버(domain/stats.ts)와 같은 규칙. 연습은 기록하지 않아서 받지 않는다 */
+  const perfect = !practice && wrong.length === 0 && results.length >= PERFECT_MIN_ANSWERS;
   const misses = results.filter((result) => result.confidentMiss).map((result) => result.card.id);
   const [stats, setStats] = useState<StatsResponse | null>(null);
   const [levelUps, setLevelUps] = useState<LevelUp[]>([]);
@@ -616,7 +622,7 @@ function Summary({
   const streakUp = goalMet && !practice && (before ? before.reviewed : stats.today.reviewed - results.length) < stats.goal;
   // 얻은 XP는 서버가 센 오늘 XP의 차이다. 시작 숫자가 없거나, 못 보낸 답이 있거나, 그사이 하루가 바뀌었으면 화면에서 어림한다
   const gained = stats && before && allSent ? stats.today.xp - before.xp : -1;
-  const xp = useCountUp(practice ? 0 : gained >= 0 ? gained : sessionXp(results));
+  const xp = useCountUp(practice ? 0 : gained >= 0 ? gained : sessionXp(results) + (perfect ? PERFECT_XP : 0));
   const toGoal = stats && !goalMet ? stats.goal - stats.today.reviewed : 0;
   const celebrate = !practice && (streakUp || levelUps.length > 0);
   useEffect(() => {
@@ -659,6 +665,21 @@ function Summary({
           </div>
         </div>
       )}
+      {perfect ? (
+        <section className="perfect" aria-label="무실수 보너스">
+          <span className="perfect-mark" aria-hidden="true">
+            <IconStar size={26} />
+          </span>
+          <span className="grow">
+            <span className="perfect-kicker">
+              PERFECT {right}/{results.length}
+            </span>
+            <strong>한 번도 안 틀렸어요</strong>
+          </span>
+          <strong className="perfect-xp">+{PERFECT_XP} XP</strong>
+        </section>
+      ) : null}
+      {stats && !practice ? <StreakGoal streak={stats.streak} /> : null}
       {stats && !practice ? <NewBadges badges={stats.badges} /> : null}
       {levelUps.length > 0 || passed.length > 0 ? (
         <section className="levelup" aria-labelledby="levelup-title">

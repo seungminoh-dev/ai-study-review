@@ -49,6 +49,25 @@ describe('streak', () => {
     expect((await api(user, '/goal', { method: 'PUT', json: { daily_goal: 0 } })).status).toBe(400);
     expect(await (await api(user, '/goal', { method: 'PUT', json: { daily_goal: 10 } })).json()).toEqual({ daily_goal: 10 });
   });
+
+  it('gives a perfect bonus only to a run of 5 or more answers with no miss', async () => {
+    await callTool(await mcpUrl(user), 'save_learning', example);
+    const card = await env.DB.prepare("SELECT id FROM cards WHERE user_id = ?1 AND type != 'explain' LIMIT 1").bind(user.id).first<string>('id');
+    const now = Date.now();
+    const run = async (grades: number[]) => {
+      const runId = crypto.randomUUID();
+      for (const [i, grade] of grades.entries()) {
+        await env.DB.prepare("INSERT INTO review_logs (id, user_id, card_id, grade, reviewed_at, prev_card, run_id) VALUES (?1, ?2, ?3, ?4, ?5, '{}', ?6)")
+          .bind(crypto.randomUUID(), user.id, card, grade, studyDayStart(now) + 1000 + i, runId)
+          .run();
+      }
+    };
+    await run([3, 3, 2, 3, 3]); // 무실수: 50 + 보너스 10
+    await run([3, 3, 1, 3, 3]); // 하나 틀림: 42
+    await run([3, 3, 3, 3]); // 4장뿐: 40
+    // 저장 30
+    expect((await loadStats(env, user.id, now)).today.xp).toBe(30 + 60 + 42 + 40);
+  });
 });
 
 // 배지는 처음 이룬 것만 DB에 넣는다 (되돌리지 않는다)

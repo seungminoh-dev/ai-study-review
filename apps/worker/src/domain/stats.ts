@@ -1,11 +1,11 @@
-import type { StatsResponse } from '@moai/shared';
+import { PERFECT_MIN_ANSWERS, PERFECT_XP, type StatsResponse } from '@moai/shared';
 import type { Env } from '../env';
 import { badgeReads, settleBadges } from './badges';
 import { DAY_MS, STUDY_DAY_SHIFT, studyDayIndex, studyDayKey, studyWeekday } from '../lib/kst';
 
 // 스트릭·XP (설계서 §9.6). 따로 저장하지 않고 review_logs와 learning_sessions에서 센다. 프리즈만 저장한다.
 
-/** XP: 정답 10, 오답 2, 설명하기 완료 20, 학습 세션 저장 30 */
+/** XP: 정답 10, 오답 2, 설명하기 완료 20, 학습 세션 저장 30, 무실수 복습 보너스 PERFECT_XP */
 const REVIEW_XP = `CASE WHEN c.type = 'explain' THEN 20 WHEN r.grade >= 2 THEN 10 ELSE 2 END`;
 const SESSION_XP = 30;
 /** 스트릭은 1년까지만 거슬러 센다 */
@@ -20,7 +20,7 @@ interface DayRow {
 export async function loadStats(env: Env, userId: string, now: number): Promise<StatsResponse> {
   const today = studyDayIndex(now);
   const since = (today - LOOKBACK_DAYS) * DAY_MS - STUDY_DAY_SHIFT;
-  const [reviews, sessions, freezes, user, ...badgeRows] = await env.DB.batch([
+  const [reviews, sessions, perfects, freezes, user, ...badgeRows] = await env.DB.batch([
     env.DB.prepare(
       `SELECT CAST((r.reviewed_at + ?3) / ${DAY_MS} AS INTEGER) AS d, count(*) AS n, sum(${REVIEW_XP}) AS xp
          FROM review_logs r JOIN cards c ON c.id = r.card_id
@@ -30,6 +30,15 @@ export async function loadStats(env: Env, userId: string, now: number): Promise<
     env.DB.prepare(
       `SELECT CAST((created_at + ?3) / ${DAY_MS} AS INTEGER) AS d, count(*) AS n FROM learning_sessions WHERE user_id = ?1 AND created_at >= ?2 GROUP BY d`,
     ).bind(userId, since, STUDY_DAY_SHIFT),
+    // 무실수 복습: 한 번에 PERFECT_MIN_ANSWERS장 이상 풀고 모두 맞힌 묶음. 마지막 답을 한 날에 센다.
+    // 기록에서 세므로 답을 되돌리면 보너스도 같이 빠진다
+    env.DB.prepare(
+      `SELECT CAST((at + ?3) / ${DAY_MS} AS INTEGER) AS d, count(*) AS n
+         FROM (SELECT max(reviewed_at) AS at FROM review_logs
+                WHERE user_id = ?1 AND run_id IS NOT NULL AND reviewed_at >= ?2
+                GROUP BY run_id HAVING count(*) >= ${PERFECT_MIN_ANSWERS} AND min(grade) >= 2)
+        GROUP BY d`,
+    ).bind(userId, since, STUDY_DAY_SHIFT),
     env.DB.prepare('SELECT day FROM streak_freezes WHERE user_id = ?1').bind(userId),
     env.DB.prepare('SELECT daily_goal FROM users WHERE id = ?1').bind(userId),
     ...badgeReads(env, userId),
@@ -38,7 +47,8 @@ export async function loadStats(env: Env, userId: string, now: number): Promise<
   const reviewed = new Map((reviews!.results as unknown as DayRow[]).map((row) => [row.d, row]));
   const saved = new Map((sessions!.results as unknown as { d: number; n: number }[]).map((row) => [row.d, row.n]));
   const frozen = new Set((freezes!.results as { day: string }[]).map((row) => row.day));
-  const xpOf = (day: number) => (reviewed.get(day)?.xp ?? 0) + (saved.get(day) ?? 0) * SESSION_XP;
+  const perfect = new Map((perfects!.results as unknown as { d: number; n: number }[]).map((row) => [row.d, row.n]));
+  const xpOf = (day: number) => (reviewed.get(day)?.xp ?? 0) + (saved.get(day) ?? 0) * SESSION_XP + (perfect.get(day) ?? 0) * PERFECT_XP;
   const met = (day: number) => (reviewed.get(day)?.n ?? 0) >= goal;
   const weekOf = (day: number) => day - studyWeekday(day);
   const usedFreezeWeeks = new Set([...frozen].map((key) => weekOf(Math.round(Date.parse(key) / DAY_MS))));

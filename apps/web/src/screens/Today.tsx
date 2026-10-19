@@ -9,7 +9,7 @@ import { Loading } from '../Loading';
 import { Mascot } from '../Mascot';
 import { materialReview, partView } from '../materials';
 import { cachedQueue } from '../offline/store';
-import { CategoryProgress, Heatmap, Ring, WeekDays, conceptCounts, todayLabel } from '../progress';
+import { CategoryProgress, Heatmap, Ring, StreakGoal, WeekDays, conceptCounts, todayLabel } from '../progress';
 import { isStandalone, pushState } from '../push';
 import { Link, TabLink } from '../router';
 import { useApi } from '../useApi';
@@ -149,6 +149,7 @@ function WeekCard({ stats }: { stats: StatsResponse }) {
         <h2 id="week-title">{stats.streak}일 연속</h2>
         <span className="aside">최고 {stats.best_streak}일</span>
       </div>
+      <StreakGoal streak={stats.streak} steps />
       <WeekDays stats={stats} />
       <p className="muted small">
         이번 주 {stats.week.xp} XP

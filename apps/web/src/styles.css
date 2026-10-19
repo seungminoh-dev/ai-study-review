@@ -3081,6 +3081,151 @@ a.notice.link:active,
   color: var(--accent-ink);
 }
 
+/* 다음 연속 목표: 14일까지는 하루씩 칸, 그 뒤로는 막대. 오늘 화면은 단계 칩도 보여 준다 */
+.streak-goal {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.summary > .streak-goal {
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+}
+
+.streak-goal-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0;
+}
+
+.streak-goal-left {
+  color: var(--accent-ink);
+  font-weight: 700;
+}
+
+.streak-cells {
+  display: flex;
+  gap: 4px;
+}
+
+.streak-cells > span {
+  flex: 1;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--surface-2);
+}
+
+.streak-cells > span.on {
+  background: var(--accent);
+}
+
+.streak-bar {
+  height: 10px;
+}
+
+.streak-steps {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.streak-steps li {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 5px 0;
+  border-radius: 12px;
+  background: var(--surface-2);
+  color: var(--muted);
+}
+
+.streak-steps li.done {
+  background: var(--good-soft);
+  color: var(--good);
+}
+
+.streak-steps li.next {
+  background: var(--surface);
+  box-shadow: inset 0 0 0 2px var(--accent);
+  color: var(--accent-ink);
+}
+
+/* 무실수 보너스 (끝 화면) */
+.perfect {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: 20px;
+  background: var(--pen-soft);
+  box-shadow:
+    inset 0 0 0 2px var(--heat-2),
+    0 4px 0 var(--heat-2);
+}
+
+.perfect-mark {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+  background: var(--accent);
+  color: var(--accent-text);
+  box-shadow: 0 3px 0 var(--accent-edge);
+}
+
+.perfect .grow {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.perfect-kicker {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 800;
+  font-family: var(--mono);
+  letter-spacing: 0.14em;
+  color: var(--accent-ink);
+}
+
+.perfect strong {
+  font-size: 1.0625rem;
+}
+
+.perfect .perfect-xp {
+  font-size: 1.25rem;
+  font-weight: 900;
+  color: var(--accent-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .perfect {
+    animation: perfect-in 0.6s var(--ease-spring) 0.25s both;
+  }
+
+  @keyframes perfect-in {
+    from {
+      opacity: 0;
+      transform: scale(0.85) rotate(-2deg);
+    }
+  }
+}
+
 .summary h2 {
   margin: 8px 0 0;
   font-size: 0.9375rem;

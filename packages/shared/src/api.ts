@@ -4,9 +4,9 @@ import type { EdgeType, JudgmentLabel } from './save-learning';
 
 // REST API(PWA용) 요청 스키마와 응답 타입 (설계서 §7). Worker와 PWA가 같이 쓴다.
 
-import { MAX_ELAPSED_MS, MAX_REMINDERS, REVIEWS_PER_REQUEST, isHhmm } from './limits';
+import { MAX_ELAPSED_MS, MAX_REMINDERS, PERFECT_MIN_ANSWERS, PERFECT_XP, REVIEWS_PER_REQUEST, isHhmm } from './limits';
 
-export { MAX_ELAPSED_MS, MAX_REMINDERS, REVIEWS_PER_REQUEST, isHhmm };
+export { MAX_ELAPSED_MS, MAX_REMINDERS, PERFECT_MIN_ANSWERS, PERFECT_XP, REVIEWS_PER_REQUEST, isHhmm };
 
 export const SetupBody = z.object({
   code: z.string().trim().min(1).max(200),
@@ -91,6 +91,8 @@ export const ReviewItem = z.object({
     .transform((value) => Math.min(Math.round(value), MAX_ELAPSED_MS))
     .optional(),
   reviewed_at: z.int().positive(),
+  /** 복습 화면을 한 번 열어 푼 답의 묶음 (기기에서 만든 UUID). 무실수 보너스를 센다 */
+  run_id: z.uuid().optional(),
 });
 export type ReviewItem = z.infer<typeof ReviewItem>;
 
