@@ -158,7 +158,8 @@ export interface StatsDay {
 /** 스트릭·XP·하루 목표 (설계서 §9.6) */
 export interface StatsResponse {
   goal: number;
-  today: { reviewed: number; xp: number };
+  /** reviewed는 오늘 푼 카드 전체, learned는 그중 자료 카드를 처음 푼 수 (학습) */
+  today: { reviewed: number; learned: number; xp: number };
   streak: number;
   /** 이번 주 프리즈를 아직 안 썼다 */
   freeze_available: boolean;
@@ -375,6 +376,10 @@ export interface OpenFollowup {
 export interface TodayResponse {
   remaining: number;
   minutes: number;
+  /** 남은 카드 나누기: 마지막 답이 틀린 카드, 대화에서 온 새 카드. 나머지는 다시 볼 때가 된 카드다 */
+  parts: { wrong: number; fresh: number };
+  /** 복습 탭의 "틀린 것": 최근 30일 안에 마지막 답이 틀린 카드 (오늘 푼 것 빼고) */
+  mistakes: number;
   reviewed_today: number;
   sessions: SessionSummary[];
   followups: OpenFollowup[];

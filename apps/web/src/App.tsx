@@ -3,7 +3,7 @@ import * as m from 'motion/react-m';
 import { Suspense, lazy, useEffect, useState, type ComponentType, type ReactNode } from 'react';
 import { OfflineError, RequestError, errorMessage, onUnauthorized, request } from './api';
 import { forgetSeenBadges } from './badges';
-import { IconBook, IconGrowth, IconHome, IconMap, IconOffline, IconRecords, IconSettings } from './icons';
+import { IconBook, IconGrowth, IconHistory, IconHome, IconMap, IconOffline, IconSettings } from './icons';
 import { Loading, Splash } from './Loading';
 import { Mascot } from './Mascot';
 import { SNAPPY } from './motion';
@@ -49,7 +49,9 @@ const MaterialDetail = lazyScreen(() => import('./screens/MaterialDetail').then(
 const Settings = lazyScreen(() => import('./screens/Settings').then((module) => module.Settings));
 const Welcome = lazyScreen(() => import('./screens/Welcome').then((module) => module.Welcome));
 const Interview = lazyScreen(() => import('./screens/Interview').then((module) => module.Interview));
-const LATER = [Review, Sessions, SessionDetail, MapScreen, Concept, Growth, Import, Materials, MaterialDetail, Settings, Welcome, Interview];
+const Learn = lazyScreen(() => import('./screens/Learn').then((module) => module.Learn));
+const Reviews = lazyScreen(() => import('./screens/Reviews').then((module) => module.Reviews));
+const LATER = [Review, Sessions, SessionDetail, MapScreen, Concept, Growth, Import, Materials, MaterialDetail, Settings, Welcome, Interview, Learn, Reviews];
 // 개인정보 처리방침·약관은 로그인 전에도 열고, 가끔만 보니 미리 받지 않는다
 const Legal = lazyScreen(() => import('./screens/Legal').then((module) => module.Legal));
 const legalDoc = (path: string) => (path === '/privacy' ? 'privacy' : path === '/terms' ? 'terms' : null);
@@ -76,43 +78,44 @@ function rememberedMe(): Me | null {
   }
 }
 
-type Section = 'today' | 'map' | 'growth' | 'records' | 'materials' | 'settings';
+type Section = 'today' | 'learn' | 'reviews' | 'map' | 'growth' | 'settings';
 
-/** 지금 화면이 어느 메뉴에 속하는지. 상세 화면은 부모 메뉴를 밝힌다 */
+/** 지금 화면이 어느 메뉴에 속하는지. 상세 화면은 부모 메뉴를 밝힌다. 자료는 학습, 공부한 대화는 복습에 속한다 */
 function sectionOf(path: string): Section | null {
   if (path === '/') return 'today';
+  if (path === '/learn' || path === '/materials' || path.startsWith('/materials/')) return 'learn';
+  if (path === '/reviews' || path.startsWith('/sessions') || path === '/import') return 'reviews';
   if (path === '/map' || path.startsWith('/concepts/')) return 'map';
   if (path === '/growth') return 'growth';
-  if (path === '/materials' || path.startsWith('/materials/')) return 'materials';
-  if (path.startsWith('/sessions') || path === '/import') return 'records';
   if (path === '/settings') return 'settings';
   return null;
 }
 
 const ICONS: Record<Section, () => ReactNode> = {
   today: () => <IconHome />,
+  learn: () => <IconBook />,
+  reviews: () => <IconHistory />,
   map: () => <IconMap />,
   growth: () => <IconGrowth />,
-  records: () => <IconRecords />,
-  materials: () => <IconBook />,
   settings: () => <IconSettings />,
 };
 
 /** 휴대폰 아래 탭. 설정은 오늘 화면 오른쪽 위에 있다 */
 const TABS: { href: string; label: string; section: Section }[] = [
   { href: '/', label: '오늘', section: 'today' },
+  { href: '/learn', label: '학습', section: 'learn' },
+  { href: '/reviews', label: '복습', section: 'reviews' },
   { href: '/map', label: '지도', section: 'map' },
   { href: '/growth', label: '성장', section: 'growth' },
-  { href: '/sessions', label: '기록', section: 'records' },
 ];
 
-/** 컴퓨터 왼쪽 메뉴. 자료는 휴대폰에서는 기록 탭 안에 있다 */
+/** 컴퓨터 왼쪽 메뉴 */
 const SIDE: { href: string; label: string; section: Section }[] = [
   { href: '/', label: '오늘', section: 'today' },
+  { href: '/learn', label: '학습', section: 'learn' },
+  { href: '/reviews', label: '복습', section: 'reviews' },
   { href: '/map', label: '지식 지도', section: 'map' },
   { href: '/growth', label: '내 성장', section: 'growth' },
-  { href: '/sessions', label: '저장 기록', section: 'records' },
-  { href: '/materials', label: '자료', section: 'materials' },
 ];
 
 function Sidebar({ current }: { current: Section | null }) {
@@ -288,8 +291,10 @@ export function App() {
   let screen;
   if (path === '/review') {
     const size = Math.min(Math.max(Number(query.get('size')) || 8, 1), 20);
-    screen = <Review key={location.search} size={size} category={query.get('category')} material={query.get('material')} part={query.get('part')} />;
+    screen = <Review key={location.search} size={size} category={query.get('category')} material={query.get('material')} part={query.get('part')} mistakes={query.get('mode') === 'mistakes'} />;
   }
+  else if (path === '/learn') screen = <Learn key={query.get('title') ?? ''} title={query.get('title')} />;
+  else if (path === '/reviews') screen = <Reviews />;
   else if (path === '/sessions') screen = <Sessions />;
   else if (sessionMatch) screen = <SessionDetail id={sessionMatch[1]!} />;
   else if (path === '/map') screen = <MapScreen />;
@@ -318,8 +323,6 @@ export function App() {
   const focus = path === '/review' || path === '/interview' || path === '/welcome';
   const wide = path === '/' || path === '/growth' || path === '/map' || path === '/materials/detail';
   const section = sectionOf(path);
-  // 휴대폰 탭에는 자료가 없어서 자료 화면에서는 기록 탭을 밝힌다
-  const tabSection = section === 'materials' ? 'records' : section;
   return (
     <div className={focus ? 'shell focus' : 'shell'}>
       {focus ? null : <Sidebar current={section} />}
@@ -339,7 +342,7 @@ export function App() {
       {focus ? null : (
         <nav className="tabs" aria-label="화면">
           {TABS.map((tab) => {
-            const current = tabSection === tab.section;
+            const current = section === tab.section;
             return (
               <TabLink key={tab.href} href={tab.href} className={current ? 'tab current' : 'tab'} aria-current={current ? 'page' : undefined}>
                 {current ? <m.span layoutId="tab-pill" className="tab-pill" transition={SNAPPY} /> : null}

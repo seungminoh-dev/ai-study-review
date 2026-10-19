@@ -1,20 +1,20 @@
-import type { MapResponse, MaterialSummary, McpTokenStatus, StatsResponse, TodayResponse } from '@moai/shared';
-import { materialLabel } from '@moai/shared/client';
+import type { MaterialSummary, McpTokenStatus, StatsResponse, TodayResponse } from '@moai/shared';
+import { isPdf, materialLabel } from '@moai/shared/client';
 import { useEffect, useState } from 'react';
 import { aiStatus } from '../ai';
 import { request } from '../api';
 import { NewBadges } from '../badges';
-import { IconArrow, IconBook, IconCheck, IconFlame, IconSettings } from '../icons';
+import { IconArrow, IconBook, IconCheck, IconFlame, IconHistory, IconSettings } from '../icons';
 import { Loading } from '../Loading';
 import { Mascot } from '../Mascot';
 import { materialReview, partView } from '../materials';
 import { cachedQueue } from '../offline/store';
-import { CategoryProgress, Heatmap, Ring, StreakGoal, WeekDays, conceptCounts, todayLabel } from '../progress';
+import { GoalRing, StreakGoal, WeekDays, todayLabel } from '../progress';
 import { isStandalone, pushState } from '../push';
 import { Link, TabLink } from '../router';
 import { useApi } from '../useApi';
 
-// 오늘 화면 (설계서 §12.1, 2단계 시안): 남은 카드와 목표 링, 시작 버튼, 이번 주, 내 성장, 분류별 진행, 이어서 풀 자료.
+// 오늘 화면 (설계서 §12.1, 4단계 시안): 복습(남은 카드)과 학습(이어서 풀 자료 섹션)을 나란히, 그 아래 연속·오늘 목표·모의면접.
 // 휴대폰은 한 줄로 쌓고, 컴퓨터는 왼쪽(할 일)·오른쪽(기록) 두 칸이다 (styles.css의 .today-cols).
 
 const ONBOARDED = 'moai:onboarded';
@@ -89,39 +89,46 @@ function Onboarding({ saved }: { saved: boolean }) {
   );
 }
 
-/** 첫 카드: 남은 장수와 시간, 오늘 목표 링, 시작 버튼 */
-function Hero({ data, stats }: { data: TodayResponse; stats: StatsResponse | null }) {
+/** 복습 카드: 남은 장수와 나누기(틀린 것·다시 볼 때·대화에서 온 새 카드), 시작 버튼. 복습 탭도 같이 쓴다 */
+export function ReviewHero({ data, className = '' }: { data: TodayResponse; className?: string }) {
   const empty = data.remaining === 0;
-  const goal = stats?.goal ?? 0;
-  const reviewed = Math.min(stats?.today.reviewed ?? 0, goal);
+  const again = Math.max(0, data.remaining - data.parts.wrong - data.parts.fresh);
+  const parts = [
+    { label: '틀린 것', n: data.parts.wrong, hot: true },
+    { label: '다시 볼 때', n: again, hot: false },
+    { label: '대화에서 온 새 카드', n: data.parts.fresh, hot: false },
+  ].filter((part) => part.n > 0);
   return (
-    <section className="hero o-hero" aria-label="오늘 복습">
+    <section className={`hero ${className}`} aria-label="오늘 복습">
       <div className="hero-top">
-        <div>
-          <p className="hero-label">오늘 복습</p>
-          {empty ? (
-            <>
-              <p className="hero-count text">{data.reviewed_today > 0 ? '다 했어요' : '카드가 없어요'}</p>
-              <p className="hero-sub">
-                {data.reviewed_today > 0 ? `오늘 ${data.reviewed_today}장을 풀었어요. 다음 카드는 알림으로 알려 드릴게요.` : 'claude.ai에서 공부하고 "모아이에 저장해줘"라고 하면 카드가 여기로 와요.'}
-              </p>
-            </>
-          ) : (
-            <>
-              <p className="hero-count">{data.remaining}장</p>
-              <p className="hero-sub">약 {data.minutes}분</p>
-            </>
-          )}
-        </div>
-        {stats ? (
-          <Ring value={reviewed} max={goal} label={`오늘 목표 ${goal}장 중 ${reviewed}장`} tone="hero">
-            <strong>
-              {reviewed}/{goal}
-            </strong>
-            <span>오늘 목표</span>
-          </Ring>
-        ) : null}
+        <span className="hero-chip">
+          <IconHistory size={14} />
+          복습
+        </span>
+        {empty ? null : <span className="hero-sub">약 {data.minutes}분</span>}
       </div>
+      {empty ? (
+        <div>
+          <p className="hero-count text">{data.reviewed_today > 0 ? '다 했어요' : '카드가 없어요'}</p>
+          <p className="hero-sub">
+            {data.reviewed_today > 0 ? `오늘 ${data.reviewed_today}장을 풀었어요. 다음 카드는 알림으로 알려 드릴게요.` : 'claude.ai에서 공부하고 "모아이에 저장해줘"라고 하면 카드가 여기로 와요.'}
+          </p>
+        </div>
+      ) : (
+        <p className="hero-count">
+          {data.remaining}
+          <small>장 남았어요</small>
+        </p>
+      )}
+      {parts.length > 0 ? (
+        <ul className="hero-parts">
+          {parts.map((part) => (
+            <li key={part.label} className={part.hot ? 'hot' : undefined}>
+              {part.label} {part.n}
+            </li>
+          ))}
+        </ul>
+      ) : null}
       {empty ? null : (
         <div className="hero-actions">
           <Link className="button accent" href="/review">
@@ -139,7 +146,59 @@ function Hero({ data, stats }: { data: TodayResponse; stats: StatsResponse | nul
   );
 }
 
-/** 연속 학습과 이번 주 7칸. "지난주의 나"와 XP를 비교한다 */
+/** 학습 카드: 이어서 풀 자료의 다음 섹션. 자료가 없거나 다 풀었으면 학습 탭으로 안내한다 */
+function LearnCard({ materials }: { materials: MaterialSummary[] }) {
+  const material = materials.find((item) => item.next !== null);
+  return (
+    <section className="card learn-card o-learn" aria-label="학습">
+      <div className="card-head">
+        <span className="learn-chip">
+          <IconBook size={14} />
+          학습
+        </span>
+        <TabLink href={material ? `/learn?${new URLSearchParams({ title: material.title })}` : '/learn'} className="aside">
+          자료 길 보기
+        </TabLink>
+      </div>
+      {material?.next ? <NextPart material={material} next={material.next} /> : (
+        <p className="muted small">{materials.length === 0 ? 'PDF 자료를 카드로 만들면 여기서 섹션 순서대로 학습해요.' : '자료의 새 카드를 다 풀었어요. 푼 카드는 복습에서 다시 나와요.'}</p>
+      )}
+    </section>
+  );
+}
+
+function NextPart({ material, next }: { material: MaterialSummary; next: NonNullable<MaterialSummary['next']> }) {
+  const index = Math.max(material.parts.indexOf(next.part), 0);
+  const view = partView(next.part, index);
+  const sections = Math.max(material.parts.length, 1);
+  return (
+    <>
+      <div className="learn-next">
+        <span className="book-tile" aria-hidden="true">
+          <span>{isPdf(material.title) ? 'PDF' : '자료'}</span>
+          <strong>{view.no}</strong>
+        </span>
+        <div className="grow">
+          <span className="muted small">
+            {materialLabel(material.title)} · 섹션 {index + 1}/{sections}
+          </span>
+          <strong>{next.part ? view.name : '안 푼 카드'}</strong>
+          <span className="muted small">
+            새 카드 {next.unsolved_open}장 · 약 {Math.max(1, Math.round(next.unsolved_open / 3))}분
+          </span>
+        </div>
+      </div>
+      <div className="bar">
+        <div style={{ width: `${material.cards === 0 ? 0 : (material.solved / material.cards) * 100}%` }} />
+      </div>
+      <Link className="button primary" href={materialReview(material.title, next.part)}>
+        이어서 학습
+      </Link>
+    </>
+  );
+}
+
+/** 연속 학습: 다음 목표, 이번 주 7칸, "지난주의 나"와 XP 비교 */
 function WeekCard({ stats }: { stats: StatsResponse }) {
   const diff = stats.week.xp - stats.last_week_xp;
   return (
@@ -165,78 +224,43 @@ function WeekCard({ stats }: { stats: StatsResponse }) {
   );
 }
 
-/** 휴대폰: 작은 숫자 카드 두 장 */
-function GrowthCards({ stats, map }: { stats: StatsResponse; map: MapResponse | null }) {
-  const counts = map ? conceptCounts(map.nodes) : null;
+/** 오늘 목표: 복습과 학습을 나눠 칠한다 */
+function GoalCard({ stats }: { stats: StatsResponse }) {
+  const learned = stats.today.learned;
+  const reviewed = stats.today.reviewed - learned;
   return (
-    <div className="stat-grid o-growth o-narrow">
-      <section className="stat" aria-label="익숙해진 개념">
-        <p className="stat-label">익숙해진 개념</p>
-        <p className="stat-value">{counts ? counts.familiar : '–'}</p>
-        <p className="stat-note">흔들림 {counts ? counts.shaky : 0}</p>
-      </section>
-      <section className="stat" aria-label="최고 연속">
-        <p className="stat-label">최고 연속</p>
-        <p className="stat-value">{stats.best_streak}일</p>
-        <p className="stat-note">지금 {stats.streak}일</p>
-      </section>
-    </div>
-  );
-}
-
-/** 컴퓨터: 오른쪽 칸의 내 성장 요약 */
-function GrowthRows({ stats, map }: { stats: StatsResponse; map: MapResponse | null }) {
-  const counts = map ? conceptCounts(map.nodes) : null;
-  return (
-    <section className="card o-wide" aria-labelledby="growth-title">
-      <h2 id="growth-title">내 성장</h2>
-      <div className="stat-rows">
-        <div className="stat-row">
-          <span>익숙해진 개념</span>
-          <strong>{counts ? counts.familiar : '–'}</strong>
-        </div>
-        <div className="stat-row">
-          <span>이번 주 XP</span>
-          <strong>
-            {stats.week.xp} <span className="muted small">지난주 {stats.last_week_xp}</span>
-          </strong>
-        </div>
-        <div className="stat-row">
-          <span>최고 연속</span>
-          <strong>{stats.best_streak}일</strong>
-        </div>
-        <div className="stat-row">
-          <span>오늘 XP</span>
-          <strong>{stats.today.xp}</strong>
-        </div>
+    <section className="card goal-card o-goal" aria-labelledby="goal-title">
+      <GoalRing review={reviewed} learn={learned} goal={stats.goal} label={`오늘 목표 ${stats.goal}장 중 ${stats.today.reviewed}장, 복습 ${reviewed}장, 학습 ${learned}장`}>
+        <strong>
+          {Math.min(stats.today.reviewed, stats.goal)}/{stats.goal}
+        </strong>
+      </GoalRing>
+      <div className="grow">
+        <h2 id="goal-title">오늘 목표 {stats.goal}장</h2>
+        <span className="goal-legend">복습 {reviewed}장</span>
+        <span className="goal-legend goal-legend-learn">학습 {learned}장</span>
       </div>
-      <TabLink href="/growth" className="small">
-        내 성장 자세히 보기
-      </TabLink>
     </section>
   );
 }
 
-/** 이어서 풀 자료: 안 푼 카드가 남은 첫 자료 */
-function ContinueMaterial({ materials }: { materials: MaterialSummary[] }) {
-  const material = materials.find((item) => item.next !== null);
-  if (!material?.next) return null;
-  const progress = material.cards === 0 ? 0 : material.solved / material.cards;
-  // 다음 섹션부터 이어서 푼다
+/** 서버 AI가 있고 이번 달 면접 질문이 남았다 */
+export function useCanInterview(): boolean {
+  const [can, setCan] = useState(false);
+  useEffect(() => {
+    void aiStatus().then((status) => setCan(status.available && !status.over_budget && status.interview_left > 0));
+  }, []);
+  return can;
+}
+
+export function InterviewLink({ className = '' }: { className?: string }) {
   return (
-    <Link className="card material-card o-material" href={materialReview(material.title, material.next.part)}>
-      <span className="icon-tile">
-        <IconBook />
+    <Link className={`claude-link ${className}`} href="/interview">
+      <Mascot mood="study" size={40} />
+      <span className="grow">
+        <strong>꼬리질문 모의면접</strong>
+        <span className="muted small">흔들리는 개념부터 면접관처럼 이어서 물어봐요</span>
       </span>
-      <div className="grow">
-        <strong>{materialLabel(material.title)}</strong>
-        <span className="muted small">
-          다음 섹션 · {material.next.part ? partView(material.next.part, 0).name : '안 푼 카드'} · {material.next.unsolved_open}장
-        </span>
-        <div className="bar">
-          <div style={{ width: `${progress * 100}%` }} />
-        </div>
-      </div>
       <IconArrow />
     </Link>
   );
@@ -245,17 +269,12 @@ function ContinueMaterial({ materials }: { materials: MaterialSummary[] }) {
 export function Today({ name }: { name: string }) {
   const { data, error } = useApi<TodayResponse>('/today');
   const { data: stats } = useApi<StatsResponse>('/stats');
-  const { data: map } = useApi<MapResponse>('/map');
   const { data: materials } = useApi<{ materials: MaterialSummary[] }>('/materials');
   const [cached, setCached] = useState(0);
-  /** 서버 AI가 있고 이번 달 면접 질문이 남았다 */
-  const [canInterview, setCanInterview] = useState(false);
+  const canInterview = useCanInterview();
   useEffect(() => {
     if (error) void cachedQueue().then((cards) => setCached(cards.length));
   }, [error]);
-  useEffect(() => {
-    void aiStatus().then((status) => setCanInterview(status.available && !status.over_budget && status.interview_left > 0));
-  }, []);
   if (error) {
     return (
       <div className="screen">
@@ -275,7 +294,6 @@ export function Today({ name }: { name: string }) {
   }
   if (!data) return <Loading />;
 
-  const studied = stats ? stats.history.filter((day) => day.reviewed > 0).length : 0;
   return (
     <div className="today">
       <header className="today-head">
@@ -294,22 +312,13 @@ export function Today({ name }: { name: string }) {
 
       <div className="today-cols">
         <div className="today-col">
-          <Hero data={data} stats={stats ?? null} />
+          <div className="today-pair">
+            <ReviewHero data={data} className="o-hero" />
+            {materials ? <LearnCard materials={materials.materials} /> : null}
+          </div>
           {/* 첫 저장처럼 복습 밖에서 이룬 이정표는 여기서 축하한다 */}
           {stats ? <NewBadges badges={stats.badges} link className="o-badges" /> : null}
           <Onboarding saved={data.sessions.length > 0} />
-          {map && map.nodes.some((node) => node.state !== 'material' && node.category) ? (
-            <section className="card o-category" aria-labelledby="category-title">
-              <div className="card-head">
-                <h2 id="category-title">분류별 진행</h2>
-                <TabLink href="/map" className="aside">
-                  지식 지도
-                </TabLink>
-              </div>
-              <CategoryProgress nodes={map.nodes} limit={4} />
-            </section>
-          ) : null}
-          {materials ? <ContinueMaterial materials={materials.materials} /> : null}
           {data.followups.length > 0 ? (
             <section className="card o-followups" aria-labelledby="followups-title">
               <div className="card-head">
@@ -325,16 +334,6 @@ export function Today({ name }: { name: string }) {
               </ul>
             </section>
           ) : null}
-          {canInterview && (map?.nodes.length ?? 0) > 0 ? (
-            <Link className="claude-link o-interview" href="/interview">
-              <Mascot mood="study" size={40} />
-              <span className="grow">
-                <strong>꼬리질문 모의면접</strong>
-                <span className="muted small">흔들리는 개념부터 면접관처럼 이어서 물어봐요</span>
-              </span>
-              <IconArrow />
-            </Link>
-          ) : null}
           {!data.reminders_set ? (
             <Link className="notice link o-reminder" href="/settings">
               알림 시간을 정하면 복습할 때 알려 드려요 →
@@ -343,17 +342,8 @@ export function Today({ name }: { name: string }) {
         </div>
         <div className="today-col">
           {stats ? <WeekCard stats={stats} /> : null}
-          {stats ? <GrowthCards stats={stats} map={map ?? null} /> : null}
-          {stats ? <GrowthRows stats={stats} map={map ?? null} /> : null}
-          {stats ? (
-            <section className="card o-wide" aria-labelledby="heat-title">
-              <div className="card-head">
-                <h2 id="heat-title">최근 12주</h2>
-                <span className="aside">{studied}일 공부</span>
-              </div>
-              <Heatmap history={stats.history} goal={stats.goal} />
-            </section>
-          ) : null}
+          {stats ? <GoalCard stats={stats} /> : null}
+          {canInterview && data.sessions.length > 0 ? <InterviewLink className="o-interview" /> : null}
         </div>
       </div>
     </div>

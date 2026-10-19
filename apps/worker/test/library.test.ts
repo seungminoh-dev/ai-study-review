@@ -29,7 +29,7 @@ const concept = (key: string) => env.DB.prepare('SELECT domain, adopted_at FROM 
 describe('materials', () => {
   it('keeps PDF cards out of my knowledge until I answer one', async () => {
     const saved = await callTool(url, 'save_learning', pdf('1장'));
-    expect(saved.content[0].text).toContain('자료 화면에서 풀면');
+    expect(saved.content[0].text).toContain('학습 탭에서 풀면');
     expect(await concept('pod')).toMatchObject({ domain: '인프라/Kubernetes', adopted_at: null });
     // 오늘 복습, 지식 지도, 모의면접에는 없다
     expect(await loadTodayQueue(env, user.id, Date.now())).toHaveLength(0);

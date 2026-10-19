@@ -1,6 +1,6 @@
 import type { McqOption, QueueCard } from '@moai/shared';
 import type { Env } from '../env';
-import { studyDayStart } from '../lib/kst';
+import { DAY_MS, studyDayStart } from '../lib/kst';
 import { pickFsrsFields, previewIntervals, type FsrsFields } from './fsrs';
 
 // 오늘 큐 (설계서 §9.2)
@@ -85,7 +85,7 @@ const CANDIDATE_LIMIT = 200;
 
 /**
  * 후보 카드. ?3은 분류 필터(없으면 NULL): 그 분류와 그 아래 분류의 개념만 고른다.
- * 자료에서 만든 카드는 한 번 풀기 전(state 0)에는 넣지 않는다. 자료 화면에서 "이 자료 풀기"로만 처음 푼다.
+ * 자료에서 만든 카드는 한 번 풀기 전(state 0)에는 넣지 않는다. 학습 탭(자료)에서만 처음 푼다.
  */
 const CANDIDATES = `SELECT c.id, c.concept_id, c.state, c.due, c.created_at, c.type, c.rung, c.prompt, c.code, c.answer, c.options, c.explain,
                           c.checklist, c.stability, c.difficulty, c.elapsed_days, c.scheduled_days, c.learning_steps, c.reps, c.lapses,
@@ -164,6 +164,46 @@ export async function loadMaterialQueue(
     cards: (rows!.results as unknown as CandidateRow[]).map((row) => toQueueCard(row, now)),
     remaining: (count!.results[0] as { n: number } | undefined)?.n ?? 0,
   };
+}
+
+/** "틀린 것"은 최근 이 날수 안에 마지막 답이 틀린 카드다 */
+const MISTAKE_DAYS = 30;
+
+/**
+ * 틀린 것 (복습 탭): 최근 MISTAKE_DAYS일 안에 마지막 답이 틀린 카드. 최근에 틀린 것부터.
+ * 오늘 푼 카드는 뺀다 (방금 정답을 봤다). 때가 안 됐어도 내지만, 다시 푼 답은 그대로 기록해 일정에 반영한다.
+ */
+export async function loadMistakes(env: Env, userId: string, now: number, size: number): Promise<{ cards: QueueCard[]; remaining: number }> {
+  const { results } = await env.DB.prepare(
+    `WITH last AS (
+       SELECT card_id, grade, reviewed_at, row_number() OVER (PARTITION BY card_id ORDER BY reviewed_at DESC) AS rn
+         FROM review_logs WHERE user_id = ?1 AND reviewed_at >= ?2
+     )
+     SELECT c.id, c.concept_id, c.state, c.due, c.created_at, c.type, c.rung, c.prompt, c.code, c.answer, c.options, c.explain,
+            c.checklist, c.stability, c.difficulty, c.elapsed_days, c.scheduled_days, c.learning_steps, c.reps, c.lapses,
+            c.last_review, k.key AS concept_key, k.name AS concept_name, k.final_answer
+       FROM last JOIN cards c ON c.id = last.card_id JOIN concepts k ON k.id = c.concept_id
+      WHERE last.rn = 1 AND last.grade = 1 AND last.reviewed_at < ?3 AND c.user_id = ?1 AND c.status = 'active'
+      ORDER BY last.reviewed_at DESC
+      LIMIT ${CANDIDATE_LIMIT}`,
+  )
+    .bind(userId, now - MISTAKE_DAYS * DAY_MS, studyDayStart(now))
+    .all<CandidateRow>();
+  return { cards: results.slice(0, size).map((row) => toQueueCard(row, now)), remaining: results.length };
+}
+
+/** 이 카드들 중 마지막 답이 틀린 카드 수 (오늘 화면의 "틀린 것") */
+export async function countLastWrong(env: Env, userId: string, cardIds: readonly string[]): Promise<number> {
+  if (cardIds.length === 0) return 0;
+  const row = await env.DB.prepare(
+    `SELECT count(*) AS n FROM (
+       SELECT grade, row_number() OVER (PARTITION BY card_id ORDER BY reviewed_at DESC) AS rn
+         FROM review_logs WHERE user_id = ?1 AND card_id IN (SELECT value FROM json_each(?2))
+     ) WHERE rn = 1 AND grade = 1`,
+  )
+    .bind(userId, JSON.stringify(cardIds))
+    .first<{ n: number }>();
+  return row?.n ?? 0;
 }
 
 function toQueueCard(row: CandidateRow, now: number): QueueCard {

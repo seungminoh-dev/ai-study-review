@@ -1,4 +1,4 @@
-import type { LevelUp, QueueCard, QueueResponse, ReportReason, ReviewGrade, StatsResponse } from '@moai/shared';
+import type { LevelUp, MaterialSummary, QueueCard, QueueResponse, ReportReason, ReviewGrade, StatsResponse } from '@moai/shared';
 import type { Confidence } from '@moai/shared/client';
 import { MAX_ELAPSED_MS, PERFECT_MIN_ANSWERS, PERFECT_XP, gradeAnswer } from '@moai/shared/client';
 import { AnimatePresence } from 'motion/react';
@@ -12,14 +12,15 @@ import { ConceptPanel, forgetConcepts } from '../cards/ConceptPanel';
 import { ExplainCard } from '../cards/ExplainCard';
 import { QuestionCard, choicesOf, type Choice } from '../cards/QuestionCard';
 import { Confetti } from '../Confetti';
-import { IconChat, IconFlame, IconStar } from '../icons';
+import { IconArrow, IconChat, IconFlame, IconStar } from '../icons';
 import { Loading } from '../Loading';
 import { Mascot } from '../Mascot';
 import { LEAVE, Presence, SOFT, useCountUp } from '../motion';
 import { cacheQueue, cachedQueue, enqueueReview, flushReviews, forgetAnswered, pendingCardIds, pendingCount, removeFromOutbox, takeLevelUps } from '../offline/store';
 import { buzz } from '../prefs';
 import { StreakGoal } from '../progress';
-import { goTab, leave } from '../router';
+import { materialReview, partView } from '../materials';
+import { Link, goTab, leave } from '../router';
 
 // 복습 세션 (설계서 §12.1, §12.2). 카드 한 장씩: 답 고르기 → 맞음·틀림과 해설 → 다음.
 
@@ -79,7 +80,20 @@ interface TodayBefore {
 
 type Load = { state: 'loading' } | { state: 'error'; message: string } | { state: 'ready'; cards: QueueCard[]; offline: boolean; before?: TodayBefore | null };
 
-export function Review({ size, category, material, part }: { size: number; category?: string | null; material?: string | null; part?: string | null }) {
+export function Review({
+  size,
+  category,
+  material,
+  part,
+  mistakes = false,
+}: {
+  size: number;
+  category?: string | null;
+  material?: string | null;
+  part?: string | null;
+  /** 복습 탭의 "틀린 것만 풀기" */
+  mistakes?: boolean;
+}) {
   const [load, setLoad] = useState<Load>({ state: 'loading' });
 
   useEffect(() => {
@@ -93,6 +107,7 @@ export function Review({ size, category, material, part }: { size: number; categ
         forgetConcepts();
         const pending = await pendingCardIds();
         const params = new URLSearchParams({ size: String(Math.min(size + pending.size, MAX_QUEUE)) });
+        if (mistakes) params.set('mode', 'mistakes');
         if (category) params.set('category', category);
         if (material) params.set('material', material);
         // 자료의 섹션 하나만 풀 때
@@ -104,11 +119,11 @@ export function Review({ size, category, material, part }: { size: number; categ
         ]);
         const cards = queue.cards.filter((card) => !pending.has(card.id)).slice(0, size);
         // 오프라인용으로는 오늘 큐 전체만 남긴다. 분류·자료로 거른 큐를 남기면 다음 오프라인 복습이 그 카드만 낸다
-        if (!category && !material) await cacheQueue(cards);
+        if (!category && !material && !mistakes) await cacheQueue(cards);
         if (!cancelled) setLoad({ state: 'ready', cards, offline: false, before: before && { xp: before.today.xp, reviewed: before.today.reviewed } });
       } catch (error) {
-        if (error instanceof OfflineError && (category || material)) {
-          if (!cancelled) setLoad({ state: 'error', message: '인터넷에 연결되지 않았어요. 분류·자료별 복습은 연결된 뒤에 할 수 있어요.' });
+        if (error instanceof OfflineError && (category || material || mistakes)) {
+          if (!cancelled) setLoad({ state: 'error', message: '인터넷에 연결되지 않았어요. 분류·자료별 복습과 틀린 것은 연결된 뒤에 할 수 있어요.' });
         } else if (error instanceof OfflineError) {
           const cards = (await cachedQueue()).slice(0, size);
           if (!cancelled) setLoad(cards.length > 0 ? { state: 'ready', cards, offline: true } : { state: 'error', message: '인터넷에 연결되지 않았고, 저장해 둔 카드도 없어요.' });
@@ -118,7 +133,7 @@ export function Review({ size, category, material, part }: { size: number; categ
     return () => {
       cancelled = true;
     };
-  }, [size, category, material, part]);
+  }, [size, category, material, part, mistakes]);
 
   if (load.state === 'loading') return <Loading label="카드를 가져오는 중" />;
   if (load.state === 'error') {
@@ -133,8 +148,8 @@ export function Review({ size, category, material, part }: { size: number; categ
     return (
       <div className="screen done">
         <Mascot mood="sleep" size={96} />
-        <p className="big">오늘 복습할 카드가 없어요</p>
-        <p className="muted">다 했거나, 아직 저장한 카드가 없어요.</p>
+        <p className="big">{mistakes ? '다시 풀 틀린 카드가 없어요' : '오늘 복습할 카드가 없어요'}</p>
+        <p className="muted">{mistakes ? '최근 30일 안에 틀린 카드는 오늘 다 풀었어요.' : '다 했거나, 아직 저장한 카드가 없어요.'}</p>
         <HomeButton primary />
       </div>
     );
@@ -595,6 +610,8 @@ function Summary({
   const misses = results.filter((result) => result.confidentMiss).map((result) => result.card.id);
   const [stats, setStats] = useState<StatsResponse | null>(null);
   const [levelUps, setLevelUps] = useState<LevelUp[]>([]);
+  /** 이어서 학습할 자료 섹션 (끝 화면에서 학습을 권한다) */
+  const [learnNext, setLearnNext] = useState<MaterialSummary | null>(null);
   /** 이번 복습의 답이 모두 서버에 들어갔다. 그래야 서버 숫자의 차이가 이번 복습의 몫이다 */
   const [allSent, setAllSent] = useState(false);
   useEffect(() => {
@@ -607,8 +624,10 @@ function Summary({
         if (cancelled) return;
         setLevelUps(takeLevelUps());
         setAllSent((await pendingCount()) === 0);
-        const next = await request<StatsResponse>('/stats');
-        if (!cancelled) setStats(next);
+        const [next, materials] = await Promise.all([request<StatsResponse>('/stats'), request<{ materials: MaterialSummary[] }>('/materials').catch(() => null)]);
+        if (cancelled) return;
+        setStats(next);
+        setLearnNext(materials?.materials.find((material) => material.next !== null) ?? null);
       } catch {
         // 오프라인이면 숫자 없이 보여 준다
       }
@@ -737,6 +756,16 @@ function Summary({
         </button>
       ) : null}
       {notice ? <p className="notice bad">{notice}</p> : null}
+      {learnNext?.next ? (
+        <Link className="learn-suggest" href={materialReview(learnNext.title, learnNext.next.part)}>
+          <span className="grow">
+            <span className="learn-suggest-kicker">학습도 이어서 할까요?</span>
+            <strong>{learnNext.next.part ? partView(learnNext.next.part, Math.max(learnNext.parts.indexOf(learnNext.next.part), 0)).name : '안 푼 카드'}</strong>
+            <span className="muted small">새 카드 {learnNext.next.unsolved_open}장</span>
+          </span>
+          <IconArrow />
+        </Link>
+      ) : null}
       <div className="summary-actions">
         {wrong.length > 0 ? (
           <button type="button" className="button" onClick={() => onRetry(wrong)}>

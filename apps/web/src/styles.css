@@ -2545,6 +2545,8 @@ a.notice.link:active,
   order: 1;
 }
 
+/* 학습 카드는 복습 카드 바로 다음 (같은 order면 놓인 순서) */
+.o-learn,
 .o-onboard {
   order: 2;
 }
@@ -2553,16 +2555,8 @@ a.notice.link:active,
   order: 3;
 }
 
-.o-growth {
+.o-goal {
   order: 4;
-}
-
-.o-category {
-  order: 5;
-}
-
-.o-material {
-  order: 6;
 }
 
 .o-followups {
@@ -2570,15 +2564,11 @@ a.notice.link:active,
 }
 
 .o-interview {
-  order: 7;
+  order: 5;
 }
 
 .o-reminder {
   order: 8;
-}
-
-.o-wide {
-  display: none !important;
 }
 
 @media (min-width: 1024px) {
@@ -2605,10 +2595,6 @@ a.notice.link:active,
 
   .today-col > * {
     order: 0;
-  }
-
-  .o-wide {
-    display: flex !important;
   }
 
   .hero {
@@ -2728,34 +2714,6 @@ a.notice.link:active,
   color: var(--muted);
 }
 
-.stat-rows {
-  display: flex;
-  flex-direction: column;
-}
-
-.stat-row {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  min-height: 44px;
-  border-bottom: 1px solid var(--border);
-}
-
-.stat-row:last-child {
-  border-bottom: none;
-}
-
-.stat-row > span {
-  font-size: 0.875rem;
-  color: var(--muted);
-}
-
-.stat-row strong {
-  font-size: 1.125rem;
-  font-variant-numeric: tabular-nums;
-}
-
 /* 다음에 볼 질문 */
 .question-list {
   list-style: none;
@@ -2771,33 +2729,6 @@ a.notice.link:active,
 .question-list li:last-child {
   border-bottom: none;
   padding-bottom: 0;
-}
-
-/* 이어서 풀 자료 */
-.material-card {
-  flex-direction: row;
-  align-items: center;
-  color: var(--text);
-  text-decoration: none;
-}
-
-.material-card .grow {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.icon-tile {
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
-  display: grid;
-  place-items: center;
-  background: var(--pen-soft);
-  color: var(--text);
-  flex-shrink: 0;
 }
 
 /* 분류별 진행 */
@@ -3260,13 +3191,6 @@ a.notice.link:active,
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
-}
-
-/* 휴대폰에서만 보이는 것 */
-@media (min-width: 1024px) {
-  .o-narrow {
-    display: none !important;
-  }
 }
 
 /* 끝 화면 버튼은 두 개가 한 줄에 들어간다 */
@@ -4773,35 +4697,6 @@ a.notice.link:active,
     opacity: 0;
     transform: translateY(-18px);
   }
-}
-
-/* 휴대폰 기록 탭 위의 나누기 (RecordsNav.tsx) */
-.records-nav {
-  display: flex;
-  gap: 4px;
-  padding: 4px;
-  border-radius: 14px;
-  background: var(--surface-2);
-}
-
-.records-nav a {
-  flex: 1;
-  min-height: 44px;
-  display: grid;
-  place-items: center;
-  border-radius: 11px;
-  color: var(--muted);
-  font-weight: 700;
-  text-decoration: none;
-  transition:
-    background-color 0.2s ease,
-    color 0.2s ease;
-}
-
-.records-nav a.on {
-  background: var(--surface);
-  color: var(--text);
-  box-shadow: 0 2px 0 var(--surface-edge);
 }
 
 /* 진행 막대: 굵은 막대, 초록(다 풂), 안의 span 채우기 */
@@ -6399,4 +6294,473 @@ a.notice.link:active,
   60% {
     transform: scale(1.06);
   }
+}
+
+/* 4단계: 오늘 화면의 복습·학습 카드. 휴대폰은 한 줄로 쌓고(order), 컴퓨터는 나란히 */
+.today-pair {
+  display: contents;
+}
+
+.hero-chip,
+.learn-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+.hero-chip {
+  background: var(--hero-line);
+}
+
+.learn-chip {
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+}
+
+.hero-count small {
+  margin-left: 4px;
+  font-size: 1.125rem;
+  font-weight: 700;
+}
+
+.hero-parts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.hero-parts li {
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--hero-line);
+  color: var(--hero-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.hero-parts li.hot {
+  background: rgba(255, 145, 77, 0.24);
+  color: var(--heat-1);
+}
+
+.learn-next {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.learn-next .grow {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.learn-next strong {
+  line-height: 1.35;
+}
+
+.learn-card > .button,
+.today-pair .hero-actions {
+  margin-top: auto;
+}
+
+/* 오늘 목표: 복습(글자색)과 학습(주황)으로 나눈 링 */
+.goal-card {
+  flex-direction: row;
+  align-items: center;
+  gap: 16px;
+}
+
+.goal-card .grow {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.goal-card h2 {
+  margin: 0;
+}
+
+.goal-legend {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8125rem;
+  color: var(--muted);
+}
+
+.goal-legend::before {
+  content: '';
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  background: var(--text);
+}
+
+.goal-legend-learn::before {
+  background: var(--accent);
+}
+
+/* 왼쪽 칸이 좁으면(1024px 언저리) 위아래로, 넓으면 나란히 */
+@media (min-width: 1024px) {
+  .today-pair {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 24px;
+  }
+}
+
+/* 학습 탭: 자료 고르기, 고른 섹션, 섹션 길 */
+.learn-screen,
+.reviews-screen {
+  gap: 16px;
+}
+
+.learn-screen h1,
+.reviews-screen h1 {
+  margin: 0;
+}
+
+.reviews-screen header p {
+  margin: 2px 0 0;
+}
+
+.material-switch {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.material-switch .grow {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.chev {
+  display: grid;
+  color: var(--muted);
+  transition: transform 0.25s var(--ease-out);
+}
+
+.chev.open {
+  transform: rotate(180deg);
+}
+
+.material-picks {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--surface);
+  list-style: none;
+}
+
+.material-picks a {
+  display: flex;
+  flex-direction: column;
+  padding: 10px 12px;
+  border-radius: 12px;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.material-picks a:hover {
+  background: var(--surface-2);
+}
+
+.material-picks a.on {
+  background: var(--pen-soft);
+}
+
+.part-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  background: var(--surface);
+}
+
+.part-card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.part-card-head .grow {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.part-no {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.part-card.current .part-no {
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+}
+
+.part-card.done .part-no {
+  background: var(--good-soft);
+  color: var(--good);
+}
+
+.part-concepts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.part-concepts li {
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.part-concepts li.known {
+  background: var(--good-soft);
+  color: var(--good);
+}
+
+.path {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 8px 0;
+  list-style: none;
+}
+
+.path-step {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 86px;
+}
+
+.path-lane {
+  position: relative;
+  display: flex;
+  flex-shrink: 0;
+  width: 150px;
+  padding-left: var(--zig, 0px);
+}
+
+.path-node {
+  display: grid;
+  place-items: center;
+  width: 62px;
+  height: 62px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.9375rem;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 6px 0 var(--surface-edge);
+  transition:
+    transform 0.12s var(--ease-out),
+    box-shadow 0.12s var(--ease-out);
+}
+
+.path-node:active {
+  transform: translateY(6px);
+  box-shadow: 0 0 0 var(--surface-edge);
+}
+
+/* "지금" 표시가 위 섹션과 겹치지 않게 띄운다 */
+.path-step.current {
+  margin-top: 18px;
+}
+
+.path-step.done .path-node {
+  background: var(--good-fill);
+  color: #192849;
+  box-shadow: 0 6px 0 var(--good);
+}
+
+.path-step.current .path-node {
+  width: 76px;
+  height: 76px;
+  background: var(--accent);
+  color: var(--accent-text);
+  box-shadow:
+    0 6px 0 var(--accent-edge),
+    0 0 0 8px var(--accent-soft);
+}
+
+.path-step.selected .path-node {
+  outline: 3px solid var(--text);
+  outline-offset: 4px;
+}
+
+.path-now {
+  position: absolute;
+  top: -28px;
+  left: calc(var(--zig, 0px) + 38px);
+  transform: translateX(-50%);
+  padding: 0 10px;
+  border-radius: 10px;
+  background: var(--hero);
+  color: var(--hero-text);
+  font-size: 0.75rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.path-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.path-name {
+  font-size: 0.875rem;
+  line-height: 1.35;
+  color: var(--muted);
+}
+
+.path-step.done .path-name,
+.path-step.current .path-name,
+.path-step.selected .path-name {
+  color: var(--text);
+  font-weight: 700;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .path-now {
+    animation: path-now 1.8s ease-in-out infinite;
+  }
+
+  @keyframes path-now {
+    50% {
+      transform: translate(-50%, -3px);
+    }
+  }
+}
+
+.claude-tip {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 18px;
+  background: var(--pen-soft);
+  font-size: 0.8125rem;
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 24px 8px;
+  text-align: center;
+}
+
+/* 복습 탭: 틀린 것 */
+/* 마스코트 머리 위 "?"가 제목에 붙지 않게 띄운다 */
+.mistakes .card-head {
+  gap: 16px;
+}
+
+.mistakes .card-head .grow {
+  flex: 1;
+}
+
+.mistakes h2,
+.mistakes .card-head p {
+  margin: 0;
+}
+
+.mistake-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mistake-list li {
+  display: flex;
+  flex-direction: column;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.mistake-list li:last-child {
+  border-bottom: none;
+}
+
+.mistake-list .small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 끝 화면: 학습도 이어서 */
+.learn-suggest {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  background: var(--accent-soft);
+  color: var(--text);
+  text-decoration: none;
+}
+
+.learn-suggest .grow {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.learn-suggest-kicker {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--accent-ink);
 }

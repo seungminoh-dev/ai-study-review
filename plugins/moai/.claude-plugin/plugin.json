@@ -1,6 +1,6 @@
 {
   "name": "moai",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "모아이 복습 앱과 연결: 코칭(/moai:coach), 학습 저장(/moai:capture), 채팅 복습(/moai:review), PDF를 자료 카드로(/moai:pdf)",
   "author": {
     "name": "seungminoh-dev"

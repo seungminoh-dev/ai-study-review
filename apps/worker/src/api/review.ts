@@ -1,7 +1,7 @@
 import { ReviewItem, ReviewsBody, estimateMinutes, normalizeCategory, type OpenFollowup, type QueueResponse, type SessionSummary, type TodayResponse } from '@moai/shared';
 import { Hono } from 'hono';
 import type { AppEnv } from '../context';
-import { countReviewedToday, loadMaterialQueue, loadTodayQueue } from '../domain/queue';
+import { countLastWrong, countReviewedToday, loadMaterialQueue, loadMistakes, loadTodayQueue } from '../domain/queue';
 import { recordReviews } from '../domain/reviews';
 import { loadMe } from '../domain/users';
 import { errorJson, readJson } from '../lib/http';
@@ -16,7 +16,7 @@ review.get('/me', async (c) => c.json(await loadMe(c.env, c.var.userId)));
 review.get('/today', async (c) => {
   const now = Date.now();
   const userId = c.var.userId;
-  const [queue, reviewedToday, sessions, rest] = await Promise.all([
+  const [queue, reviewedToday, sessions, rest, mistakes] = await Promise.all([
     loadTodayQueue(c.env, userId, now),
     countReviewedToday(c.env, userId, now),
     listSessions(c.env, userId, 3),
@@ -30,11 +30,17 @@ review.get('/today', async (c) => {
       ).bind(userId),
       c.env.DB.prepare('SELECT count(*) AS n FROM reminder_slots WHERE user_id = ?1 AND enabled = 1').bind(userId),
     ]),
+    loadMistakes(c.env, userId, now, 0),
   ]);
   const [followups, reminders] = rest;
   const body: TodayResponse = {
     remaining: queue.length,
     minutes: estimateMinutes(queue.length),
+    parts: {
+      wrong: await countLastWrong(c.env, userId, queue.map((card) => card.id)),
+      fresh: queue.filter((card) => card.state === 0).length,
+    },
+    mistakes: mistakes.remaining,
     reviewed_today: reviewedToday,
     sessions: sessions satisfies SessionSummary[],
     followups: followups!.results as unknown as OpenFollowup[],
@@ -43,10 +49,14 @@ review.get('/today', async (c) => {
   return c.json(body);
 });
 
-/** ?category=분류 경로: 그 분류만 복습. ?material=자료 제목: 그 자료 풀기 (아직 안 푼 자료 카드 포함), &part=섹션 이름이면 그 섹션만 */
+/**
+ * ?category=분류 경로: 그 분류만 복습. ?material=자료 제목: 그 자료 풀기 (아직 안 푼 자료 카드 포함), &part=섹션 이름이면 그 섹션만.
+ * ?mode=mistakes: 틀린 것만 (domain/queue.ts의 loadMistakes)
+ */
 review.get('/queue', async (c) => {
   const size = Math.min(Math.max(Number.parseInt(c.req.query('size') ?? '8', 10) || 8, 1), 20);
   const now = Date.now();
+  if (c.req.query('mode') === 'mistakes') return c.json((await loadMistakes(c.env, c.var.userId, now, size)) satisfies QueueResponse);
   const material = c.req.query('material')?.slice(0, 120);
   if (material) {
     const part = c.req.query('part');

@@ -22,7 +22,7 @@
 
 2. `.dev.vars`에는 **이 컴퓨터용 새 값**만 넣는다. 운영 secret을 회사 컴퓨터에 두지 않는다. 배포는 `main` push → GitHub Actions가 하므로 Cloudflare 로그인도 필요 없다. 운영 D1을 직접 봐야 할 때만 `wrangler login`을 한다.
 3. 로컬 DB는 컴퓨터마다 따로다 (`apps/worker/.wrangler`, gitignore). 새 컴퓨터는 빈 DB다.
-   - `npm run db:migrate:local`(`0001`~`0008`) → `npm run dev` → http://localhost:8787/setup 에서 로컬 `BOOTSTRAP_CODE`로 오너를 만든다.
+   - `npm run db:migrate:local`(`0001`~`0009`) → `npm run dev` → http://localhost:8787/setup 에서 로컬 `BOOTSTRAP_CODE`로 오너를 만든다.
    - 시험 데이터: 설정의 커넥터 주소(로컬)로 MCP `save_learning`을 부른다. 견본은 `packages/shared/fixtures/immutable-object.json`이다. §6의 리허설 순서를 그대로 써도 된다.
 4. Claude Code 앱의 미리보기 설정 `.claude/launch.json`은 레포에 없다 (`.claude/`는 커밋하지 않는다). 아래 내용으로 다시 만든다:
 
@@ -37,8 +37,8 @@
 ## 1. 지금 상태
 
 - **운영**: https://moai.smoh.dev. Cloudflare Workers Paid, D1 `moai`, 매분 Cron 1개.
-- **배포된 마이그레이션**: `0001`~`0008` (0006: 자료·분류, 0007: 이정표 배지, 0008: 오너 알림). 모두 운영과 비슷한 로컬 데이터로 미리 돌려 보고 올렸다.
-- **끝난 기능**: MVP 0~2 전부. MVP 3은 Claude Code 플러그인, 채팅 복습, 확신도, 모의면접 체인, 질문 은행, 베타 지표, 자동 분류, PDF 자료까지다. 표는 [설계서 §2.4](design.md#24-mvp-3-확장-이후).
+- **배포된 마이그레이션**: `0001`~`0009` (0006: 자료·분류, 0007: 이정표 배지, 0008: 오너 알림, 0009: 복습 묶음 `review_logs.run_id`). 모두 운영과 비슷한 로컬 데이터로 미리 돌려 보고 올렸다.
+- **끝난 기능**: MVP 0~2 전부. MVP 3은 Claude Code 플러그인, 채팅 복습, 확신도, 모의면접 체인, 질문 은행, 베타 지표, 자동 분류, PDF 자료, OAuth 커넥터, 학습·복습 나누기까지다. 표는 [설계서 §2.4](design.md#24-mvp-3-확장-이후).
 - **2026-10-18 방향 바꿈**: 친구와 함께하는 기능(리그, 질문 은행, 질문 공유)은 PWA 화면에서 뺐다. 내 성취를 높이는 쪽으로 디자인을 다시 짰다. 2026-10-19에 서버 API(`/api/league`, `/api/shared-questions`)도 지웠다. `shared_questions` 테이블과 데이터는 남겨서 내보내기와 계정 지우기에 그대로 들어간다.
 - **디자인 개편** (모두 배포, 원칙은 §4):
   - 2단계 (`f902930`): 마스코트 색, 마스코트 컴포넌트(`apps/web/src/Mascot.tsx`), 선 아이콘(`icons.tsx`), 휴대폰 아래 탭과 컴퓨터 사이드바, "내 성장"(`/growth`). `/api/stats`에 `best_streak`, `last_week_xp`, `history`(84일). 설계서 §12의 화면 목록은 2026-10-19에 지금 화면으로 고쳤다.
@@ -83,8 +83,15 @@
   - 다듬기 (2026-10-19): AI 개념 채팅 답은 2~4문장으로 짧게. 물어보기는 찍음·반반으로 맞힌 문제(이때 "너무 쉬웠어요"는 등급을 못 바꿔서 숨긴다)와 설명하기 비교 뒤에도 열린다(내 설명을 같이 보낸다). 끝 화면의 얻은 XP·연속 +1은 시작과 끝의 `/api/stats` 차이로 낸다(못 보낸 답이 있으면 어림). 지식 지도 배치는 Web Worker(`map/layout.worker.ts`)에서 하고 창 비율이 바뀌면 다시 배치한다. 처음 설치되는 동안 연 화면도 다음 배포 때 새로고침된다(`main.tsx`).
   - 세션 만료와 빈 화면 (2026-10-19): 쓰는 도중 API가 401을 주면 `/login?auth=session`으로 보낸다(`api.ts`의 `onUnauthorized`, App이 로그인한 동안 정한다). 못 보낸 답은 기기에 남는다. 화면을 그리다 오류가 나면 그 화면 자리에 새로고침 안내를 보여 준다(`ErrorBoundary.tsx`, 화면 주소마다 따로).
   - OAuth 커넥터 (2026-10-19, 설계서 §8.7): 커넥터 주소가 모두 같은 `/mcp`이고, 추가하면 모아이 로그인·허용 화면(`auth/authorize.ts`)이 뜬다. 설정에 연결한 앱 목록과 끊기, 시작 가이드 2단계도 이 주소다. 비밀 URL은 설정의 "예전 방식"에 접어 두었다. KV `OAUTH_KV`가 있어야 배포된다.
+  - 학습·복습 나누기 (2026-10-19, 4단계 시안 "모아이 4단계 디자인 시안", 설계서 §9.2·§9.6·§12.1):
+    - 기준: 학습 = PDF 자료에서 아직 안 푼 카드, 복습 = 대화에서 온 카드와 한 번이라도 푼 카드. 서버의 오늘 큐는 원래 안 푼 자료 카드를 넣지 않았다.
+    - 탭: 휴대폰 아래 탭과 컴퓨터 사이드바가 오늘·학습(`/learn`)·복습(`/reviews`)·지도·성장이다. 자료 화면은 학습, 저장 기록은 복습에 속한다. 예전 기록 탭의 "공부한 대화 | 자료" 나누기(`RecordsNav`)는 지웠다.
+    - 오늘: 복습 카드(틀린 것·다시 볼 때·대화 새 카드, `GET /api/today`의 `parts`)와 학습 카드(다음 섹션)를 나란히, 연속 카드에 다음 연속 목표(3·7·14·30·60·100·365일), 오늘 목표 링을 복습·학습으로 나눠 칠한다(`/api/stats`의 `today.learned`). 분류별 진행·내 성장 요약·최근 12주는 복습 탭과 내 성장으로 옮겼다.
+    - 학습 탭: 자료 고르기, 고른 섹션 카드, 섹션 길(`screens/Learn.tsx`).
+    - 복습 탭: 오늘 복습, 틀린 것(`GET /api/queue?mode=mistakes`: 최근 30일 안에 마지막 답이 틀린 카드, 오늘 푼 것 빼고, 다시 푼 답은 기록), 분류별, 모의면접, 공부한 대화(`screens/Reviews.tsx`).
+    - 무실수 보너스: 복습 화면마다 `run_id`를 답에 붙이고, 5장 이상 모두 맞힌 묶음에 +10 XP(`domain/stats.ts`, 기록에서 센다). 끝 화면에 PERFECT 배너, 다음 연속 목표, "학습도 이어서 할까요?".
   - 컴퓨터 화면 폭 (2026-10-19): `.app`이 `.shell` 그리드 칸에서 내용 폭으로 줄던 것을 `width: 100%`로 고쳤다. 이제 화면마다 760px(넓은 화면 1120px)까지 칸을 채운다. 내 성장은 오늘 화면처럼 두 칸(왼쪽 이정표·분류별 진행, 오른쪽 최근 12주)이고, 최근 12주 히트맵은 컴퓨터에서 칸 폭에 맞춰 날짜 칸을 키운다. 휴대폰은 그대로다.
-- **테스트**: worker 134개, shared 23개 통과. CI·Deploy 모두 초록.
+- **테스트**: worker 136개, shared 23개 통과. CI·Deploy 모두 초록.
 - **브랜치**: `main`만 쓴다. 열린 PR은 없다.
 - **확인 못 한 것**:
   1. 실제 카톡 링크 미리보기. 주소를 한 번 보내 본다. 예전 미리보기가 캐시돼 있으면 카카오 개발자 사이트의 공유 디버거로 지운다.
@@ -128,7 +135,7 @@
 - **모션**: 사라짐·레이아웃·스프링만 Motion, 나머지는 CSS. 동작 줄이기를 켜면 자리를 옮기는 움직임만 멈추고 투명도와 깜빡임은 남긴다. 새 움직임 CSS는 `@media (prefers-reduced-motion: no-preference)` 안에 둔다.
 - **글꼴**: 앱은 Pretendard. 캔버스 시안은 Google Fonts만 쓸 수 있어서 Noto Sans KR + 숫자 배지에 Silkscreen이다.
 - **화면 구조**: 휴대폰 아래 탭(오늘·지도·성장·기록, 설정은 오늘 화면 오른쪽 위, 자료는 기록 탭 안), 컴퓨터(1024px 이상)는 왼쪽 사이드바. 복습과 시작 가이드는 메뉴 없이 집중한다.
-- **시안**: claude.ai 아티팩트 "모아이 2단계 디자인 시안", "모아이 3단계 디자인 시안"(디자인 캔버스). 같은 계정이면 어느 컴퓨터에서나 열리고, Claude Code의 아티팩트 목록으로 찾는다. 3단계 캔버스 맨 아래 줄이 AI 개념 채팅 시안(휴대폰·컴퓨터)이다.
+- **시안**: claude.ai 아티팩트 "모아이 2단계 디자인 시안", "모아이 3단계 디자인 시안", "모아이 4단계 디자인 시안"(학습·복습 나누기, 디자인 캔버스). 같은 계정이면 어느 컴퓨터에서나 열리고, Claude Code의 아티팩트 목록으로 찾는다. 3단계 캔버스 맨 아래 줄이 AI 개념 채팅 시안(휴대폰·컴퓨터)이다.
 - **개선 후보**: 오류·오프라인 화면, 되돌리기 토스트, 다크 모드 직접 고르기, 진동 피드백, 앱 바로가기·설치 미리보기는 2026-10-19에 모두 만들었다 (§1).
 - 마스코트 원본(사용자가 만든 상황 시트 svg)은 집 컴퓨터에만 있다. 지금 그림의 기준은 `Mascot.tsx`다.
 
@@ -143,7 +150,7 @@
 | `apps/worker/src/mcp/` | MCP 서버. 도구 8개는 `server.ts`, 서버 지침·도구 설명은 `descriptions.ko.ts` |
 | `apps/worker/src/llm/` | 서버 AI: `anthropic.ts`(`callClaude`), `budget.ts`(`overBudget`), 작업 테이블(`jobs.ts`), 단가, 프롬프트 |
 | `apps/worker/src/cron.ts` | 매분: 알림 → AI 작업. 매시 0분: 만료 정리, `repairLibrary` |
-| `apps/worker/migrations/` | D1 마이그레이션 `0001`~`0008` |
+| `apps/worker/migrations/` | D1 마이그레이션 `0001`~`0009` |
 | `apps/web/src/` | PWA (Vite·React). `screens/`, `cards/`(문제·설명하기·체험·개념 패널), `badges.tsx`, `motion.tsx`, 오프라인 답안함 `offline/store`, 글꼴 `fonts/` |
 | `packages/shared/src/` | zod 스키마와 공용 규칙: `save-learning`, `api`, `grading`, `category`, `material`, `badges`, `llm` |
 | `plugins/moai/` | Claude Code 플러그인 (0.2.0): `/moai:coach`, `capture`, `review`, `pdf`. 마켓플레이스는 루트 `.claude-plugin/marketplace.json` |
@@ -215,7 +222,7 @@
    - 새 도구가 안 보이면 커넥터를 껐다 켜거나 새 채팅을 연다.
 2. **GitHub OAuth 앱 + `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`** ([운영 가이드 1.5](runbook.md#15-여러-기기와-github-로그인-켜기-한-번만)). 운영 `/api/auth/options`가 `github: true`라 들어 있는 것으로 보인다.
 3. Android 내비게이션 바 색: GitHub를 먼저 이어 두고 PWA를 다시 설치한다. 알림도 다시 켠다.
-4. 플러그인 0.2.0으로 업데이트한다 (`/moai:pdf`).
+4. 플러그인 0.2.1로 업데이트한다 (`/moai:pdf`, 안내 문구가 "학습 탭"으로 바뀌었다).
 5. (선택) `ANTHROPIC_API_KEY`, `GRADER_MODEL`. 콘솔에서 월 지출 한도도 건다. 운영에 들어 있는지는 확인하지 않았다 (로그인 뒤 `GET /api/ai/status`). AI 개념 채팅을 만들려면 필요하다.
 6. **OAuth 커넥터** ([운영 가이드 3.5](runbook.md#35-oauth-커넥터-켜기-한-번만)): KV를 만들어 id를 `wrangler.jsonc`에 넣고, claude.ai 커넥터를 `/mcp`로 바꾼 뒤 비밀 주소를 지운다.
 

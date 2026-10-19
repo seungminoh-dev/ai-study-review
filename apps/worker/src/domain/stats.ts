@@ -1,7 +1,7 @@
 import { PERFECT_MIN_ANSWERS, PERFECT_XP, type StatsResponse } from '@moai/shared';
 import type { Env } from '../env';
 import { badgeReads, settleBadges } from './badges';
-import { DAY_MS, STUDY_DAY_SHIFT, studyDayIndex, studyDayKey, studyWeekday } from '../lib/kst';
+import { DAY_MS, STUDY_DAY_SHIFT, studyDayIndex, studyDayKey, studyDayStart, studyWeekday } from '../lib/kst';
 
 // 스트릭·XP (설계서 §9.6). 따로 저장하지 않고 review_logs와 learning_sessions에서 센다. 프리즈만 저장한다.
 
@@ -20,7 +20,7 @@ interface DayRow {
 export async function loadStats(env: Env, userId: string, now: number): Promise<StatsResponse> {
   const today = studyDayIndex(now);
   const since = (today - LOOKBACK_DAYS) * DAY_MS - STUDY_DAY_SHIFT;
-  const [reviews, sessions, perfects, freezes, user, ...badgeRows] = await env.DB.batch([
+  const [reviews, sessions, perfects, learned, freezes, user, ...badgeRows] = await env.DB.batch([
     env.DB.prepare(
       `SELECT CAST((r.reviewed_at + ?3) / ${DAY_MS} AS INTEGER) AS d, count(*) AS n, sum(${REVIEW_XP}) AS xp
          FROM review_logs r JOIN cards c ON c.id = r.card_id
@@ -39,6 +39,11 @@ export async function loadStats(env: Env, userId: string, now: number): Promise<
                 GROUP BY run_id HAVING count(*) >= ${PERFECT_MIN_ANSWERS} AND min(grade) >= 2)
         GROUP BY d`,
     ).bind(userId, since, STUDY_DAY_SHIFT),
+    // 오늘 학습: 자료 카드를 처음 푼 답 (오늘 목표 링을 복습과 나눠 칠한다)
+    env.DB.prepare(
+      `SELECT count(*) AS n FROM review_logs r JOIN cards c ON c.id = r.card_id
+        WHERE r.user_id = ?1 AND r.reviewed_at >= ?2 AND c.origin = 'material' AND json_extract(r.prev_card, '$.state') = 0`,
+    ).bind(userId, studyDayStart(now)),
     env.DB.prepare('SELECT day FROM streak_freezes WHERE user_id = ?1').bind(userId),
     env.DB.prepare('SELECT daily_goal FROM users WHERE id = ?1').bind(userId),
     ...badgeReads(env, userId),
@@ -104,7 +109,7 @@ export async function loadStats(env: Env, userId: string, now: number): Promise<
   const weekXp = (start: number) => Array.from({ length: 7 }, (_, i) => xpOf(start + i)).reduce((sum, xp) => sum + xp, 0);
   return {
     goal,
-    today: { reviewed: reviewed.get(today)?.n ?? 0, xp: xpOf(today) },
+    today: { reviewed: reviewed.get(today)?.n ?? 0, learned: (learned!.results[0] as { n: number } | undefined)?.n ?? 0, xp: xpOf(today) },
     streak,
     freeze_available: !usedFreezeWeeks.has(monday),
     week: { xp: weekXp(monday), days },

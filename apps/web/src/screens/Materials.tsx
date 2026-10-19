@@ -3,7 +3,6 @@ import { isPdf, materialLabel } from '@moai/shared/client';
 import { Loading } from '../Loading';
 import { Mascot } from '../Mascot';
 import { materialHref, materialReview, partView } from '../materials';
-import { RecordsNav } from '../RecordsNav';
 import { Link } from '../router';
 import { useApi } from '../useApi';
 
@@ -84,7 +83,6 @@ export function Materials() {
   if (!data) return <Loading />;
   return (
     <div className="screen materials">
-      <RecordsNav current="materials" materials={data.materials.length} />
       <h1>자료</h1>
       <p className="muted small">PDF로 만든 카드예요. 풀어 본 카드부터 내 지식이 되고, 그 개념이 지식 지도에 생겨요.</p>
       <div className="material-list">

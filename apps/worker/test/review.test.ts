@@ -32,13 +32,15 @@ beforeEach(async () => {
 describe('today and queue', () => {
   it('starts empty', async () => {
     const today = (await (await api(user, '/today')).json()) as TodayResponse;
-    expect(today).toEqual({ remaining: 0, minutes: 0, reviewed_today: 0, sessions: [], followups: [], reminders_set: false });
+    expect(today).toEqual({ remaining: 0, minutes: 0, parts: { wrong: 0, fresh: 0 }, mistakes: 0, reviewed_today: 0, sessions: [], followups: [], reminders_set: false });
   });
 
   it('serves one card per concept with answers for on-device grading', async () => {
     await saveExample();
     const queue = (await (await api(user, '/queue?size=8')).json()) as QueueResponse;
     expect(queue.remaining).toBe(3);
+    // 대화에서 온 새 카드라 틀린 것은 없다
+    expect(((await (await api(user, '/today')).json()) as TodayResponse).parts).toEqual({ wrong: 0, fresh: 3 });
     expect(queue.cards.map((card) => card.concept_key).sort()).toEqual(['deep-copy', 'final-variable', 'immutable-object']);
     const mcq = queue.cards.find((card) => card.type === 'mcq')!;
     expect(mcq.options!.filter((option) => option.correct)).toHaveLength(1);
@@ -293,5 +295,31 @@ describe('saved sessions', () => {
     expect(detail.followups).toHaveLength(2);
 
     expect((await api(await newUser(), `/sessions/${id}`)).status).toBe(404);
+  });
+});
+
+// 틀린 것: 다시 푼 답이 일정에 들어가므로(되돌리지 않는다) 고르는 규칙을 확인해 둔다
+describe('mistakes', () => {
+  it('lists cards whose last answer in 30 days was wrong, except ones answered today', async () => {
+    await saveExample();
+    const cards = (await env.DB.prepare("SELECT id FROM cards WHERE user_id = ?1 AND status = 'active' ORDER BY id LIMIT 4").bind(user.id).all<{ id: string }>())
+      .results.map((row) => row.id);
+    const now = Date.now();
+    const log = (cardId: string, grade: number, daysAgo: number) =>
+      env.DB.prepare("INSERT INTO review_logs (id, user_id, card_id, grade, reviewed_at, prev_card) VALUES (?1, ?2, ?3, ?4, ?5, '{}')")
+        .bind(crypto.randomUUID(), user.id, cardId, grade, now - daysAgo * 86_400_000)
+        .run();
+    await log(cards[0]!, 1, 2); // 이틀 전에 틀림 → 나온다
+    await log(cards[1]!, 1, 3); // 틀렸다가
+    await log(cards[1]!, 3, 1); // 어제 맞힘 → 안 나온다
+    await log(cards[2]!, 1, 40); // 30일보다 전 → 안 나온다
+    await log(cards[3]!, 1, 0); // 오늘 틀림 → 안 나온다 (방금 정답을 봤다)
+
+    const mistakes = (await (await api(user, '/queue?mode=mistakes')).json()) as QueueResponse;
+    expect(mistakes.cards.map((card) => card.id)).toEqual([cards[0]]);
+    expect(mistakes.remaining).toBe(1);
+    const today = (await (await api(user, '/today')).json()) as TodayResponse;
+    expect(today.mistakes).toBe(1);
+    expect((await (await api(await newUser(), '/queue?mode=mistakes')).json()) as QueueResponse).toEqual({ cards: [], remaining: 0 });
   });
 });

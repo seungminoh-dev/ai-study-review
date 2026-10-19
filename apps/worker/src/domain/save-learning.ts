@@ -188,7 +188,7 @@ export async function saveLearning(
   };
   const nextReminder = (reminder!.results[0] as { next: number | null } | undefined)?.next ?? null;
   const summary = fromMaterial
-    ? `자료 "${input.material!.title}"${input.material!.part ? ` (${input.material!.part})` : ''}에서 ${withObject(`카드 ${counts.cards}장`)} 만들었어요. 앱의 자료 화면에서 풀면 그 개념이 내 지식이 돼요.`
+    ? `자료 "${input.material!.title}"${input.material!.part ? ` (${input.material!.part})` : ''}에서 ${withObject(`카드 ${counts.cards}장`)} 만들었어요. 앱의 학습 탭에서 풀면 그 개념이 내 지식이 돼요.`
     : summarize(counts, cards.filter((card) => card.status === 'active').length, nextReminder, now);
 
   const conceptId = (path: string) => `(SELECT id FROM concepts WHERE user_id = ?1 AND key = json_extract(value, '${path}'))`;

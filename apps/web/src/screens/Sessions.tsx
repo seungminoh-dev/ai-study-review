@@ -5,7 +5,6 @@ import { errorMessage, request } from '../api';
 import { CodeBlock } from '../cards/CodeBlock';
 import { Loading } from '../Loading';
 import { materialHref } from '../materials';
-import { RecordsNav } from '../RecordsNav';
 import { BackLink, Link } from '../router';
 import { formatDate, formatDateTime, useApi } from '../useApi';
 
@@ -44,7 +43,6 @@ export function Sessions() {
   if (!data) return <Loading />;
   return (
     <div className="screen">
-      <RecordsNav current="sessions" />
       <h1>저장 기록</h1>
       <Link href="/import" className="notice link">
         커넥터 없이 공부한 대화를 붙여 넣어 카드로 만들기 →

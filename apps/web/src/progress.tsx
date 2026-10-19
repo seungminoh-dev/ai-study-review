@@ -38,6 +38,41 @@ export function Ring({ value, max, size = 96, label, children, tone = 'card' }: 
   );
 }
 
+/** 오늘 목표 링: 복습(글자색)과 학습(주황)을 이어 칠한다 */
+export function GoalRing({ review, learn, goal, label, size = 84, children }: { review: number; learn: number; goal: number; label: string; size?: number; children: ReactNode }) {
+  const stroke = Math.round(size / 8);
+  const radius = (size - stroke) / 2;
+  const c = size / 2;
+  const a = goal > 0 ? Math.min(1, review / goal) : 0;
+  const b = goal > 0 ? Math.min(1 - a, learn / goal) : 0;
+  const arc = (part: number, offset: number, color: string) => (
+    <circle
+      cx={c}
+      cy={c}
+      r={radius}
+      fill="none"
+      stroke={color}
+      strokeWidth={stroke}
+      pathLength={1}
+      strokeDasharray={`${part} 1`}
+      strokeDashoffset={-offset}
+      transform={`rotate(-90 ${c} ${c})`}
+    />
+  );
+  return (
+    <div className="ring" style={{ width: size, height: size }}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-label={label}>
+        <circle cx={c} cy={c} r={radius} fill="none" stroke="var(--surface-2)" strokeWidth={stroke} />
+        {a > 0 ? arc(a, 0, 'var(--text)') : null}
+        {b > 0 ? arc(b, a, 'var(--accent)') : null}
+      </svg>
+      <div className="ring-label" aria-hidden="true">
+        {children}
+      </div>
+    </div>
+  );
+}
+
 /** 연속 학습 목표 단계. 지금 연속보다 큰 첫 단계가 다음 목표다 */
 const STREAK_GOALS = [3, 7, 14, 30, 60, 100, 365];
 
