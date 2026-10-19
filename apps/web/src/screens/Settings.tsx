@@ -56,6 +56,7 @@ function Status({ text, tone }: { text: string; tone: 'good' | 'bad' | 'warn' | 
 const PUSH_TEXT: Record<PushState, string> = {
   unsupported: '이 브라우저는 웹 푸시를 지원하지 않아요.',
   'needs-install': 'iPhone은 Safari 공유 버튼 → "홈 화면에 추가"로 설치한 앱에서만 알림을 받을 수 있어요.',
+  'in-app': '카톡 같은 앱 안의 브라우저에서는 알림을 켤 수 없어요. 맨 위의 버튼으로 Chrome·Safari에서 열어 주세요.',
   denied: '알림이 차단되어 있어요. 휴대폰 설정에서 이 앱의 알림을 허용해 주세요.',
   off: '이 기기에서는 알림이 꺼져 있어요.',
   on: '이 기기에서 알림을 받아요.',
@@ -448,7 +449,7 @@ function InviteSection() {
 
   // 코드는 링크에 넣지 않는다. 받은 사람이 앱 안에서 직접 입력한다 (설계서 §8.4)
   const shareText = created
-    ? `모아이 초대 코드: ${created.code}\n${location.origin} 에서 "GitHub로 계속하기"를 누른 뒤 이 코드를 넣어 주세요. 7일 동안 한 번 쓸 수 있어요.`
+    ? `모아이 초대 코드: ${created.code}\n${location.origin} 을 Chrome이나 Safari로 열어서(카톡 안에서는 설치와 알림이 안 돼요) "GitHub로 계속하기"를 누른 뒤 이 코드를 넣어 주세요. 7일 동안 한 번 쓸 수 있어요.`
     : '';
 
   return (

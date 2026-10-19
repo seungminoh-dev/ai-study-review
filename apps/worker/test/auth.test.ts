@@ -33,14 +33,15 @@ function cookieOf(response: Response, name: string): string | null {
 const jar = (...cookies: (string | null | undefined)[]) => cookies.filter(Boolean).join('; ');
 
 /** GitHub로 보냈다가 돌아오기까지. 돌아온 응답(리다이렉트)을 준다 */
-async function viaGithub(user: FakeGithubUser, options: { intent?: 'login' | 'link'; cookie?: string } = {}): Promise<Response> {
-  const start = await workerFetch(`${ORIGIN}/api/auth/github/start?intent=${options.intent ?? 'login'}`, {
+async function viaGithub(user: FakeGithubUser, options: { intent?: 'login' | 'link'; cookie?: string; next?: string } = {}): Promise<Response> {
+  const query = new URLSearchParams({ intent: options.intent ?? 'login', ...(options.next ? { next: options.next } : {}) });
+  const start = await workerFetch(`${ORIGIN}/api/auth/github/start?${query}`, {
     headers: options.cookie ? { cookie: options.cookie } : {},
   });
   const state = new URL(start.headers.get('location')!).searchParams.get('state')!;
   mockGithub(user);
   return workerFetch(`${ORIGIN}/api/auth/github/callback?code=gh-code&state=${state}`, {
-    headers: { cookie: jar(options.cookie, cookieOf(start, '__Host-moai-oauth')) },
+    headers: { cookie: jar(options.cookie, cookieOf(start, '__Host-moai-oauth'), cookieOf(start, '__Host-moai-next')) },
   });
 }
 
@@ -167,6 +168,15 @@ describe('joining with an invite', () => {
     expect(cookieOf(response, '__Host-sid')).toBeNull();
     return cookieOf(response, '__Host-moai-join')!;
   }
+
+  it('sends a new account that came from the Claude connector back to it after joining', async () => {
+    const next = '/authorize?response_type=code&client_id=abc';
+    const response = await viaGithub(githubUser('connector-newbie'), { next });
+    expect(response.headers.get('location')).toBe(`/join?${new URLSearchParams({ next })}`);
+    // 남의 사이트로는 보내지 않는다
+    const outside = await viaGithub(githubUser('outside-newbie'), { next: 'https://evil.example/' });
+    expect(outside.headers.get('location')).toBe('/join');
+  });
 
   it('asks a new GitHub account for an invite code, then creates the account once', async () => {
     const join = await arriveAtJoin();

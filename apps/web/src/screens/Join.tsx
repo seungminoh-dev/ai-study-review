@@ -31,7 +31,11 @@ function Steps() {
   );
 }
 
+/** Claude 커넥터 허용 화면에서 가입하러 왔으면 가입한 뒤 그리로 돌아간다. 남의 사이트로 보내지 않게 /authorize?만 따른다 */
+const nextOf = (value: string | null) => (value && value.startsWith('/authorize?') ? value : null);
+
 export function Join({ onDone }: { onDone: (me: Me) => void }) {
+  const next = nextOf(new URLSearchParams(location.search).get('next'));
   const [load, setLoad] = useState<Load>({ state: 'loading' });
   const [code, setCode] = useState('');
   const [name, setName] = useState('');
@@ -52,7 +56,9 @@ export function Join({ onDone }: { onDone: (me: Me) => void }) {
     setBusy(true);
     setError(null);
     try {
-      onDone(await request<Me>('/auth/join', { method: 'POST', json: { code, display_name: name } }));
+      const me = await request<Me>('/auth/join', { method: 'POST', json: { code, display_name: name } });
+      if (next) location.assign(next);
+      else onDone(me);
     } catch (reason) {
       // 만료됐거나 너무 많이 틀렸으면 GitHub 확인부터 다시 한다
       if (reason instanceof RequestError && (reason.status === 410 || reason.status === 429)) setLoad({ state: 'expired', message: reason.message });

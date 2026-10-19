@@ -7687,3 +7687,26 @@ a.notice.link:active,
     transform: scale(0.97, 1.05) rotate(2deg);
   }
 }
+
+/* 앱 안의 브라우저(카톡 등) 안내 (InAppNotice.tsx): 모든 화면 맨 위 */
+.inapp-notice {
+  max-width: 34rem;
+  margin: max(12px, env(safe-area-inset-top)) auto 0;
+  width: calc(100% - 32px);
+}
+
+.inapp-notice p {
+  margin: 0 0 8px;
+}
+
+.inapp-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.inapp-actions .button {
+  flex: 0 0 auto;
+  min-height: 44px;
+}

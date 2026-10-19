@@ -1,4 +1,4 @@
-import type { McpTokenStatus, Reminder, SessionSummary } from '@moai/shared';
+import type { LoginCode, McpTokenStatus, Reminder, SessionSummary } from '@moai/shared';
 import { MAX_REMINDERS } from '@moai/shared/client';
 import { AnimatePresence } from 'motion/react';
 import { useEffect, useState, type ReactNode } from 'react';
@@ -150,11 +150,15 @@ function InstallStep({ onNext, onInstalled }: { onNext: () => void; onInstalled:
               </button>
             </div>
             {device === 'ios' ? (
-              <ol className="steps">
-                <li>Safari 아래쪽 공유 버튼을 눌러요</li>
-                <li>"홈 화면에 추가"를 골라요</li>
-                <li>오른쪽 위 "추가"를 눌러요</li>
-              </ol>
+              <>
+                <ol className="steps">
+                  <li>Safari 아래쪽 공유 버튼을 눌러요</li>
+                  <li>"홈 화면에 추가"를 골라요</li>
+                  <li>오른쪽 위 "추가"를 눌러요</li>
+                  <li>홈 화면의 모아이를 열면 로그인을 한 번 더 해요. 아래 코드를 넣으면 돼요</li>
+                </ol>
+                <HomeLoginCode />
+              </>
             ) : canInstall ? (
               <p>아래 버튼을 누르면 바로 설치 창이 떠요.</p>
             ) : (
@@ -183,6 +187,35 @@ function InstallStep({ onNext, onInstalled }: { onNext: () => void; onInstalled:
           </button>
         )}
       </Actions>
+    </>
+  );
+}
+
+/** iPhone 홈 화면 앱은 Safari와 로그인을 따로 기억한다. 그 앱에서 넣을 로그인 코드를 미리 받아 둔다 (10분) */
+function HomeLoginCode() {
+  const [code, setCode] = useState<LoginCode | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  if (code) {
+    return (
+      <p className="notice good">
+        로그인 코드 <strong className="login-code">{code.code}</strong> · 10분 동안 한 번 쓸 수 있어요
+      </p>
+    );
+  }
+  return (
+    <>
+      <button
+        type="button"
+        className="button"
+        onClick={() =>
+          void request<LoginCode>('/login-codes', { method: 'POST' })
+            .then(setCode)
+            .catch((reason: unknown) => setError(errorMessage(reason)))
+        }
+      >
+        홈 화면 앱에서 쓸 로그인 코드 받기
+      </button>
+      {error ? <p className="notice bad">{error}</p> : null}
     </>
   );
 }
@@ -350,6 +383,7 @@ const TIMES = [
 /** 알림을 켤 수 없는 기기 상태. 시간은 먼저 저장해 둔다 */
 const PUSH_NOTE: Partial<Record<PushState, string>> = {
   'needs-install': 'iPhone은 홈 화면에 추가한 앱에서만 알림을 받을 수 있어요. 시간은 먼저 정해 둘게요.',
+  'in-app': '카톡 같은 앱 안의 브라우저에서는 알림을 켤 수 없어요. 맨 위의 버튼으로 바깥 브라우저에서 연 뒤에 켜 주세요. 시간은 먼저 정해 둘게요.',
   denied: '알림이 차단되어 있어요. 휴대폰 설정에서 이 앱의 알림을 허용해 주세요. 시간은 먼저 정해 둘게요.',
   unsupported: '이 브라우저는 알림을 지원하지 않아요. 시간은 먼저 정해 둘게요.',
 };

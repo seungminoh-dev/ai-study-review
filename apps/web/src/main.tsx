@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
+import { InAppNotice } from './InAppNotice';
 // 설치 이벤트는 앱이 뜰 때 한 번만 와서 가장 먼저 잡아 둔다
 import './install';
 import { MotionProvider } from './motion';
@@ -21,6 +22,7 @@ if (staleShell) void navigator.serviceWorker?.getRegistration().then((registrati
 if (!staleShell) createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <MotionProvider>
+      <InAppNotice />
       <App />
     </MotionProvider>
   </StrictMode>,

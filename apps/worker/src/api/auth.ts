@@ -120,7 +120,10 @@ async function loginWithGithub(c: Context<AppEnv>, github: GithubUser, now: numb
     .bind(await hashToken(c.env.TOKEN_PEPPER, token), github.id, github.login, github.name, now + JOIN_TTL_MS)
     .run();
   shortCookie(c, JOIN_COOKIE, token, JOIN_TTL_MS);
-  return c.redirect('/join');
+  // Claude 커넥터 허용 화면에서 왔으면 가입 화면이 이어받아, 가입한 뒤 허용 화면으로 돌아간다
+  const next = safeNext(decodeURIComponent(getCookie(c, NEXT_COOKIE) ?? ''));
+  dropCookie(c, NEXT_COOKIE);
+  return c.redirect(next ? `/join?${new URLSearchParams({ next })}` : '/join');
 }
 
 interface PendingRow {
