@@ -19,6 +19,9 @@ export interface RelayResult {
 }
 
 export class AnthropicRelay extends DurableObject<Env> {
+  /** 이 인스턴스가 깨어난 뒤 위치를 로그에 남겼는지 */
+  private located = false;
+
   /** Messages API에 본문(JSON 문자열)을 그대로 보내고 상태와 응답 글을 돌려준다. 저장소는 쓰지 않는다 */
   async post(body: string, beta: boolean, timeoutMs: number): Promise<RelayResult> {
     try {
@@ -33,6 +36,12 @@ export class AnthropicRelay extends DurableObject<Env> {
         body,
         signal: AbortSignal.timeout(timeoutMs),
       });
+      if (!this.located) {
+        this.located = true;
+        // 깨어날 때 한 번, 이 중계가 도는 데이터센터를 남긴다. Anthropic 앞단(Cloudflare)이 붙이는 cf-ray의 끝(IAD 같은 코드)이 그곳이다
+        const ray = response.headers.get('cf-ray');
+        console.log(JSON.stringify({ event: 'llm_relay_location', colo: ray?.split('-').pop() ?? '-', status: response.status }));
+      }
       return { status: response.status, body: await response.text() };
     } catch (error) {
       const { name, message } = error as Error;
