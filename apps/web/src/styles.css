@@ -6965,3 +6965,18 @@ a.notice.link:active,
 .levelup-notice .text-button {
   align-self: flex-start;
 }
+
+/* 주간 설문 (오늘 화면) */
+.survey-card p {
+  margin: 0;
+}
+
+.survey-note {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.survey-card .text-button {
+  align-self: flex-start;
+}

@@ -96,3 +96,29 @@ describe('connector URL', () => {
     expect(((await (await api(user, '/mcp-token')).json()) as McpTokenStatus).active).toBe(false);
   });
 });
+
+// 주간 설문은 답을 저장한다 (기획서 §13)
+describe('weekly survey', () => {
+  it('asks people who joined 3+ days ago once a week and shows answers to the owner', async () => {
+    expect(await (await api(user, '/survey')).json()).toMatchObject({ ask: false });
+    await env.DB.prepare('UPDATE users SET created_at = ?2 WHERE id = ?1').bind(user.id, Date.now() - 4 * 86_400_000).run();
+    const status = (await (await api(user, '/survey')).json()) as { week: string; ask: boolean };
+    expect(status.ask).toBe(true);
+    expect(status.week).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect((await api(user, '/survey', { method: 'PUT', json: { used: 'yes' } })).status).toBe(400);
+    expect((await api(user, '/survey', { method: 'PUT', json: { used: true, note: '트랜잭션 전파' } })).status).toBe(204);
+    expect(await (await api(user, '/survey')).json()).toMatchObject({ ask: false });
+
+    const owner = await newUser('오너', 'owner');
+    const metrics = (await (await api(owner, '/admin/metrics')).json()) as {
+      survey: { week: string; answered: number; used: number; notes: string[] }[];
+      retention_14d: { eligible: number; retained: number };
+      first_review: { saved: number; reviewed: number };
+      accuracy: { second: number | null; fifth: number | null };
+    };
+    expect(metrics.survey[0]).toMatchObject({ week: status.week, answered: 1, used: 1, notes: ['트랜잭션 전파'] });
+    expect(metrics.survey).toHaveLength(4);
+    expect(metrics.retention_14d).toEqual({ eligible: expect.any(Number), retained: expect.any(Number) });
+    expect(metrics.first_review).toEqual({ saved: expect.any(Number), reviewed: expect.any(Number) });
+  });
+});

@@ -1,8 +1,8 @@
-import type { LevelUp, MaterialSummary, McpTokenStatus, StatsResponse, TodayResponse } from '@moai/shared';
+import type { LevelUp, MaterialSummary, McpTokenStatus, StatsResponse, SurveyStatus, TodayResponse } from '@moai/shared';
 import { QUEST_XP, isPdf } from '@moai/shared/client';
 import { useEffect, useState } from 'react';
 import { aiStatus } from '../ai';
-import { request } from '../api';
+import { errorMessage, request } from '../api';
 import { NewBadges } from '../badges';
 import { IconArrow, IconBook, IconCheck, IconFlame, IconHistory, IconSettings } from '../icons';
 import { Loading } from '../Loading';
@@ -284,6 +284,85 @@ function GoalCard({ stats }: { stats: StatsResponse }) {
   );
 }
 
+const SURVEY_SKIP = 'moai:survey-skip';
+
+/** 주간 한 문항 설문 (기획서 §13). 서버가 물을 때만, "다음에"를 누른 주에는 다시 띄우지 않는다 */
+function SurveyCard() {
+  const { data } = useApi<SurveyStatus>('/survey');
+  const [state, setState] = useState<'ask' | 'note' | 'sent' | 'hidden'>('ask');
+  const [note, setNote] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  if (!data?.ask || state === 'hidden') return null;
+  try {
+    if (localStorage.getItem(SURVEY_SKIP) === data.week) return null;
+  } catch {
+    // 저장소를 못 쓰면 그냥 묻는다
+  }
+  const send = async (used: boolean) => {
+    setError(null);
+    try {
+      await request('/survey', { method: 'PUT', json: { used, ...(note.trim() ? { note: note.trim() } : {}) } });
+      setState('sent');
+    } catch (reason) {
+      setError(errorMessage(reason));
+    }
+  };
+  const skip = () => {
+    try {
+      localStorage.setItem(SURVEY_SKIP, data.week);
+    } catch {
+      // 저장소를 못 쓰면 이번 화면에서만 숨긴다
+    }
+    setState('hidden');
+  };
+  return (
+    <section className="card survey-card o-badges" aria-labelledby="survey-title">
+      <div className="card-head">
+        <Mascot mood="think" size={36} />
+        <h2 id="survey-title">이번 주 한 가지만 물어볼게요</h2>
+      </div>
+      {state === 'sent' ? (
+        <p className="notice good">고마워요! 다음 주에 또 물어볼게요.</p>
+      ) : (
+        <>
+          <p>이번 주 면접이나 공부에서 써먹은 개념이 있나요?</p>
+          <p className="muted small">답은 베타를 고치는 데 쓰여요. 운영자는 누가 답했는지 빼고 모아서 봐요.</p>
+          {state === 'note' ? (
+            <form
+              className="survey-note"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void send(true);
+              }}
+            >
+              <label htmlFor="survey-note" className="small">
+                어떤 개념이었나요? (적지 않아도 돼요)
+              </label>
+              <input id="survey-note" value={note} maxLength={200} autoFocus onChange={(event) => setNote(event.target.value)} placeholder="예: 트랜잭션 전파" />
+              <button type="submit" className="button primary">
+                보내기
+              </button>
+            </form>
+          ) : (
+            <div className="actions">
+              <button type="button" className="button primary" onClick={() => setState('note')}>
+                있어요
+              </button>
+              <button type="button" className="button" onClick={() => void send(false)}>
+                아직 없어요
+              </button>
+            </div>
+          )}
+          {error ? <p className="notice bad">{error}</p> : null}
+          <button type="button" className="text-button" onClick={skip}>
+            다음에
+          </button>
+        </>
+      )}
+    </section>
+  );
+}
+
 /** 복습 밖에서 받은 LEVEL UP (앱을 열 때 밀린 답을 보내서 열린 단계). 확인하면 비운다 */
 function LevelUpNotice() {
   const [ups, setUps] = useState<LevelUp[]>([]);
@@ -390,6 +469,7 @@ export function Today({ name }: { name: string }) {
           {/* 첫 저장처럼 복습 밖에서 이룬 이정표는 여기서 축하한다 */}
           {stats ? <NewBadges badges={stats.badges} link className="o-badges" /> : null}
           <LevelUpNotice />
+          <SurveyCard />
           <Onboarding saved={data.sessions.length > 0} />
           {data.followups.length > 0 ? (
             <section className="card o-followups" aria-labelledby="followups-title">

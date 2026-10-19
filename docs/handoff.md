@@ -22,7 +22,7 @@
 
 2. `.dev.vars`에는 **이 컴퓨터용 새 값**만 넣는다. 운영 secret을 회사 컴퓨터에 두지 않는다. 배포는 `main` push → GitHub Actions가 하므로 Cloudflare 로그인도 필요 없다. 운영 D1을 직접 봐야 할 때만 `wrangler login`을 한다.
 3. 로컬 DB는 컴퓨터마다 따로다 (`apps/worker/.wrangler`, gitignore). 새 컴퓨터는 빈 DB다.
-   - `npm run db:migrate:local`(`0001`~`0011`) → `npm run dev` → http://localhost:8787/setup 에서 로컬 `BOOTSTRAP_CODE`로 오너를 만든다.
+   - `npm run db:migrate:local`(`0001`~`0012`) → `npm run dev` → http://localhost:8787/setup 에서 로컬 `BOOTSTRAP_CODE`로 오너를 만든다.
    - 시험 데이터: 설정의 커넥터 주소(로컬)로 MCP `save_learning`을 부른다. 견본은 `packages/shared/fixtures/immutable-object.json`이다. §6의 리허설 순서를 그대로 써도 된다.
 4. Claude Code 앱의 미리보기 설정 `.claude/launch.json`은 레포에 없다 (`.claude/`는 커밋하지 않는다). 아래 내용으로 다시 만든다:
 
@@ -37,7 +37,7 @@
 ## 1. 지금 상태
 
 - **운영**: https://moai.smoh.dev. Cloudflare Workers Paid, D1 `moai`, 매분 Cron 1개.
-- **배포된 마이그레이션**: `0001`~`0010` (0006: 자료·분류, 0007: 이정표 배지, 0008: 오너 알림, 0009: 복습 묶음 `review_logs.run_id`, 0010: 자료 보여 줄 이름 `material_labels`, 0011: 섹션 보여 줄 이름 `material_part_labels`). 모두 운영과 비슷한 로컬 데이터로 미리 돌려 보고 올렸다.
+- **배포된 마이그레이션**: `0001`~`0010` (0006: 자료·분류, 0007: 이정표 배지, 0008: 오너 알림, 0009: 복습 묶음 `review_logs.run_id`, 0010: 자료 보여 줄 이름 `material_labels`, 0011: 섹션 보여 줄 이름 `material_part_labels`, 0012: 주간 설문 `survey_answers`). 모두 운영과 비슷한 로컬 데이터로 미리 돌려 보고 올렸다.
 - **끝난 기능**: MVP 0~2 전부. MVP 3은 Claude Code 플러그인, 채팅 복습, 확신도, 모의면접 체인, 질문 은행, 베타 지표, 자동 분류, PDF 자료, OAuth 커넥터, 학습·복습 나누기까지다. 표는 [설계서 §2.4](design.md#24-mvp-3-확장-이후).
 - **2026-10-18 방향 바꿈**: 친구와 함께하는 기능(리그, 질문 은행, 질문 공유)은 PWA 화면에서 뺐다. 내 성취를 높이는 쪽으로 디자인을 다시 짰다. 2026-10-19에 서버 API(`/api/league`, `/api/shared-questions`)도 지웠다. `shared_questions` 테이블과 데이터는 남겨서 내보내기와 계정 지우기에 그대로 들어간다.
 - **디자인 개편** (모두 배포, 원칙은 §4):
@@ -90,6 +90,9 @@
     - 학습 탭: 자료 고르기, 고른 섹션 카드, 섹션 길(`screens/Learn.tsx`).
     - 복습 탭: 오늘 복습, 틀린 것(`GET /api/queue?mode=mistakes`: 최근 30일 안에 마지막 답이 틀린 카드, 오늘 푼 것 빼고, 다시 푼 답은 기록), 분류별, 모의면접, 공부한 대화(`screens/Reviews.tsx`).
     - 무실수 보너스: 복습 화면마다 `run_id`를 답에 붙이고, 5장 이상 모두 맞힌 묶음에 +10 XP(`domain/stats.ts`, 기록에서 센다). 끝 화면에 PERFECT 배너, 다음 연속 목표, "학습도 이어서 할까요?".
+  - 베타 지표와 주간 설문 (2026-10-19, 기획서 §13):
+    - 오너 설정의 베타 지표 아래 "참고 지표": 14일 유지율(가입 14일 넘은 사람 중 14일째부터 복습한 사람), 저장 → 첫 복습(하루 넘게 지난 대화 저장 중 카드를 한 장이라도 푼 저장, 자료 저장은 뺀다), 카드마다 2회차·5회차 답의 정답률. 목표가 정해지지 않아 ✓/✗ 없이 보여 준다(`GET /api/admin/metrics`).
+    - 주간 설문 "이번 주 면접이나 공부에서 써먹은 개념이 있나요?": 가입 3일이 넘었고 이번 주(월요일, 04:00 KST 경계)에 아직 답하지 않았으면 오늘 화면에 뜬다. "있어요"면 어떤 개념인지 적을 수 있다(선택). "다음에"는 그 주 동안 이 기기에서 숨긴다(`localStorage`). `GET/PUT /api/survey`, `survey_answers`(사람마다 한 주에 하나). 오너 화면에 최근 4주의 답 수, 써먹은 수, 적은 개념. 내보내기와 계정 지우기에 들어간다.
   - 기능 묶음 (2026-10-19, 시안 없이 사용자가 맡김):
     - 분류 관리(`/categories`, 지식 지도·복습 탭에서 연다): 큰 분류까지 트리로 보여 주고, 분류를 옮기거나 이름을 바꾼다. 이미 있는 이름이면 합쳐진다. 먼저 미리 보기(`POST /api/categories/rename`의 `dry_run`)로 옮길 분류와 단계가 합쳐지는 이동을 보여 준다. 채팅의 `update_categories`와 같은 함수다.
     - 오늘의 퀘스트(`packages/shared/src/quests.ts`): 카드 10장 풀기, 무실수 복습 1번, 새 카드 5장 학습 또는 설명하기 1장. 하나에 +10 XP. 매일 같은 세 가지라 기록에서 날마다 다시 센다(`domain/stats.ts`의 `questOf`). 오늘 화면 오른쪽 칸.
@@ -106,7 +109,7 @@
     - 개념 이름이 곧 정답인 문제가 많아서, 복습 카드의 개념 칩과 컴퓨터 개념 패널의 이름은 답한 뒤에 보여 준다(설명하기는 문제에 이름이 있어 그대로). 복습 탭 "틀린 것" 목록도 문제만 보여 준다. 채팅 복습 안내(MCP)에도 개념 이름을 먼저 말하지 말라고 적었다.
     - 복습 탭의 "공부한 대화"는 대화만 보여 준다. 자료 섹션은 학습 탭에 있다.
   - 컴퓨터 화면 폭 (2026-10-19): `.app`이 `.shell` 그리드 칸에서 내용 폭으로 줄던 것을 `width: 100%`로 고쳤다. 이제 화면마다 760px(넓은 화면 1120px)까지 칸을 채운다. 내 성장은 오늘 화면처럼 두 칸(왼쪽 이정표·분류별 진행, 오른쪽 최근 12주)이고, 최근 12주 히트맵은 컴퓨터에서 칸 폭에 맞춰 날짜 칸을 키운다. 휴대폰은 그대로다.
-- **테스트**: worker 142개, shared 23개 통과. CI·Deploy 모두 초록.
+- **테스트**: worker 143개, shared 23개 통과. CI·Deploy 모두 초록.
 - **브랜치**: `main`만 쓴다. 열린 PR은 없다.
 - **확인 못 한 것**:
   1. 실제 카톡 링크 미리보기. 주소를 한 번 보내 본다. 예전 미리보기가 캐시돼 있으면 카카오 개발자 사이트의 공유 디버거로 지운다.
@@ -165,7 +168,7 @@
 | `apps/worker/src/mcp/` | MCP 서버. 도구 8개는 `server.ts`, 서버 지침·도구 설명은 `descriptions.ko.ts` |
 | `apps/worker/src/llm/` | 서버 AI: `anthropic.ts`(`callClaude`), `budget.ts`(`overBudget`), 작업 테이블(`jobs.ts`), 단가, 프롬프트 |
 | `apps/worker/src/cron.ts` | 매분: 알림 → AI 작업. 매시 0분: 만료 정리, `repairLibrary` |
-| `apps/worker/migrations/` | D1 마이그레이션 `0001`~`0011` |
+| `apps/worker/migrations/` | D1 마이그레이션 `0001`~`0012` |
 | `apps/web/src/` | PWA (Vite·React). `screens/`, `cards/`(문제·설명하기·체험·개념 패널), `badges.tsx`, `motion.tsx`, 오프라인 답안함 `offline/store`, 글꼴 `fonts/` |
 | `packages/shared/src/` | zod 스키마와 공용 규칙: `save-learning`, `api`, `grading`, `category`, `material`, `badges`, `llm` |
 | `plugins/moai/` | Claude Code 플러그인 (0.2.0): `/moai:coach`, `capture`, `review`, `pdf`. 마켓플레이스는 루트 `.claude-plugin/marketplace.json` |

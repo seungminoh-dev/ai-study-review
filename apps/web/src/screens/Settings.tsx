@@ -755,6 +755,37 @@ function MetricsSection() {
           </li>
         ))}
       </ul>
+      <h3>참고 지표</h3>
+      <ul className="list">
+        <li className="metric">
+          <span>14일 유지율</span>
+          <span>
+            {data.retention_14d.eligible === 0 ? '아직 14일 지난 사람이 없어요' : `${percent(data.retention_14d.retained / data.retention_14d.eligible)} (${data.retention_14d.retained}/${data.retention_14d.eligible})`}
+          </span>
+        </li>
+        <li className="metric">
+          <span>저장 → 첫 복습</span>
+          <span>{data.first_review.saved === 0 ? '아직 하루 지난 저장이 없어요' : `${percent(data.first_review.reviewed / data.first_review.saved)} (${data.first_review.reviewed}/${data.first_review.saved})`}</span>
+        </li>
+        <li className="metric">
+          <span>정답률 2회차 → 5회차</span>
+          <span>
+            {data.accuracy.second === null ? '–' : percent(data.accuracy.second)} → {data.accuracy.fifth === null ? '–' : percent(data.accuracy.fifth)}{' '}
+            <span className="muted small">
+              ({data.accuracy.second_n}장 · {data.accuracy.fifth_n}장)
+            </span>
+          </span>
+        </li>
+      </ul>
+      <h3>주간 설문: 써먹은 개념이 있었나요?</h3>
+      <ul className="list">
+        {data.survey.map((week) => (
+          <li key={week.week} className="small">
+            {week.week} 주 · 답 {week.answered}명 · 써먹음 {week.used}명
+            {week.notes.length > 0 ? <span className="muted"> · {week.notes.join(' / ')}</span> : null}
+          </li>
+        ))}
+      </ul>
       <ul className="list">
         {data.people.map((person) => (
           <li key={`${person.name}-${person.joined_at}`} className="small">

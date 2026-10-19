@@ -330,7 +330,23 @@ export interface BetaMetrics {
   /** 이번 달 서버 AI 비용 (목표 월 $100 미만) */
   ai_usd_month: number;
   people: { name: string; reviews_7d: number; last_review_at: number | null; joined_at: number }[];
+  /** 가입한 지 14일 넘은 사람 중 14일째 뒤에도 복습한 사람 */
+  retention_14d: { eligible: number; retained: number };
+  /** 하루 넘게 지난 대화 저장 중 그 카드를 한 장이라도 푼 저장 (자료 저장은 뺀다) */
+  first_review: { saved: number; reviewed: number };
+  /** 카드마다 2회차·5회차 답의 정답률. 답이 없으면 null */
+  accuracy: { second: number | null; second_n: number; fifth: number | null; fifth_n: number };
+  /** 주간 설문: 최근 4주, 최근 주부터. 답한 사람과 "써먹었다"고 한 사람 */
+  survey: { week: string; answered: number; used: number; notes: string[] }[];
 }
+
+/** 주간 설문 (기획서 §13): 이번 주에 물을지와 이번 주 월요일 */
+export interface SurveyStatus {
+  week: string;
+  ask: boolean;
+}
+
+export const SurveyBody = z.object({ used: z.boolean(), note: z.string().trim().max(200).optional() });
 
 export interface MemberSummary {
   id: string;
