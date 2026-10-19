@@ -129,6 +129,22 @@ describe('AI concept chat', () => {
     expect(await askCount()).toBe(50);
   });
 
+  it('turns the conversation into an import job for my own card only', async () => {
+    const cardId = await mcqCardId();
+    const turns = [{ question: '내 답은 왜 틀렸어요?', answer: '방어적 복사는 생성자와 getter 양쪽에서 해요.' }];
+    expect((await api(await newUser(), `/cards/${cardId}/ask/cards`, { method: 'POST', json: { turns } })).status).toBe(404);
+    const response = await api(user, `/cards/${cardId}/ask/cards`, { method: 'POST', json: { turns, picked: '얕은 복사' } });
+    expect(response.status).toBe(202);
+    const { job_id } = (await response.json()) as { job_id: string };
+    const input = await env.DB.prepare("SELECT input FROM llm_jobs WHERE id = ?1 AND kind = 'import'").bind(job_id).first<string>('input');
+    expect(input).toContain('방어적 복사는 생성자와 getter 양쪽에서 해요.');
+    expect(input).toMatch(/이미 있는 개념: key `[a-z-]+`/);
+    // 같은 대화를 다시 보내면 같은 작업이다
+    expect(await (await api(user, `/cards/${cardId}/ask/cards`, { method: 'POST', json: { turns, picked: '얕은 복사' } })).json()).toEqual({ job_id, duplicate: true });
+    // 기다리는 작업을 남기면 다음 테스트의 Cron이 이것부터 집는다
+    await env.DB.prepare('DELETE FROM llm_jobs WHERE id = ?1').bind(job_id).run();
+  });
+
   it('does not count a question the API never answered', async () => {
     const cardId = await mcqCardId();
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('overloaded', { status: 529 }));

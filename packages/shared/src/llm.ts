@@ -55,6 +55,16 @@ export type AskBody = z.infer<typeof AskBody>;
 
 export const AskResult = z.object({ answer: z.string().min(1).max(2000) });
 
+/** AI 개념 채팅 2차: 주고받은 대화로 카드를 만든다 (붙여넣기 가져오기와 같은 작업으로 돈다) */
+export const AskCardsBody = z.object({
+  picked: z.string().trim().max(2000).optional(),
+  turns: z
+    .array(z.object({ question: z.string().trim().min(1).max(300), answer: z.string().trim().min(1).max(2000) }))
+    .min(1)
+    .max(6),
+});
+export type AskCardsBody = z.infer<typeof AskCardsBody>;
+
 export interface AskResponse {
   answer: string;
   /** 이번 달 남은 질문 수 */

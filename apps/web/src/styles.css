@@ -5729,6 +5729,13 @@ a.notice.link:active,
   transition: background-color 0.15s ease;
 }
 
+/* 대화로 카드 만들기 (2차) */
+.ask-chip.make {
+  justify-content: center;
+  border-style: dashed;
+  color: var(--accent-ink);
+}
+
 .ask-form {
   display: flex;
   flex-direction: column;

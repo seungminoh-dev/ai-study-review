@@ -1,11 +1,11 @@
-import { AskBody, GradeAiBody, ImportBody, type AiStatus, type AskResponse, type BetaMetrics, type JobView, type UsageReport } from '@moai/shared';
+import { AskBody, AskCardsBody, GradeAiBody, ImportBody, type AiStatus, type AskResponse, type BetaMetrics, type JobView, type UsageReport } from '@moai/shared';
 import { Hono } from 'hono';
 import type { AppEnv } from '../context';
 import { sha256Hex } from '../lib/crypto';
 import { errorJson, readJson } from '../lib/http';
 import { DAY_MS } from '../lib/kst';
 import { llmConfigured } from '../llm/anthropic';
-import { askConcept, askLeft } from '../llm/ask';
+import { askConcept, askLeft, askToCards } from '../llm/ask';
 import { caps, monthStart, overBudget } from '../llm/budget';
 import { createJob, runJob } from '../llm/jobs';
 import { requireOwner } from './account';
@@ -32,6 +32,16 @@ ai.post('/cards/:id/ask', async (c) => {
   if (body instanceof Response) return body;
   const outcome = await askConcept(c.env, c.var.userId, c.req.param('id'), body, Date.now());
   return outcome.ok ? c.json({ answer: outcome.answer, left: outcome.left } satisfies AskResponse) : errorJson(outcome.status, outcome.code, outcome.message);
+});
+
+/** AI 개념 채팅 2차: 그 대화로 카드를 만든다. 가져오기 작업으로 돌고, 끝나면 푸시로 알린다 */
+ai.post('/cards/:id/ask/cards', async (c) => {
+  if (!llmConfigured(c.env)) return errorJson(503, 'ai_unavailable', '서버에 AI 설정이 없어요.');
+  const body = await readJson(c, AskCardsBody);
+  if (body instanceof Response) return body;
+  const outcome = await askToCards(c.env, c.var.userId, c.req.param('id'), body, Date.now());
+  if (!outcome.ok) return errorJson(outcome.status, outcome.code, outcome.message);
+  return c.json({ job_id: outcome.job_id, duplicate: outcome.duplicate }, outcome.duplicate ? 200 : 202);
 });
 
 ai.post('/cards/:id/grade-ai', async (c) => {

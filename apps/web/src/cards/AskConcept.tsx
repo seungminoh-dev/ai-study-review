@@ -1,11 +1,12 @@
-import type { AskResponse, QueueCard } from '@moai/shared';
+import type { AskResponse, ImportResult, QueueCard } from '@moai/shared';
 import { AnimatePresence } from 'motion/react';
 import * as m from 'motion/react-m';
 import { Fragment, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
-import { aiStatus, forgetAiStatus } from '../ai';
+import { JOB_ERROR, aiStatus, forgetAiStatus, waitForJob } from '../ai';
 import { RequestError, errorMessage, request } from '../api';
 import { IconArrow } from '../icons';
 import { Mascot } from '../Mascot';
+import { Link } from '../router';
 import { LEAVE, SOFT } from '../motion';
 
 // AI 개념 채팅 (3단계 시안 "AI 개념 채팅"): 복습에서 틀렸거나, 찍어서 맞혔거나, 설명하기를 비교한 카드의 개념을 묻는다.
@@ -33,6 +34,9 @@ const INTRO: Record<AskMode, string> = {
   explain: '내 설명과 비교해서 궁금한 걸 물어봐요.',
 };
 
+/** 2차: 이 대화로 카드 만들기 */
+type Making = { state: 'idle' } | { state: 'making' } | { state: 'done'; summary: string; sessionId: string } | { state: 'failed'; message: string };
+
 export interface Ask {
   /** 서버 AI가 켜져 있고 이번 달 AI 한도가 남았다 */
   available: boolean;
@@ -41,12 +45,15 @@ export interface Ask {
   turns: Turn[];
   pending: boolean;
   ask: (question: string) => Promise<void>;
+  making: Making;
+  makeCards: () => Promise<void>;
 }
 
 /** 카드 자리(stageKey)마다 대화를 따로 둔다. 다음 카드로 가면 빈 대화가 된다 */
 export function useAsk(stageKey: string, cardId: string | undefined, picked: string | null): Ask {
   const [status, setStatus] = useState({ available: false, left: 0 });
   const [log, setLog] = useState<{ key: string; turns: Turn[] }>({ key: stageKey, turns: [] });
+  const [made, setMade] = useState<{ key: string; making: Making }>({ key: stageKey, making: { state: 'idle' } });
 
   useEffect(() => {
     void aiStatus().then((value) => setStatus({ available: value.available && !value.over_budget, left: value.ask_left }));
@@ -77,7 +84,32 @@ export function useAsk(stageKey: string, cardId: string | undefined, picked: str
     }
   };
 
-  return { ...status, turns, pending, ask };
+  const making = made.key === stageKey ? made.making : { state: 'idle' as const };
+  const makeCards = async () => {
+    const answered = turns.flatMap((turn) => (turn.answer ? [{ question: turn.question, answer: turn.answer }] : [])).slice(-6);
+    if (!cardId || answered.length === 0 || making.state === 'making') return;
+    const key = stageKey;
+    const set = (next: Making) => setMade((current) => (current.key === key || next.state === 'making' ? { key, making: next } : current));
+    set({ state: 'making' });
+    try {
+      const { job_id } = await request<{ job_id: string }>(`/cards/${cardId}/ask/cards`, { method: 'POST', json: { turns: answered, ...(picked ? { picked } : {}) } });
+      // 매분 작업이 만든다. 보통 1~2분이고, 다 되면 푸시로도 알린다
+      const job = await waitForJob(job_id, 240_000);
+      if (job.status === 'done') {
+        const result = job.result as ImportResult;
+        set({ state: 'done', summary: result.summary, sessionId: result.session_id });
+      } else if (job.status === 'failed') {
+        set({ state: 'failed', message: JOB_ERROR[job.error ?? ''] ?? '카드를 만들지 못했어요.' });
+      } else {
+        set({ state: 'failed', message: '아직 만드는 중이에요. 다 되면 알림으로 알려 드려요.' });
+      }
+    } catch (error) {
+      if (error instanceof RequestError && error.status === 429) forgetAiStatus();
+      set({ state: 'failed', message: errorMessage(error) });
+    }
+  };
+
+  return { ...status, turns, pending, ask, making, makeCards };
 }
 
 /** 대화: 문제와 내 답, 추천 질문, 주고받은 말, 직접 묻는 칸 */
@@ -128,6 +160,7 @@ export function AskChat({ card, mode, picked, ask }: { card: QueueCard; mode: As
             )}
           </Fragment>
         ))}
+        {ask.turns.some((turn) => turn.answer) && !ask.pending ? <MakeCards ask={ask} /> : null}
         {!ask.pending && ask.left > 0 ? (
           <div className="ask-suggest">
             {SUGGESTIONS[mode].filter((question) => !asked.has(question)).map((question) => (
@@ -160,6 +193,28 @@ export function AskChat({ card, mode, picked, ask }: { card: QueueCard; mode: As
         <p className="ask-foot">이번 달 남은 질문 {ask.left}번 · AI 답은 틀릴 수 있어요</p>
       </form>
     </div>
+  );
+}
+
+/** 2차: 주고받은 대화로 카드 만들기. 붙여넣기 가져오기와 같은 작업이라 같은 예산 한도를 따른다 */
+function MakeCards({ ask }: { ask: Ask }) {
+  const { making } = ask;
+  if (making.state === 'making') return <p className="notice">이 대화로 카드를 만드는 중이에요. 1~2분 걸리고, 다 되면 알림으로도 알려 드려요.</p>;
+  if (making.state === 'done') {
+    return (
+      <p className="notice good">
+        {making.summary.split('\n')[0]}{' '}
+        <Link href={`/sessions/${making.sessionId}`}>저장 기록에서 보기</Link>
+      </p>
+    );
+  }
+  return (
+    <>
+      {making.state === 'failed' ? <p className="notice bad">{making.message}</p> : null}
+      <button type="button" className="ask-chip make" onClick={() => void ask.makeCards()}>
+        이 대화로 카드 만들기
+      </button>
+    </>
   );
 }
 
