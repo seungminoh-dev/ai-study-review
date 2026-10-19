@@ -31,7 +31,6 @@ export function Interview({ concept, category }: { concept: string | null; categ
   const [text, setText] = useState('');
   const [saving, setSaving] = useState<Saving>({ state: 'idle' });
   const started = useRef(false);
-  const logEnd = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
 
   const ask = async (sent: Turn[]) => {
@@ -61,10 +60,11 @@ export function Interview({ concept, category }: { concept: string | null; categ
     void ask([]);
   }, []);
 
+  // 새 말이 오면 문서 끝까지 내린다. 입력 칸이 아래에 붙어 있어서, 마지막 말이 그 뒤에 가리지 않고 바로 위에 보인다
   useEffect(() => {
-    logEnd.current?.scrollIntoView({ block: 'end' });
+    window.scrollTo({ top: document.documentElement.scrollHeight });
     if (question) input.current?.focus({ preventScroll: true });
-  }, [turns.length, question, waiting, summary]);
+  }, [turns.length, question, waiting, summary, error]);
 
   const answer = (value: string) => {
     if (!question || waiting) return;
@@ -106,21 +106,23 @@ export function Interview({ concept, category }: { concept: string | null; categ
   const total = chain?.total ?? 0;
   return (
     <div className="interview">
-      <header className="review-top">
-        <button type="button" className="icon-button" aria-label="그만하기" onClick={quit}>
-          ✕
-        </button>
-        <div className="progress" role="progressbar" aria-label="진행" aria-valuemin={0} aria-valuemax={total} aria-valuenow={done}>
-          <div style={{ width: total ? `${(done / total) * 100}%` : '0%' }} />
-        </div>
-        <span className="muted count">{total ? `${Math.min(done + (summary ? 0 : 1), total)}/${total}` : ''}</span>
-      </header>
-
-      <div className="interview-head">
-        <Mascot mood={waiting ? 'think' : summary ? 'cheer' : 'study'} size={44} />
-        <div className="grow">
-          <h1>꼬리질문 모의면접</h1>
-          <p className="muted small">{chain ? chain.names.join(' → ') : '물을 개념을 고르는 중이에요'}</p>
+      {/* 머리는 위에 붙어 있다. 대화가 길어져도 어디까지 왔는지 보인다 */}
+      <div className="interview-top">
+        <header className="review-top">
+          <button type="button" className="icon-button" aria-label="그만하기" onClick={quit}>
+            ✕
+          </button>
+          <div className="progress" role="progressbar" aria-label="진행" aria-valuemin={0} aria-valuemax={total} aria-valuenow={done}>
+            <div style={{ width: total ? `${(done / total) * 100}%` : '0%' }} />
+          </div>
+          <span className="muted count">{total ? `${Math.min(done + (summary ? 0 : 1), total)}/${total}` : ''}</span>
+        </header>
+        <div className="interview-head">
+          <Mascot mood={waiting ? 'think' : summary ? 'cheer' : 'study'} size={44} />
+          <div className="grow">
+            <h1>꼬리질문 모의면접</h1>
+            <p className="muted small">{chain ? chain.names.join(' → ') : '물을 개념을 고르는 중이에요'}</p>
+          </div>
         </div>
       </div>
 
@@ -152,10 +154,10 @@ export function Interview({ concept, category }: { concept: string | null; categ
           </div>
         ) : null}
         {summary ? <Summary summary={summary} saving={saving} onSave={() => void save()} /> : null}
-        <div ref={logEnd} />
       </div>
 
-      {question ? (
+      {/* 면접이 끝날 때까지 입력 칸을 둔다. 답을 보내는 동안 없애면 페이지가 짧아져 맨 위로 튄다 */}
+      {summary ? null : (
         <form className="interview-form" onSubmit={submit}>
           <label className="sr-only" htmlFor="interview-answer">
             내 답
@@ -167,24 +169,24 @@ export function Interview({ concept, category }: { concept: string | null; categ
             rows={4}
             maxLength={2000}
             value={text}
-            placeholder="면접관에게 말하듯 답해 보세요. 첫 문장에 답부터."
+            placeholder={waiting ? '면접관이 생각하는 중이에요. 먼저 적어 둬도 돼요.' : '면접관에게 말하듯 답해 보세요. 첫 문장에 답부터.'}
             onChange={(event) => setText(event.target.value)}
             onKeyDown={(event) => {
               if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') submit(event);
             }}
           />
           <div className="actions">
-            <button type="button" className="button" onClick={() => answer(DONT_KNOW)}>
+            <button type="button" className="button" disabled={!question || waiting} onClick={() => answer(DONT_KNOW)}>
               모르겠어요
             </button>
-            <button type="submit" className="button primary" disabled={!text.trim()}>
+            <button type="submit" className="button primary" disabled={!question || waiting || !text.trim()}>
               답하기
             </button>
           </div>
           <p className="ask-foot">{left !== null ? `질문 하나에 ${CREDIT_COST.interview} 크레딧 · 남은 크레딧 ${left} · ` : ''}AI가 묻고 정리해요. 틀릴 수 있어요</p>
           <p className="kbd-hint muted small">키보드: Ctrl+Enter 답하기</p>
         </form>
-      ) : null}
+      )}
     </div>
   );
 }
