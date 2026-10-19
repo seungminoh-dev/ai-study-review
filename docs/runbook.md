@@ -192,13 +192,30 @@ claude.ai 계정으로 로그인한 Claude Code면 claude.ai의 모아이 커넥
 
 ### 백업 (🙋 주 1회)
 
+내보낸 파일에는 모든 회원의 학습 기록이 평문으로 들어 있다. **레포 밖**에 만들고 바로 암호화한다.
+
 ```bash
 cd apps/worker
-npx wrangler d1 export moai --remote --output=moai-$(date +%F).sql
+mkdir -p ~/moai-backups
+npx wrangler d1 export moai --remote --output="$HOME/moai-backups/moai-$(date +%F).sql"
+# 바로 암호화하고 평문은 지운다 (비밀번호는 비밀번호 관리자에)
+openssl enc -aes-256-cbc -pbkdf2 -salt -in ~/moai-backups/moai-$(date +%F).sql -out ~/moai-backups/moai-$(date +%F).sql.enc && rm ~/moai-backups/moai-$(date +%F).sql
 ```
 
-- 파일은 레포나 공개 저장소에 올리지 않는다.
-- D1 Time Travel로 7일 안의 시점으로 되돌릴 수도 있다.
+- 암호화한 파일은 한 곳(개인 컴퓨터의 암호화된 디스크나 비밀번호 관리자 첨부)에만 둔다. 회사 컴퓨터에는 받지 않는다.
+- **28일이 지나면 지운다.** 처리방침이 "백업에는 지운 정보가 최대 30일 남는다"고 약속한다.
+- 레포 안에서 실수로 만들어도 `.gitignore`의 `moai-*.sql`, `/apps/worker/*.sql`이 막는다. 그래도 레포나 공개 저장소에 올리지 않는다.
+- 풀 때: `openssl enc -d -aes-256-cbc -pbkdf2 -in <파일>.sql.enc -out <파일>.sql`
+
+### 되돌리기 (D1 Time Travel)
+
+- Workers Paid라 **30일** 안의 어느 시점으로든 되돌릴 수 있다. Deploy는 마이그레이션 직전에 그때의 bookmark를 로그에 남긴다("Note D1 bookmark" 단계).
+- 순서 (모두 `apps/worker`에서):
+  1. 되돌릴 시점의 bookmark 확인: `npx wrangler d1 time-travel info moai --timestamp=2026-10-20T09:00:00+09:00` (또는 Deploy 로그의 bookmark)
+  2. 지금 상태를 먼저 남긴다: 위 "백업" 순서로 export
+  3. 되돌린다: `npx wrangler d1 time-travel restore moai --bookmark=<bookmark>`
+- **제자리 복원**이다. 그 시점 뒤의 모든 쓰기(복습, 저장, 가입)가 사라진다. 복원 결과에 나오는 이전 bookmark로 복원 자체를 되돌릴 수 있다.
+- 코드만 잘못 나간 것이면 DB는 두고 Worker만 되돌린다 (아래 "배포가 잘못 나갔을 때").
 
 ### 로그
 

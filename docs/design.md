@@ -274,7 +274,7 @@ claude.ai에서 공부하다가 "정리해줘"라고 하면, 대화 중인 Claud
 | Cron Trigger | 계정당 5개, UTC 기준, 최소 1분 | 매분 1개로 모든 주기 작업을 처리한다 |
 | 정적 파일 | 무료, 무제한 | PWA 전부를 Worker가 직접 제공한다 |
 | KV (MVP 3 OAuth) | 하루 쓰기 1,000건 | 10명이면 충분하다 |
-| 백업 | D1 Time Travel 7일 | 주 1회 수동 export를 더한다 (§13.2) |
+| 백업 | D1 Time Travel 30일 (Workers Paid) | 주 1회 수동 export를 더한다. 레포 밖에 만들고 암호화해 28일 뒤 지운다 (§13.2, runbook) |
 
 ---
 
@@ -1349,7 +1349,7 @@ runJob(id):
 
 ### 13.2 백업
 
-- D1 Time Travel이 7일 안의 시점으로 되돌려 준다.
+- D1 Time Travel이 30일 안의 시점으로 되돌려 준다(Workers Paid). Deploy가 마이그레이션 직전 bookmark를 로그에 남긴다. 복원 순서는 runbook "되돌리기".
 - 주 1회 `wrangler d1 export moai --remote --output=<파일>`로 내보낸다. 친구들 데이터가 들어 있으므로 레포나 공개 저장소에 올리지 않는다.
 
 ### 13.3 Cloudflare 존 설정 체크리스트

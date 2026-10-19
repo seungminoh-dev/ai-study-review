@@ -48,6 +48,12 @@ jobs:
         run: npm run build
       - if: steps.check.outputs.skip != 'true'
         run: npm test
+      # 마이그레이션 직전 시점을 남긴다. 잘못되면 이 bookmark로 Time Travel 복원한다 (docs/runbook.md 되돌리기)
+      - name: Note D1 bookmark
+        if: steps.check.outputs.skip != 'true'
+        working-directory: apps/worker
+        continue-on-error: true
+        run: npx wrangler d1 time-travel info moai
       - name: Apply D1 migrations
         if: steps.check.outputs.skip != 'true'
         working-directory: apps/worker

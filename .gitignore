@@ -7,3 +7,6 @@ coverage/
 *.log
 .DS_Store
 !.dev.vars.example
+# D1 백업 덤프(회원 데이터 평문). 레포 밖에 만들지만, 실수로 여기서 만들어도 커밋되지 않게 (docs/runbook.md 백업)
+moai-*.sql
+/apps/worker/*.sql
