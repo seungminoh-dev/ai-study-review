@@ -8,7 +8,7 @@ import { IconArrow } from '../icons';
 import { Mascot } from '../Mascot';
 import { LEAVE, SOFT } from '../motion';
 
-// AI 개념 채팅 (3단계 시안 "AI 개념 채팅"): 복습에서 틀린 문제의 개념을 묻는다.
+// AI 개념 채팅 (3단계 시안 "AI 개념 채팅"): 복습에서 틀렸거나, 찍어서 맞혔거나, 설명하기를 비교한 카드의 개념을 묻는다.
 // 휴대폰은 답 아래 "이 개념 물어보기"로 여는 시트, 컴퓨터는 개념 패널의 "물어보기" 탭이다. 질문과 답은 기기에도 서버에도 남기지 않는다.
 
 interface Turn {
@@ -17,8 +17,21 @@ interface Turn {
   error?: string;
 }
 
-/** 차이·예시·왜 틀렸나. 고르면 그대로 질문이 된다 */
-const SUGGESTIONS = ['내 답은 왜 틀렸어요?', '쉬운 예시로 설명해 줘요', '헷갈리기 쉬운 것과 뭐가 달라요?'];
+/** 틀림, 맞혔지만 찍음·반반, 설명하기 */
+export type AskMode = 'wrong' | 'unsure' | 'explain';
+
+/** 고르면 그대로 질문이 된다 */
+const SUGGESTIONS: Record<AskMode, string[]> = {
+  wrong: ['내 답은 왜 틀렸어요?', '쉬운 예시로 설명해 줘요', '헷갈리기 쉬운 것과 뭐가 달라요?'],
+  unsure: ['이게 왜 정답이에요?', '쉬운 예시로 설명해 줘요', '헷갈리기 쉬운 것과 뭐가 달라요?'],
+  explain: ['내 설명에서 빠진 게 뭐예요?', '더 짧게 말하려면요?', '쉬운 예시로 설명해 줘요'],
+};
+
+const INTRO: Record<AskMode, string> = {
+  wrong: '어디가 헷갈렸어요? 아래에서 고르거나 직접 물어봐요.',
+  unsure: '맞혔지만 확신은 없었죠? 아래에서 고르거나 직접 물어봐요.',
+  explain: '내 설명과 비교해서 궁금한 걸 물어봐요.',
+};
 
 export interface Ask {
   /** 서버 AI가 켜져 있고 이번 달 AI 한도가 남았다 */
@@ -68,7 +81,7 @@ export function useAsk(stageKey: string, cardId: string | undefined, picked: str
 }
 
 /** 대화: 문제와 내 답, 추천 질문, 주고받은 말, 직접 묻는 칸 */
-export function AskChat({ card, picked, ask }: { card: QueueCard; picked: string; ask: Ask }) {
+export function AskChat({ card, mode, picked, ask }: { card: QueueCard; mode: AskMode; picked: string; ask: Ask }) {
   const [text, setText] = useState('');
   const logRef = useRef<HTMLDivElement>(null);
   const asked = new Set(ask.turns.map((turn) => turn.question));
@@ -91,10 +104,10 @@ export function AskChat({ card, picked, ask }: { card: QueueCard; picked: string
         <p className="ask-context">
           <b>문제</b>
           <span>
-            {card.prompt} · 내 답: {card.type === 'ox' ? picked : `“${picked}”`}
+            {card.prompt} · {mode === 'explain' ? `내 설명: ${picked || '(머릿속으로)'}` : `내 답: ${card.type === 'ox' ? picked : `“${picked}”`}`}
           </span>
         </p>
-        <p className="bubble ai">어디가 헷갈렸어요? 아래에서 고르거나 직접 물어봐요.</p>
+        <p className="bubble ai">{INTRO[mode]}</p>
         {ask.turns.map((turn, index) => (
           <Fragment key={index}>
             <p className="bubble me">{turn.question}</p>
@@ -117,7 +130,7 @@ export function AskChat({ card, picked, ask }: { card: QueueCard; picked: string
         ))}
         {!ask.pending && ask.left > 0 ? (
           <div className="ask-suggest">
-            {SUGGESTIONS.filter((question) => !asked.has(question)).map((question) => (
+            {SUGGESTIONS[mode].filter((question) => !asked.has(question)).map((question) => (
               <button key={question} type="button" className="ask-chip" onClick={() => void ask.ask(question)}>
                 {question}
               </button>

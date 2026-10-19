@@ -37,13 +37,14 @@ interface CardRow {
   answer: string | null;
   options: string | null;
   explain: string | null;
+  checklist: string | null;
   concept_name: string;
   final_answer: string | null;
 }
 
 export async function askConcept(env: Env, userId: string, cardId: string, body: AskBody, now: number): Promise<AskOutcome> {
   const card = await env.DB.prepare(
-    `SELECT c.type, c.prompt, c.code, c.answer, c.options, c.explain, k.name AS concept_name, k.final_answer
+    `SELECT c.type, c.prompt, c.code, c.answer, c.options, c.explain, c.checklist, k.name AS concept_name, k.final_answer
        FROM cards c JOIN concepts k ON k.id = c.concept_id WHERE c.id = ?1 AND c.user_id = ?2`,
   )
     .bind(cardId, userId)
@@ -77,6 +78,7 @@ export async function askConcept(env: Env, userId: string, cardId: string, body:
             : null,
       answer: card.type === 'ox' ? card.answer : null,
       explain: card.explain,
+      checklist: card.type === 'explain' && card.checklist ? (JSON.parse(card.checklist) as string[]) : null,
       picked: body.picked ?? null,
       notes: card.final_answer,
       history: body.history,

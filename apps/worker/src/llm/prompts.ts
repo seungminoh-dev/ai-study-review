@@ -29,10 +29,13 @@ export function gradingInput(card: { prompt: string; final_answer: string | null
 }
 
 export const ASK_SYSTEM = `너는 사용자가 복습하다 틀린 개념을 묻는 질문에 답하는 학습 코치다.
-<card>에는 방금 푼 문제, 보기, 정답, 해설, 사용자가 고른 답이 있다. <my_notes>는 사용자가 예전에 정리한 답이고, <history>는 같은 문제에서 앞서 주고받은 질문과 답이다.
+<card>에는 방금 푼 문제, 보기, 정답, 해설, 사용자가 고른 답(설명하기 카드면 사용자가 쓴 설명)이 있다. <my_notes>는 사용자가 예전에 정리한 답이고, <history>는 같은 문제에서 앞서 주고받은 질문과 답이다.
 
-- <question>에 답한다. 3~6문장, 한국어 해요체, 마크다운 없이 평문으로 쓴다. 코드와 명령은 그대로 쓴다.
+- <question>에 짧게 답한다. 첫 문장에 바로 답하고, 전체는 2~4문장(250자 안쪽)이다. 더 궁금하면 사용자가 다시 묻는다.
+- 한국어 해요체, 마크다운 없이 평문으로 쓴다. 코드와 명령은 그대로 쓴다.
 - 고른 답이 왜 틀렸는지 물으면, 그 답이 어떤 경우에 맞는 말인지와 정답과 무엇이 다른지 짚는다.
+- 맞혔지만 확신이 없던 답이면, 정답인 근거를 한 가지로 짚는다.
+- 설명하기 카드면, 사용자의 설명에서 빠진 핵심 요소나 틀린 부분을 짚는다. 모범답안을 통째로 쓰지 않는다.
 - 예시를 물으면 일상 비유나 짧은 코드 예시를 하나 든다.
 - 카드의 정답이나 해설이 틀렸다고 보면 숨기지 말고 그렇다고 말한다. 확실하지 않으면 확실하지 않다고 말한다.
 - 이 개념과 관계없는 부탁에는 "이 개념에 대한 질문만 답할 수 있어요"라고 짧게 답한다.
@@ -47,6 +50,8 @@ export interface AskContext {
   /** OX 정답 */
   answer: string | null;
   explain: string | null;
+  /** 설명하기 카드의 핵심 요소 */
+  checklist: string[] | null;
   picked: string | null;
   notes: string | null;
   history: { question: string; answer: string }[];
@@ -61,7 +66,8 @@ export function askInput(context: AskContext): string {
     ...(context.choices ? ['보기:', ...context.choices.map((choice) => `- ${choice.text}${choice.correct ? ' (정답)' : ''}`)] : []),
     ...(context.answer ? [`정답: ${context.answer}`] : []),
     ...(context.explain ? [`해설: ${context.explain}`] : []),
-    `사용자가 고른 답: ${context.picked ?? '(없음)'}`,
+    ...(context.checklist ? [`핵심 요소: ${context.checklist.join(', ')}`] : []),
+    context.checklist ? `사용자가 쓴 설명: ${context.picked || '(머릿속으로만 설명함)'}` : `사용자가 고른 답: ${context.picked ?? '(없음)'}`,
   ];
   return [
     `<card>\n${card.join('\n')}\n</card>`,

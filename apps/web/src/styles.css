@@ -5390,6 +5390,13 @@ a.notice.link:active,
 }
 
 /* AI 개념 채팅 (3단계 시안 "AI 개념 채팅"): 틀린 문제에서 개념을 묻는다. 휴대폰은 아래에서 올라오는 시트, 컴퓨터는 개념 패널의 탭 */
+/* 설명하기 카드의 비교 아래 */
+.button.ask-explain {
+  display: flex;
+  width: 100%;
+  margin: 12px 0 4px;
+}
+
 /* "이 개념 물어보기"는 "다음"과 반씩 나눠도 한 줄에 들어가게 옆 여백을 줄인다 */
 .button.soft {
   padding-inline: 12px;

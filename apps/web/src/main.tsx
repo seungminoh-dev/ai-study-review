@@ -26,8 +26,9 @@ document.addEventListener('visibilitychange', () => {
 
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   // 배포하면 새 서비스 워커가 바로 자리를 잡지만, 열려 있던 화면은 예전 코드 그대로다.
-  // 그래서 새 버전으로 바뀌면 다시 불러온다. 처음 설치될 때(전에 서비스 워커가 없을 때)는 다시 불러오지 않는다.
-  const hadWorker = navigator.serviceWorker.controller !== null;
+  // 그래서 새 버전으로 바뀌면 다시 불러온다. 처음 설치될 때(전에 서비스 워커가 없을 때)는 다시 불러오지 않고,
+  // 그 뒤에 오는 업데이트부터 다시 불러온다. 처음 설치되는 동안 연 화면도 다음 배포를 놓치지 않게 한다.
+  let hadWorker = navigator.serviceWorker.controller !== null;
   let reloading = false;
   const reload = () => {
     if (reloading) return;
@@ -35,7 +36,10 @@ if (import.meta.env.PROD && 'serviceWorker' in navigator) {
     location.reload();
   };
   navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (!hadWorker) return;
+    if (!hadWorker) {
+      hadWorker = true;
+      return;
+    }
     // 복습 중이면 답을 잃지 않게 복습 화면을 나갈 때까지 기다린다
     if (location.pathname !== '/review') return reload();
     const stop = onNavigate(() => {

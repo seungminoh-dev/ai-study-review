@@ -1,8 +1,9 @@
 import type { ConceptStateKey, MapResponse } from '@moai/shared';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { STATE_LABEL } from '../concept-state';
 import { Loading } from '../Loading';
-import { labelWidth, layoutGraph } from '../map/layout';
+import { labelWidth, layoutGraph, type Layout } from '../map/layout';
+import type { LayoutRequest } from '../map/layout.worker';
 import { Link, navigate } from '../router';
 import { useApi } from '../useApi';
 
@@ -14,6 +15,62 @@ const topOf = (category: string | null) => (category ? category.split('/')[0]! :
 
 function shortName(name: string): string {
   return name.length > 9 ? `${name.slice(0, 8)}…` : name;
+}
+
+/** 그릴 곳의 가로/세로 비율. 창 크기가 바뀌면 잠시 뒤에 다시 잰다 (소수 한 자리로 맞춰 작은 변화에는 다시 배치하지 않는다) */
+function useAspect(): number {
+  const read = () => Math.round((window.innerWidth / window.innerHeight) * 10) / 10;
+  const [aspect, setAspect] = useState(read);
+  useEffect(() => {
+    let timer = 0;
+    const onResize = () => {
+      clearTimeout(timer);
+      timer = window.setTimeout(() => setAspect(read()), 250);
+    };
+    window.addEventListener('resize', onResize);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('resize', onResize);
+    };
+  }, []);
+  return aspect;
+}
+
+let worker: Worker | null | undefined;
+let nextId = 0;
+
+/** 배치는 Worker에서 한다. 새로 배치하는 동안에는 앞 배치를 그대로 보여 준다. Worker를 못 쓰면 그 자리에서 계산한다 */
+function useLayout(request: Omit<LayoutRequest, 'id'> | null): Layout | null {
+  const [layout, setLayout] = useState<Layout | null>(null);
+  useEffect(() => {
+    if (!request) return;
+    const local = () => setLayout(layoutGraph(request.keys, request.edges, (key) => request.widths[key] ?? 0, request.aspect));
+    if (worker === undefined) {
+      try {
+        worker = new Worker(new URL('../map/layout.worker.ts', import.meta.url), { type: 'module' });
+      } catch {
+        worker = null;
+      }
+    }
+    const current = worker;
+    if (!current) return local();
+    const id = ++nextId;
+    const onMessage = (event: MessageEvent<{ id: number; layout: Layout }>) => {
+      if (event.data.id === id) setLayout(event.data.layout);
+    };
+    const onError = () => {
+      worker = null;
+      local();
+    };
+    current.addEventListener('message', onMessage);
+    current.addEventListener('error', onError);
+    current.postMessage({ id, ...request } satisfies LayoutRequest);
+    return () => {
+      current.removeEventListener('message', onMessage);
+      current.removeEventListener('error', onError);
+    };
+  }, [request]);
+  return layout;
 }
 
 export function MapScreen() {
@@ -29,16 +86,18 @@ export function MapScreen() {
     const keys = new Set(nodes.map((node) => node.key));
     return { nodes, edges: raw.edges.filter((edge) => keys.has(edge.from) && keys.has(edge.to)) };
   }, [raw, top, withMaterials]);
-  const layout = useMemo(() => {
-    if (!data) return null;
-    const names = new Map(data.nodes.map((node) => [node.key, shortName(node.name)]));
-    return layoutGraph(
-      data.nodes.map((node) => node.key),
-      data.edges.map((edge) => [edge.from, edge.to] as const),
-      (key) => labelWidth(names.get(key) ?? key),
-      window.innerWidth / window.innerHeight,
-    );
-  }, [data]);
+  const aspect = useAspect();
+  const request = useMemo(
+    () =>
+      data && {
+        keys: data.nodes.map((node) => node.key),
+        edges: data.edges.map((edge): [string, string] => [edge.from, edge.to]),
+        widths: Object.fromEntries(data.nodes.map((node) => [node.key, labelWidth(shortName(node.name))])),
+        aspect,
+      },
+    [data, aspect],
+  );
+  const layout = useLayout(request);
   const positions = layout?.positions ?? new Map<string, { x: number; y: number }>();
   const materialCount = raw?.nodes.filter((node) => node.state === 'material').length ?? 0;
   if (error) return <div className="screen"><p className="notice bad">{error}</p></div>;

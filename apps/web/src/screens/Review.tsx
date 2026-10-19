@@ -7,7 +7,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperti
 import { OfflineError, errorMessage, request } from '../api';
 import { NewBadges } from '../badges';
 import { AiGrade } from '../cards/AiGrade';
-import { AskChat, AskSheet, useAsk } from '../cards/AskConcept';
+import { AskChat, AskSheet, useAsk, type AskMode } from '../cards/AskConcept';
 import { ConceptPanel, forgetConcepts } from '../cards/ConceptPanel';
 import { ExplainCard } from '../cards/ExplainCard';
 import { QuestionCard, choicesOf, type Choice } from '../cards/QuestionCard';
@@ -16,7 +16,7 @@ import { IconChat, IconFlame } from '../icons';
 import { Loading } from '../Loading';
 import { Mascot } from '../Mascot';
 import { LEAVE, Presence, SOFT, useCountUp } from '../motion';
-import { cacheQueue, cachedQueue, enqueueReview, flushReviews, forgetAnswered, pendingCardIds, removeFromOutbox, takeLevelUps } from '../offline/store';
+import { cacheQueue, cachedQueue, enqueueReview, flushReviews, forgetAnswered, pendingCardIds, pendingCount, removeFromOutbox, takeLevelUps } from '../offline/store';
 import { goTab, leave } from '../router';
 
 // 복습 세션 (설계서 §12.1, §12.2). 카드 한 장씩: 답 고르기 → 맞음·틀림과 해설 → 다음.
@@ -69,7 +69,13 @@ function useWide(): boolean {
 /** 끝 화면의 LEVEL UP: 새로 열린 단계에서 나오는 카드 */
 const RUNG_NEXT: Record<number, string> = { 2: '이제 빈칸·코드 문제가 나와요', 3: '이제 직접 설명하는 카드가 나와요' };
 
-type Load = { state: 'loading' } | { state: 'error'; message: string } | { state: 'ready'; cards: QueueCard[]; offline: boolean };
+/** 복습을 시작할 때 서버가 센 오늘 XP와 장수 */
+interface TodayBefore {
+  xp: number;
+  reviewed: number;
+}
+
+type Load = { state: 'loading' } | { state: 'error'; message: string } | { state: 'ready'; cards: QueueCard[]; offline: boolean; before?: TodayBefore | null };
 
 export function Review({ size, category, material, part }: { size: number; category?: string | null; material?: string | null; part?: string | null }) {
   const [load, setLoad] = useState<Load>({ state: 'loading' });
@@ -89,11 +95,15 @@ export function Review({ size, category, material, part }: { size: number; categ
         if (material) params.set('material', material);
         // 자료의 섹션 하나만 풀 때
         if (material && part !== null && part !== undefined) params.set('part', part);
-        const queue = await request<QueueResponse>(`/queue?${params}`);
+        // 끝 화면의 얻은 XP와 연속 +1은 시작할 때와 끝날 때의 서버 숫자를 비교해서 낸다
+        const [queue, before] = await Promise.all([
+          request<QueueResponse>(`/queue?${params}`),
+          request<StatsResponse>('/stats').catch(() => null),
+        ]);
         const cards = queue.cards.filter((card) => !pending.has(card.id)).slice(0, size);
         // 오프라인용으로는 오늘 큐 전체만 남긴다. 분류·자료로 거른 큐를 남기면 다음 오프라인 복습이 그 카드만 낸다
         if (!category && !material) await cacheQueue(cards);
-        if (!cancelled) setLoad({ state: 'ready', cards, offline: false });
+        if (!cancelled) setLoad({ state: 'ready', cards, offline: false, before: before && { xp: before.today.xp, reviewed: before.today.reviewed } });
       } catch (error) {
         if (error instanceof OfflineError && (category || material)) {
           if (!cancelled) setLoad({ state: 'error', message: '인터넷에 연결되지 않았어요. 분류·자료별 복습은 연결된 뒤에 할 수 있어요.' });
@@ -127,7 +137,7 @@ export function Review({ size, category, material, part }: { size: number; categ
       </div>
     );
   }
-  return <Session initial={load.cards} offline={load.offline} />;
+  return <Session initial={load.cards} offline={load.offline} before={load.before ?? null} />;
 }
 
 interface Recorded {
@@ -142,7 +152,7 @@ const REPORT_REASONS: { reason: ReportReason; label: string }[] = [
   { reason: 'other', label: '그 밖의 문제' },
 ];
 
-function Session({ initial, offline }: { initial: QueueCard[]; offline: boolean }) {
+function Session({ initial, offline, before }: { initial: QueueCard[]; offline: boolean; before: TodayBefore | null }) {
   const [cards, setCards] = useState(initial);
   const [index, setIndex] = useState(0);
   const [picked, setPicked] = useState<Choice | null>(null);
@@ -160,6 +170,8 @@ function Session({ initial, offline }: { initial: QueueCard[]; offline: boolean 
   const [reporting, setReporting] = useState(false);
   /** 설명하기 카드에서 내 최종 버전을 펼친 카드 자리 (개념 패널을 연다) */
   const [explainShown, setExplainShown] = useState<string | null>(null);
+  /** 설명하기 카드에서 내가 쓴 설명 (개념 물어보기에 같이 보낸다) */
+  const [explainText, setExplainText] = useState('');
   /** 휴대폰에서 연 개념 물어보기 시트 */
   const [askOpen, setAskOpen] = useState(false);
   /** 컴퓨터 개념 패널에서 보고 있는 탭 */
@@ -179,9 +191,15 @@ function Session({ initial, offline }: { initial: QueueCard[]; offline: boolean 
     liveKey.current = stageKey;
   });
   const stale = () => liveKey.current !== stageKey;
-  const ask = useAsk(stageKey, card?.id, picked?.value ?? null);
-  /** 틀린 문제(설명하기 빼고)는 그 개념을 AI에게 물을 수 있다. 오프라인이거나 서버 AI가 없으면 숨긴다 */
-  const canAsk = !!card && card.type !== 'explain' && picked !== null && !picked.correct && !offline && ask.available;
+  /** 맞혔어도 찍었거나 반반이었다. "너무 쉬웠어요"는 등급을 바꾸지 못해 숨기고, 대신 물어보기를 연다 */
+  const unsure = picked?.correct === true && (confidence === 'guess' || confidence === 'unsure');
+  /** 개념을 AI에게 물을 수 있는 때: 틀렸을 때, 찍어서 맞혔을 때, 설명하기를 비교한 뒤. 오프라인이거나 서버 AI가 없으면 숨긴다 */
+  const askMode: AskMode | null =
+    card?.type === 'explain' ? (explainShown === stageKey ? 'explain' : null) : picked === null ? null : !picked.correct ? 'wrong' : unsure ? 'unsure' : null;
+  const askPicked = card?.type === 'explain' ? explainText : (picked?.value ?? '');
+  const ask = useAsk(stageKey, card?.id, askPicked || null);
+  const canAsk = askMode !== null && !offline && ask.available;
+  const canEasy = picked?.correct === true && !practice && !unsure;
   const openAsk = () => (wide ? setPanelTab('ask') : setAskOpen(true));
   const closeAsk = () => {
     setAskOpen(false);
@@ -311,7 +329,11 @@ function Session({ initial, offline }: { initial: QueueCard[]; offline: boolean 
       if (key === 'escape') {
         leave();
       } else if (card.type === 'explain') {
-        // 설명하기는 카드가 직접 키를 받는다
+        // 설명하기는 카드가 직접 키를 받는다. 비교한 뒤의 A(물어보기)만 여기서 본다
+        if (key === 'a' && canAsk) {
+          event.preventDefault();
+          openAsk();
+        }
       } else if (chosen) {
         // 고른 뒤에는 1 확실 · 2 반반 · 3 찍음
         const level = ({ '1': 'sure', '2': 'unsure', '3': 'guess' } as Record<string, Confidence>)[key];
@@ -331,7 +353,7 @@ function Session({ initial, offline }: { initial: QueueCard[]; offline: boolean 
         if (target?.closest('button, a')) return;
         event.preventDefault();
         void next(false);
-      } else if (key === 'e' && picked.correct && !practice) {
+      } else if (key === 'e' && canEasy) {
         event.preventDefault();
         void next(true);
       } else if (key === 'a' && canAsk) {
@@ -343,7 +365,7 @@ function Session({ initial, offline }: { initial: QueueCard[]; offline: boolean 
     return () => window.removeEventListener('keydown', onKey);
   });
 
-  if (!card) return <Summary results={results} practice={practice} onRetry={retry} onUndo={last ? () => void undo() : null} notice={notice} />;
+  if (!card) return <Summary results={results} practice={practice} before={before} onRetry={retry} onUndo={last ? () => void undo() : null} notice={notice} />;
 
   const report = async (reason: ReportReason) => {
     if (stale()) return;
@@ -413,8 +435,20 @@ function Session({ initial, offline }: { initial: QueueCard[]; offline: boolean 
                   <ExplainCard
                     card={card}
                     onGrade={(grade, text) => void gradeExplain(grade, text)}
-                    onReveal={() => setExplainShown(stageKey)}
-                    aiPanel={practice || offline ? undefined : (text, suggest) => <AiGrade cardId={card.id} text={text} onSuggest={suggest} />}
+                    onReveal={(text) => {
+                      setExplainShown(stageKey);
+                      setExplainText(text);
+                    }}
+                    aiPanel={(text, suggest) => (
+                      <>
+                        {practice || offline ? null : <AiGrade cardId={card.id} text={text} onSuggest={suggest} />}
+                        {canAsk && !wide ? (
+                          <button ref={askButton} type="button" className="button soft ask-explain" onClick={() => setAskOpen(true)}>
+                            <IconChat />이 개념 물어보기
+                          </button>
+                        ) : null}
+                      </>
+                    )}
                   />
                   {notice ? <p className="notice bad">{notice}</p> : null}
                   {reportArea}
@@ -462,7 +496,7 @@ function Session({ initial, offline }: { initial: QueueCard[]; offline: boolean 
                       {card.explain ? <p className="explain">{card.explain}</p> : null}
                       {notice ? <p className="notice bad">{notice}</p> : null}
                       <div className="actions">
-                        {picked.correct && !practice ? (
+                        {canEasy ? (
                           <button type="button" className="button" onClick={() => void next(true)}>
                             너무 쉬웠어요
                           </button>
@@ -483,7 +517,7 @@ function Session({ initial, offline }: { initial: QueueCard[]; offline: boolean 
                   <p className="kbd-hint muted small">
                     {chosen
                       ? '키보드: 1 확실 · 2 반반 · 3 찍음'
-                      : `키보드: ${card.type === 'ox' ? 'O·X' : `1~${choices.length}`} 고르기 · Enter 다음${picked?.correct && !practice ? ' · E 너무 쉬웠어요' : ''}${canAsk ? ' · A 물어보기' : ''} · Esc 그만하기`}
+                      : `키보드: ${card.type === 'ox' ? 'O·X' : `1~${choices.length}`} 고르기 · Enter 다음${canEasy ? ' · E 너무 쉬웠어요' : ''}${canAsk ? ' · A 물어보기' : ''} · Esc 그만하기`}
                   </p>
                 </>
               )}
@@ -497,15 +531,15 @@ function Session({ initial, offline }: { initial: QueueCard[]; offline: boolean 
             next={cards[index + 1]}
             revealed={picked !== null || explainShown === stageKey}
             ask={
-              canAsk && picked
-                ? { tab: panelTab, onTab: setPanelTab, fresh: ask.turns.length === 0, pending: ask.pending, chat: <AskChat card={card} picked={picked.value} ask={ask} /> }
+              canAsk && askMode
+                ? { tab: panelTab, onTab: setPanelTab, fresh: ask.turns.length === 0, pending: ask.pending, chat: <AskChat card={card} mode={askMode} picked={askPicked} ask={ask} /> }
                 : undefined
             }
           />
         ) : null}
       </div>
       <AskSheet open={askOpen && canAsk && !wide} pending={ask.pending} onClose={closeAsk}>
-        {picked ? <AskChat card={card} picked={picked.value} ask={ask} /> : null}
+        {askMode ? <AskChat card={card} mode={askMode} picked={askPicked} ask={ask} /> : null}
       </AskSheet>
     </div>
   );
@@ -514,12 +548,15 @@ function Session({ initial, offline }: { initial: QueueCard[]; offline: boolean 
 function Summary({
   results,
   practice,
+  before,
   onRetry,
   onUndo,
   notice,
 }: {
   results: Result[];
   practice: boolean;
+  /** 시작할 때 서버가 센 오늘 숫자. 없으면(오프라인으로 시작) 화면에서 어림한다 */
+  before: TodayBefore | null;
   onRetry: (cards: QueueCard[]) => void;
   onUndo: (() => void) | null;
   notice: string | null;
@@ -529,6 +566,8 @@ function Summary({
   const misses = results.filter((result) => result.confidentMiss).map((result) => result.card.id);
   const [stats, setStats] = useState<StatsResponse | null>(null);
   const [levelUps, setLevelUps] = useState<LevelUp[]>([]);
+  /** 이번 복습의 답이 모두 서버에 들어갔다. 그래야 서버 숫자의 차이가 이번 복습의 몫이다 */
+  const [allSent, setAllSent] = useState(false);
   useEffect(() => {
     if (practice) return;
     let cancelled = false;
@@ -538,6 +577,7 @@ function Summary({
         await flushReviews();
         if (cancelled) return;
         setLevelUps(takeLevelUps());
+        setAllSent((await pendingCount()) === 0);
         const next = await request<StatsResponse>('/stats');
         if (!cancelled) setStats(next);
       } catch {
@@ -550,8 +590,10 @@ function Summary({
   }, [practice]);
   const goalMet = stats !== null && stats.today.reviewed >= stats.goal;
   // 이번 복습으로 오늘 목표를 처음 채웠으면 연속 학습이 하루 늘었다
-  const streakUp = goalMet && !practice && stats.today.reviewed - results.length < stats.goal;
-  const xp = useCountUp(practice ? 0 : sessionXp(results));
+  const streakUp = goalMet && !practice && (before ? before.reviewed : stats.today.reviewed - results.length) < stats.goal;
+  // 얻은 XP는 서버가 센 오늘 XP의 차이다. 시작 숫자가 없거나, 못 보낸 답이 있거나, 그사이 하루가 바뀌었으면 화면에서 어림한다
+  const gained = stats && before && allSent ? stats.today.xp - before.xp : -1;
+  const xp = useCountUp(practice ? 0 : gained >= 0 ? gained : sessionXp(results));
   const toGoal = stats && !goalMet ? stats.goal - stats.today.reviewed : 0;
   /** 설명하기를 스스로 통과로 매긴 개념 */
   const passed = practice ? [] : [...new Set(results.filter((result) => result.card.type === 'explain' && result.correct).map((result) => result.card.concept_name))];
@@ -659,7 +701,7 @@ function Summary({
   );
 }
 
-/** 이번 복습으로 얻은 XP. 서버 규칙(worker의 domain/stats.ts REVIEW_XP)과 같다: 설명하기 20, 정답 10, 오답 2 */
+/** 서버 숫자가 없을 때 어림하는 이번 복습 XP. 서버 규칙(worker의 domain/stats.ts REVIEW_XP)과 같다: 설명하기 20, 정답 10, 오답 2 */
 function sessionXp(results: Result[]): number {
   return results.reduce((sum, result) => sum + (result.card.type === 'explain' ? 20 : result.correct ? 10 : 2), 0);
 }
