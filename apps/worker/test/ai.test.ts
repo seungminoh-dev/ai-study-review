@@ -156,8 +156,13 @@ describe('AI concept chat', () => {
 
   it('does not count a question the API never answered', async () => {
     const cardId = await mcqCardId();
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('overloaded', { status: 529 }));
+    // 응답은 부를 때 만든다. 중계(Durable Object)는 다른 곳에서 만든 응답 본문을 읽지 못한다
+    const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response('overloaded', { status: 529 }));
+    const errors = vi.spyOn(console, 'error');
     expect((await api(user, `/cards/${cardId}/ask`, { method: 'POST', json: { question: '왜요?' } })).status).toBe(502);
+    // 연결 실패가 아니라 Anthropic의 529 응답으로 처리했다
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(errors.mock.calls.flat().join(' ')).toContain('"status":529');
     expect(await askCount()).toBe(0);
     // 쓴 크레딧도 돌려준다
     expect(await monthlyLeft(user)).toBe(500);
