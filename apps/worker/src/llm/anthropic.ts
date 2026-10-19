@@ -1,12 +1,11 @@
 import { raiseAlert } from '../domain/alerts';
 import type { Env } from '../env';
 import type { Usage } from './pricing';
+import { anthropicRelay } from './relay';
 
-// Claude Messages API를 fetch로 부른다 (설계서 §11.1). SDK는 Worker 번들을 키우고, 쓰는 기능이 적어서 넣지 않는다.
+// Claude Messages API를 부른다 (설계서 §11.1). SDK는 Worker 번들을 키우고, 쓰는 기능이 적어서 넣지 않는다.
 // 키(ANTHROPIC_API_KEY)는 서버에만 있다. 브라우저로 보내거나 로그에 남기지 않는다.
-
-const API_URL = 'https://api.anthropic.com/v1/messages';
-const FALLBACK_BETA = 'server-side-fallback-2026-07-01';
+// 실제 fetch는 미국 위치의 중계(relay.ts)가 한다. 홍콩 데이터센터에서 나간 호출은 Anthropic이 거절하기 때문이다.
 
 export interface CallRequest {
   system: string;
@@ -35,17 +34,11 @@ interface MessageResponse {
 }
 
 async function post(env: Env, body: Record<string, unknown>, beta: boolean, timeoutMs: number): Promise<Response> {
-  return fetch(API_URL, {
-    method: 'POST',
-    headers: {
-      'x-api-key': env.ANTHROPIC_API_KEY!,
-      'anthropic-version': '2023-06-01',
-      'content-type': 'application/json',
-      ...(beta ? { 'anthropic-beta': FALLBACK_BETA } : {}),
-    },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(timeoutMs),
-  });
+  const result = await anthropicRelay(env).post(JSON.stringify(body), beta, timeoutMs);
+  // 중계에서 끊긴 요청은 여기서 던져, 직접 fetch하던 때와 같은 길(시간 초과·연결 실패)로 처리한다
+  if (result.timedOut) throw new DOMException('Anthropic API를 기다리다 끊었어요', 'TimeoutError');
+  if (result.networkError !== undefined) throw new Error(result.networkError);
+  return new Response(result.body, { status: result.status });
 }
 
 export async function callClaude(env: Env, request: CallRequest): Promise<CallResult> {

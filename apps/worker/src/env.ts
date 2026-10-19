@@ -1,4 +1,5 @@
 import type { OAuthHelpers } from '@cloudflare/workers-oauth-provider';
+import type { AnthropicRelay } from './llm/relay';
 
 export interface Env {
   DB: D1Database;
@@ -23,6 +24,8 @@ export interface Env {
   ANTHROPIC_API_KEY?: string;
   /** secret. 채점·가져오기에 쓸 모델 ID */
   GRADER_MODEL?: string;
+  /** Anthropic 호출을 미국에서 내보내는 중계 (llm/relay.ts) */
+  ANTHROPIC_RELAY: DurableObjectNamespace<AnthropicRelay>;
   /** 사용자별·전체 이번 달 한도 (달러). 기본 6, 90 */
   LLM_MONTHLY_CAP_USD?: string;
 }

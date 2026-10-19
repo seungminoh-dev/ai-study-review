@@ -239,7 +239,7 @@
   - 저장할 때 `normalizeCategory`로 모양을 맞추고, 별칭을 따른 뒤 기존 철자를 따른다. 이미 분류가 있는 개념은 다시 저장해도 분류를 바꾸지 않는다.
   - 이름을 바꾸면 옛 이름을 별칭으로 남긴다. 필터는 대소문자를 가리지 않는다.
 - **서버 AI** ([설계서 §11](design.md#11-서버-llm-mvp-2)):
-  - Messages API를 fetch로 직접 부른다 (structured outputs).
+  - Messages API를 fetch로 직접 부른다 (structured outputs). 실제 fetch는 미국 동부 위치의 Durable Object 중계(`llm/relay.ts`, 바인딩 `ANTHROPIC_RELAY`)가 한다. Worker가 Cloudflare 홍콩에서 돌면 Anthropic이 지원하지 않는 지역이라 403 "Request not allowed"로 거절하기 때문이다 (2026-10-19 장애, 2026-10-20 고침). 중계는 외부 주소가 없고 저장소도 쓰지 않는다.
   - 비용은 넉넉한 단가로 센다. 한도는 사람별·전체로 걸고, 대기 중인 작업도 미리 잡아 둔다.
   - 같은 종류의 대기 작업은 사람마다 3개까지다.
   - 키가 없으면 그 기능의 버튼만 숨긴다 (`GET /api/ai/status`).
@@ -280,6 +280,8 @@
 ---
 
 ## 10. 함정
+
+- Cloudflare는 한국 요청을 홍콩(HKG)이나 도쿄(NRT) 데이터센터로 자주 보낸다 (`https://moai.smoh.dev/cdn-cgi/trace`의 `colo`). Worker는 요청을 받은 곳에서 돌아서, 지역을 막는 외부 API(Anthropic 등)는 홍콩에서 나간 호출을 거절한다. 그런 API는 `llm/relay.ts`처럼 위치를 정한 Durable Object에서 부른다.
 
 - 테스트 헬퍼의 `workerFetch`는 `redirect: 'manual'`이다. 리다이렉트를 따라가면 OAuth 테스트가 깨진다.
 - `recordReviews`는 채점 시각을 카드 생성 시각과 서버 현재 시각 사이로 자른다. "때가 안 됨"을 시험하려면 기록을 DB에서 직접 옛날로 옮긴다.

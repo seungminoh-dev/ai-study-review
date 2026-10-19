@@ -17,6 +17,10 @@
   },
   // OAuth 커넥터 인증의 저장소 (설계서 §8.7). id는 비밀이 아니다
   "kv_namespaces": [{ "binding": "OAUTH_KV", "id": "67c2cfbd33fc4af98f3fb9ea9f6b4ede" }],
+  // Anthropic 호출을 미국 동부에서 내보내는 중계 (llm/relay.ts). 홍콩 데이터센터에서 나간 호출은 Anthropic이 403으로 거절한다.
+  // 외부 주소는 없고 이 바인딩으로만 부른다. 저장소는 쓰지 않는다
+  "durable_objects": { "bindings": [{ "name": "ANTHROPIC_RELAY", "class_name": "AnthropicRelay" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["AnthropicRelay"] }],
   "d1_databases": [
     {
       "binding": "DB",

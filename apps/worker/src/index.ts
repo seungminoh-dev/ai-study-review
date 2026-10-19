@@ -3,6 +3,9 @@ import { runCron } from './cron';
 import type { Env } from './env';
 import { oauthProvider } from './oauth';
 
+// Durable Object 클래스는 Worker 입구에서 내보내야 한다 (wrangler.jsonc의 durable_objects)
+export { AnthropicRelay } from './llm/relay';
+
 export default {
   fetch(request, env, ctx) {
     // 예전 비밀 URL 커넥터(/mcp/u/:token)는 OAuth 보호 경로(/mcp) 아래에 있어서 OAuthProvider보다 먼저 받는다

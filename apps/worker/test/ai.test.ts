@@ -162,6 +162,21 @@ describe('AI concept chat', () => {
     // 쓴 크레딧도 돌려준다
     expect(await monthlyLeft(user)).toBe(500);
   });
+
+  // Anthropic 호출은 미국 위치의 중계(llm/relay.ts)가 한다. 중계에서 끊긴 요청도 직접 부르던 때와 같이 셈한다
+  it('keeps the cost of a call the relay gave up waiting on, and refunds one it could not even send', async () => {
+    const cardId = await mcqCardId();
+    vi.spyOn(globalThis, 'fetch')
+      .mockRejectedValueOnce(new DOMException('timed out', 'TimeoutError'))
+      .mockRejectedValueOnce(new TypeError('Network connection lost'));
+    // 기다리다 끊은 요청은 Anthropic 쪽에서 청구됐을 수 있어 비용 기록과 크레딧을 그대로 둔다
+    expect((await api(user, `/cards/${cardId}/ask`, { method: 'POST', json: { question: '왜요?' } })).status).toBe(502);
+    expect(await env.DB.prepare("SELECT model FROM llm_usage WHERE user_id = ?1 AND kind = 'ask'").bind(user.id).first<string>('model')).toMatch(/시간 초과/);
+    // 보내지도 못한 요청은 기록을 지우고 크레딧을 돌려준다
+    expect((await api(user, `/cards/${cardId}/ask`, { method: 'POST', json: { question: '왜요?' } })).status).toBe(502);
+    expect(await askCount()).toBe(1);
+    expect(await monthlyLeft(user)).toBe(499);
+  });
 });
 
 describe('in-app mock interview', () => {
