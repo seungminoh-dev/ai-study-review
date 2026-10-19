@@ -1,3 +1,4 @@
+import { raiseAlert } from '../domain/alerts';
 import type { Env } from '../env';
 import type { Usage } from './pricing';
 
@@ -70,11 +71,13 @@ export async function callClaude(env: Env, request: CallRequest): Promise<CallRe
     // 기다리다 끊은 요청도 Anthropic 쪽에서는 끝까지 돌고 청구될 수 있다. 부르는 쪽이 비용을 넉넉히 적어 둔다
     const timedOut = (error as Error).name === 'TimeoutError' || (error as Error).name === 'AbortError';
     console.error(JSON.stringify({ event: timedOut ? 'llm_timeout' : 'llm_network_error', message: (error as Error).message }));
+    await raiseAlert(env, 'llm_failed');
     return { ok: false, error: 'api', retry: true, status: 0, timedOut };
   }
   if (!response.ok) {
     const detail = (await response.text().catch(() => '')).slice(0, 300);
     console.error(JSON.stringify({ event: 'llm_api_error', status: response.status, message: detail }));
+    await raiseAlert(env, 'llm_failed');
     // 429 한도, 500대 서버 오류, 529 과부하는 다시 해 볼 만하다. 400·401·403·404는 설정 문제다
     return { ok: false, error: 'api', retry: response.status === 429 || response.status >= 500, status: response.status };
   }

@@ -22,7 +22,7 @@
 
 2. `.dev.vars`에는 **이 컴퓨터용 새 값**만 넣는다. 운영 secret을 회사 컴퓨터에 두지 않는다. 배포는 `main` push → GitHub Actions가 하므로 Cloudflare 로그인도 필요 없다. 운영 D1을 직접 봐야 할 때만 `wrangler login`을 한다.
 3. 로컬 DB는 컴퓨터마다 따로다 (`apps/worker/.wrangler`, gitignore). 새 컴퓨터는 빈 DB다.
-   - `npm run db:migrate:local`(`0001`~`0007`) → `npm run dev` → http://localhost:8787/setup 에서 로컬 `BOOTSTRAP_CODE`로 오너를 만든다.
+   - `npm run db:migrate:local`(`0001`~`0008`) → `npm run dev` → http://localhost:8787/setup 에서 로컬 `BOOTSTRAP_CODE`로 오너를 만든다.
    - 시험 데이터: 설정의 커넥터 주소(로컬)로 MCP `save_learning`을 부른다. 견본은 `packages/shared/fixtures/immutable-object.json`이다. §6의 리허설 순서를 그대로 써도 된다.
 4. Claude Code 앱의 미리보기 설정 `.claude/launch.json`은 레포에 없다 (`.claude/`는 커밋하지 않는다). 아래 내용으로 다시 만든다:
 
@@ -37,7 +37,7 @@
 ## 1. 지금 상태
 
 - **운영**: https://moai.smoh.dev. Cloudflare Workers Paid, D1 `moai`, 매분 Cron 1개.
-- **배포된 마이그레이션**: `0001`~`0007` (0006: 자료·분류, 0007: 이정표 배지). 모두 운영과 비슷한 로컬 데이터로 미리 돌려 보고 올렸다.
+- **배포된 마이그레이션**: `0001`~`0008` (0006: 자료·분류, 0007: 이정표 배지, 0008: 오너 알림). 모두 운영과 비슷한 로컬 데이터로 미리 돌려 보고 올렸다.
 - **끝난 기능**: MVP 0~2 전부. MVP 3은 Claude Code 플러그인, 채팅 복습, 확신도, 모의면접 체인, 질문 은행, 베타 지표, 자동 분류, PDF 자료까지다. 표는 [설계서 §2.4](design.md#24-mvp-3-확장-이후).
 - **2026-10-18 방향 바꿈**: 친구와 함께하는 기능(리그, 질문 은행, 질문 공유)은 PWA 화면에서 뺐다. 내 성취를 높이는 쪽으로 디자인을 다시 짰다. 2026-10-19에 서버 API(`/api/league`, `/api/shared-questions`)도 지웠다. `shared_questions` 테이블과 데이터는 남겨서 내보내기와 계정 지우기에 그대로 들어간다.
 - **디자인 개편** (모두 배포, 원칙은 §4):
@@ -70,6 +70,7 @@
     - `POST /api/cards/:id/ask` (`llm/ask.ts`)가 요청 안에서 바로 답한다. 카드·보기·정답·해설·내 정리는 서버가 DB에서 읽고, 앞서 주고받은 두 번까지 같이 보낸다. 질문과 답은 저장하지 않는다.
     - 한도: 사람마다 한 달 50번 + 기존 예산 가드. `llm_usage`(kind `ask`)에 예상 비용을 먼저 적고 세는 것을 한 문장으로 해서, 동시에 보내도 넘지 않는다. 답이 오면 실제 비용으로 바꾸고, 청구되지 않은 실패는 세지 않는다. `GET /api/ai/status`의 `ask_left`.
     - 서버 AI 키(`ANTHROPIC_API_KEY`, `GRADER_MODEL`)가 없으면 버튼과 탭이 보이지 않는다.
+  - 오너 알림 (2026-10-19, `0008_alerts.sql`): 처리하지 못한 서버 오류, 매분 작업 실패, AI 호출 실패를 `alerts`에 세어 두고, 매분 Cron이 종류마다 한 시간에 한 번 오너에게 푸시한다(`domain/alerts.ts`). 오너 기기에 알림이 켜져 있어야 받는다. 자세한 내용은 Cloudflare 로그에서 본다.
   - 개선 후보 묶음 (2026-10-19, 시안 없이 사용자 승인):
     - 오프라인이면 화면 위에 한 줄 안내(`App.tsx`의 `useOnline`, 복습 화면은 원래 안내가 있어 뺀다).
     - 되돌리기: 다음 카드 위에 떠 있는 토스트("답을 기록했어요 · 되돌리기"), 고르기 전까지 길어야 6초. 그 뒤에는 끝 화면에서 되돌린다.
@@ -138,7 +139,7 @@
 | `apps/worker/src/mcp/` | MCP 서버. 도구 8개는 `server.ts`, 서버 지침·도구 설명은 `descriptions.ko.ts` |
 | `apps/worker/src/llm/` | 서버 AI: `anthropic.ts`(`callClaude`), `budget.ts`(`overBudget`), 작업 테이블(`jobs.ts`), 단가, 프롬프트 |
 | `apps/worker/src/cron.ts` | 매분: 알림 → AI 작업. 매시 0분: 만료 정리, `repairLibrary` |
-| `apps/worker/migrations/` | D1 마이그레이션 `0001`~`0007` |
+| `apps/worker/migrations/` | D1 마이그레이션 `0001`~`0008` |
 | `apps/web/src/` | PWA (Vite·React). `screens/`, `cards/`(문제·설명하기·체험·개념 패널), `badges.tsx`, `motion.tsx`, 오프라인 답안함 `offline/store`, 글꼴 `fonts/` |
 | `packages/shared/src/` | zod 스키마와 공용 규칙: `save-learning`, `api`, `grading`, `category`, `material`, `badges`, `llm` |
 | `plugins/moai/` | Claude Code 플러그인 (0.2.0): `/moai:coach`, `capture`, `review`, `pdf`. 마켓플레이스는 루트 `.claude-plugin/marketplace.json` |

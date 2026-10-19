@@ -2,6 +2,7 @@ import { env } from 'cloudflare:workers';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import example from '../../../packages/shared/fixtures/immutable-object.json';
 import { runCron } from '../src/cron';
+import { ALERT_QUIET_MS, raiseAlert } from '../src/domain/alerts';
 import { hashToken, randomToken } from '../src/lib/crypto';
 import { nextKstTime } from '../src/lib/kst';
 import { api, callTool, fakeSubscription, mcpUrl, newUser, type TestUser } from './helpers';
@@ -81,5 +82,30 @@ describe('hourly cleanup', () => {
     expect(await exists()).not.toBeNull();
     await runCron(env, Date.parse('2026-10-18T04:00:00Z'));
     expect(await exists()).toBeNull();
+  });
+});
+
+describe('owner alerts', () => {
+  it('pushes each kind to the owner at most once an hour', async () => {
+    await env.DB.prepare('DELETE FROM alerts').run();
+    const owner = await newUser('오너', 'owner');
+    const subscription = await fakeSubscription();
+    await api(owner, '/push/subscriptions', { method: 'POST', json: subscription });
+    const push = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 201 }));
+    const toOwner = () => push.mock.calls.filter(([input]) => String(input) === subscription.endpoint).length;
+
+    for (let i = 0; i < 3; i++) await raiseAlert(env, 'server_error');
+    const now = minute(Date.now()) + 60_000;
+    await runCron(env, now);
+    expect(toOwner()).toBe(1);
+    // 한 시간 안에 또 생기면 모아 두었다가 한 시간이 지나야 보낸다
+    await raiseAlert(env, 'server_error');
+    await runCron(env, now + 60_000);
+    expect(toOwner()).toBe(1);
+    await runCron(env, now + ALERT_QUIET_MS);
+    expect(toOwner()).toBe(2);
+    // 보낼 것이 없으면 보내지 않는다
+    await runCron(env, now + 2 * ALERT_QUIET_MS);
+    expect(toOwner()).toBe(2);
   });
 });

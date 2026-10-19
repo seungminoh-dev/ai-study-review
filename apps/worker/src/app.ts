@@ -11,6 +11,7 @@ import { sessions } from './api/sessions';
 import { settings } from './api/settings';
 import { setup } from './api/setup';
 import { requireUser } from './auth/session';
+import { raiseAlert } from './domain/alerts';
 import type { AppEnv } from './context';
 import { requireSameOrigin } from './lib/guard';
 import { errorJson } from './lib/http';
@@ -50,5 +51,6 @@ app.route('/api', settings);
 app.notFound((c) => errorJson(404, 'not_found', `${c.req.path.startsWith('/mcp/') ? '/mcp/u/:token' : c.req.path}을(를) 찾지 못했어요.`));
 app.onError((error, c) => {
   console.error(JSON.stringify({ event: 'unhandled_error', path: c.req.path.startsWith('/mcp/') ? '/mcp/u/:token' : c.req.path, message: error.message }));
+  c.executionCtx.waitUntil(raiseAlert(c.env, 'server_error'));
   return errorJson(500, 'internal', '서버에서 문제가 생겼어요.');
 });

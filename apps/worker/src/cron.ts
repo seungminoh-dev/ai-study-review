@@ -1,3 +1,4 @@
+import { raiseAlert, sendAlerts } from './domain/alerts';
 import { repairLibrary } from './domain/categories';
 import { deliverDueReminders } from './domain/reminders';
 import { runPendingJobs } from './llm/jobs';
@@ -10,12 +11,20 @@ export async function runCron(env: Env, now: number): Promise<void> {
     await deliverDueReminders(env, now);
   } catch (error) {
     console.error(JSON.stringify({ event: 'cron_reminders_failed', message: (error as Error).message }));
+    await raiseAlert(env, 'cron_failed');
   }
   // AI 채점 이어 받기와 붙여넣기 가져오기 (설계서 §11.3). 가져오기는 몇 분 걸릴 수 있어서 알림 뒤에 한다
   try {
     await runPendingJobs(env, now);
   } catch (error) {
     console.error(JSON.stringify({ event: 'cron_jobs_failed', message: (error as Error).message }));
+    await raiseAlert(env, 'cron_failed');
+  }
+  // 쌓인 서버 문제를 오너에게 알린다 (종류마다 한 시간에 한 번)
+  try {
+    await sendAlerts(env, now);
+  } catch (error) {
+    console.error(JSON.stringify({ event: 'cron_alerts_failed', message: (error as Error).message }));
   }
   // 매시 0분: 만료된 로그인 세션, 로그인 코드, 끝내지 않은 가입을 지운다
   if (new Date(now).getUTCMinutes() === 0) {
@@ -32,6 +41,7 @@ export async function runCron(env: Env, now: number): Promise<void> {
       if (repaired.normalized + repaired.adopted > 0) console.log(JSON.stringify({ event: 'library_repaired', ...repaired }));
     } catch (error) {
       console.error(JSON.stringify({ event: 'cron_repair_failed', message: (error as Error).message }));
+      await raiseAlert(env, 'cron_failed');
     }
   }
 }
