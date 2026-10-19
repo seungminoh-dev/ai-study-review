@@ -1,15 +1,16 @@
-import { GradeAiBody, ImportBody, type AiStatus, type BetaMetrics, type JobView, type UsageReport } from '@moai/shared';
+import { AskBody, GradeAiBody, ImportBody, type AiStatus, type AskResponse, type BetaMetrics, type JobView, type UsageReport } from '@moai/shared';
 import { Hono } from 'hono';
 import type { AppEnv } from '../context';
 import { sha256Hex } from '../lib/crypto';
 import { errorJson, readJson } from '../lib/http';
 import { DAY_MS } from '../lib/kst';
 import { llmConfigured } from '../llm/anthropic';
+import { askConcept, askLeft } from '../llm/ask';
 import { caps, monthStart, overBudget } from '../llm/budget';
 import { createJob, runJob } from '../llm/jobs';
 import { requireOwner } from './account';
 
-// 서버 LLM API (설계서 §11): 설명하기 AI 채점, 붙여넣기 가져오기, 작업 상태, 관리자 사용량
+// 서버 LLM API (설계서 §11): 설명하기 AI 채점, 개념 물어보기, 붙여넣기 가져오기, 작업 상태, 관리자 사용량
 
 export const ai = new Hono<AppEnv>();
 
@@ -18,8 +19,19 @@ const OVER_BUDGET = () => errorJson(429, 'budget', '이번 달 AI 한도에 닿�
 
 ai.get('/ai/status', async (c) => {
   const available = llmConfigured(c.env);
-  const body: AiStatus = { available, over_budget: available ? await overBudget(c.env, c.var.userId, Date.now()) : false };
+  const now = Date.now();
+  const [over, left] = available ? await Promise.all([overBudget(c.env, c.var.userId, now), askLeft(c.env, c.var.userId, now)]) : [false, 0];
+  const body: AiStatus = { available, over_budget: over, ask_left: left };
   return c.json(body);
+});
+
+/** AI 개념 채팅: 틀린 카드의 개념을 묻는다. 답은 바로 돌려준다 */
+ai.post('/cards/:id/ask', async (c) => {
+  if (!llmConfigured(c.env)) return errorJson(503, 'ai_unavailable', '서버에 AI 설정이 없어요.');
+  const body = await readJson(c, AskBody);
+  if (body instanceof Response) return body;
+  const outcome = await askConcept(c.env, c.var.userId, c.req.param('id'), body, Date.now());
+  return outcome.ok ? c.json({ answer: outcome.answer, left: outcome.left } satisfies AskResponse) : errorJson(outcome.status, outcome.code, outcome.message);
 });
 
 ai.post('/cards/:id/grade-ai', async (c) => {

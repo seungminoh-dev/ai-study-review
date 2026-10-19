@@ -1,7 +1,7 @@
 import type { ConceptDetail, QueueCard } from '@moai/shared';
 import { AnimatePresence } from 'motion/react';
 import * as m from 'motion/react-m';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { request } from '../api';
 import { STATE_LABEL } from '../concept-state';
 import { copyText } from '../copy';
@@ -36,7 +36,17 @@ function loadConcept(key: string): Promise<ConceptDetail> {
 
 type Loaded = { key: string; data: ConceptDetail | null; failed: boolean };
 
-export function ConceptPanel({ card, next, revealed }: { card: QueueCard; next: QueueCard | undefined; revealed: boolean }) {
+/** 틀린 문제에서 여는 "물어보기" 탭 (AI 개념 채팅). 없으면 탭 없이 개념만 보인다 */
+export interface PanelAsk {
+  tab: 'concept' | 'ask';
+  onTab: (tab: 'concept' | 'ask') => void;
+  /** 아직 이 카드에서 묻지 않았다. 탭에 점을 찍는다 */
+  fresh: boolean;
+  pending: boolean;
+  chat: ReactNode;
+}
+
+export function ConceptPanel({ card, next, revealed, ask }: { card: QueueCard; next: QueueCard | undefined; revealed: boolean; ask?: PanelAsk | undefined }) {
   const [loaded, setLoaded] = useState<Loaded | null>(null);
   useEffect(() => {
     let cancelled = false;
@@ -55,36 +65,62 @@ export function ConceptPanel({ card, next, revealed }: { card: QueueCard; next: 
 
   return (
     <aside className="concept-panel" aria-label="이 개념">
-      <section className="panel-card">
-        <div className="panel-top">
-          <p className="panel-label">이 개념</p>
-          {data ? <span className={`chip state-${data.state}`}>{STATE_LABEL[data.state]}</span> : null}
+      {ask ? (
+        <div className="panel-tabs" role="tablist" aria-label="개념 패널">
+          <button type="button" role="tab" aria-selected={ask.tab === 'concept'} onClick={() => ask.onTab('concept')}>
+            개념
+          </button>
+          <button type="button" role="tab" aria-selected={ask.tab === 'ask'} onClick={() => ask.onTab('ask')}>
+            물어보기
+            {ask.fresh && ask.tab !== 'ask' ? <span className="tab-dot" aria-hidden="true" /> : null}
+          </button>
         </div>
-        <h2>{card.concept_name}</h2>
-        <p className="muted small">{[data?.category, RUNG_LABEL[card.rung]].filter(Boolean).join(' · ')}</p>
-        <AnimatePresence mode="wait" initial={false}>
-          {revealed ? (
-            <m.div key={`open-${card.id}`} className="panel-open" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0, transition: SOFT }} exit={{ opacity: 0, transition: LEAVE }}>
-              {data ? (
-                <Notes data={data} />
-              ) : current?.failed ? (
-                <p className="small muted">연결이 끊겨 개념 정보를 불러오지 못했어요.</p>
+      ) : null}
+      {ask?.tab === 'ask' ? (
+        <section className="panel-card ask-panel" role="tabpanel" aria-labelledby="ask-panel-title">
+          <header className="ask-head">
+            <Mascot mood={ask.pending ? 'think' : 'happy'} size={36} />
+            <div className="grow">
+              <strong id="ask-panel-title">{card.concept_name} 물어보기</strong>
+              <p>방금 문제와 내 답을 같이 보고 답해요</p>
+            </div>
+          </header>
+          {ask.chat}
+        </section>
+      ) : (
+        <>
+          <section className="panel-card">
+            <div className="panel-top">
+              <p className="panel-label">이 개념</p>
+              {data ? <span className={`chip state-${data.state}`}>{STATE_LABEL[data.state]}</span> : null}
+            </div>
+            <h2>{card.concept_name}</h2>
+            <p className="muted small">{[data?.category, RUNG_LABEL[card.rung]].filter(Boolean).join(' · ')}</p>
+            <AnimatePresence mode="wait" initial={false}>
+              {revealed ? (
+                <m.div key={`open-${card.id}`} className="panel-open" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0, transition: SOFT }} exit={{ opacity: 0, transition: LEAVE }}>
+                  {data ? (
+                    <Notes data={data} />
+                  ) : current?.failed ? (
+                    <p className="small muted">연결이 끊겨 개념 정보를 불러오지 못했어요.</p>
+                  ) : (
+                    <>
+                      <span className="skeleton" />
+                      <span className="skeleton short" />
+                    </>
+                  )}
+                </m.div>
               ) : (
-                <>
-                  <span className="skeleton" />
-                  <span className="skeleton short" />
-                </>
+                <m.div key={`locked-${card.id}`} className="panel-locked" initial={{ opacity: 0 }} animate={{ opacity: 1, transition: SOFT }} exit={{ opacity: 0, transition: LEAVE }}>
+                  <Mascot mood="think" size={40} />
+                  <p className="small">{card.type === 'explain' ? '내 말로 설명하고 비교하면' : '답을 고르면'} 내가 정리한 답과 지난번 설명이 열려요.</p>
+                </m.div>
               )}
-            </m.div>
-          ) : (
-            <m.div key={`locked-${card.id}`} className="panel-locked" initial={{ opacity: 0 }} animate={{ opacity: 1, transition: SOFT }} exit={{ opacity: 0, transition: LEAVE }}>
-              <Mascot mood="think" size={40} />
-              <p className="small">{card.type === 'explain' ? '내 말로 설명하고 비교하면' : '답을 고르면'} 내가 정리한 답과 지난번 설명이 열려요.</p>
-            </m.div>
-          )}
-        </AnimatePresence>
-      </section>
-      {revealed && data ? <More key={card.id} data={data} /> : null}
+            </AnimatePresence>
+          </section>
+          {revealed && data ? <More key={card.id} data={data} /> : null}
+        </>
+      )}
     </aside>
   );
 }

@@ -40,11 +40,34 @@ export interface ImportResult {
   duplicate: boolean;
 }
 
+/** AI 개념 채팅 (3단계 시안): 복습에서 틀린 카드의 개념을 묻는다. 카드와 내 정리는 서버가 DB에서 읽는다 */
+export const AskBody = z.object({
+  question: z.string().trim().min(1).max(300),
+  /** 내가 고른 답 (보기 글 그대로, OX는 O·X) */
+  picked: z.string().trim().max(300).optional(),
+  /** 같은 카드에서 앞서 주고받은 질문과 답. 이어지는 질문에 쓴다 */
+  history: z
+    .array(z.object({ question: z.string().max(300), answer: z.string().max(2000) }))
+    .max(2)
+    .default([]),
+});
+export type AskBody = z.infer<typeof AskBody>;
+
+export const AskResult = z.object({ answer: z.string().min(1).max(2000) });
+
+export interface AskResponse {
+  answer: string;
+  /** 이번 달 남은 질문 수 */
+  left: number;
+}
+
 export interface AiStatus {
   /** 서버에 API 키와 모델이 설정되어 있다 */
   available: boolean;
   /** 이번 달 한도에 닿았다 */
   over_budget: boolean;
+  /** 이번 달 남은 개념 질문 수 */
+  ask_left: number;
 }
 
 export interface UsageReport {

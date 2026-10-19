@@ -126,6 +126,14 @@ export const IconChevron = ({ size = 18 }: Props) => (
   </Icon>
 );
 
+/** 말풍선: 개념 물어보기 */
+export const IconChat = ({ size = 18 }: Props) => (
+  <Icon size={size} strokeWidth={2.2}>
+    <path d="M5 5h14v10H10l-5 4z" />
+    <path d="M9 9.5h6" />
+  </Icon>
+);
+
 /** 바깥 사이트로 나가는 링크 */
 export const IconExternal = ({ size = 18 }: Props) => (
   <Icon size={size} strokeWidth={2.4}>

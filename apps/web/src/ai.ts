@@ -9,7 +9,7 @@ let status: Promise<AiStatus> | null = null;
 export function aiStatus(): Promise<AiStatus> {
   status ??= request<AiStatus>('/ai/status').catch(() => {
     status = null;
-    return { available: false, over_budget: false };
+    return { available: false, over_budget: false, ask_left: 0 };
   });
   return status;
 }

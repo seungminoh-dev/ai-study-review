@@ -7,11 +7,12 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperti
 import { OfflineError, errorMessage, request } from '../api';
 import { NewBadges } from '../badges';
 import { AiGrade } from '../cards/AiGrade';
+import { AskChat, AskSheet, useAsk } from '../cards/AskConcept';
 import { ConceptPanel, forgetConcepts } from '../cards/ConceptPanel';
 import { ExplainCard } from '../cards/ExplainCard';
 import { QuestionCard, choicesOf, type Choice } from '../cards/QuestionCard';
 import { Confetti } from '../Confetti';
-import { IconFlame } from '../icons';
+import { IconChat, IconFlame } from '../icons';
 import { Loading } from '../Loading';
 import { Mascot } from '../Mascot';
 import { LEAVE, Presence, SOFT, useCountUp } from '../motion';
@@ -159,6 +160,11 @@ function Session({ initial, offline }: { initial: QueueCard[]; offline: boolean 
   const [reporting, setReporting] = useState(false);
   /** 설명하기 카드에서 내 최종 버전을 펼친 카드 자리 (개념 패널을 연다) */
   const [explainShown, setExplainShown] = useState<string | null>(null);
+  /** 휴대폰에서 연 개념 물어보기 시트 */
+  const [askOpen, setAskOpen] = useState(false);
+  /** 컴퓨터 개념 패널에서 보고 있는 탭 */
+  const [panelTab, setPanelTab] = useState<'concept' | 'ask'>('concept');
+  const askButton = useRef<HTMLButtonElement>(null);
   const wide = useWide();
   /** 두 번 탭해도 한 번만 기록한다 */
   const moving = useRef(false);
@@ -173,6 +179,14 @@ function Session({ initial, offline }: { initial: QueueCard[]; offline: boolean 
     liveKey.current = stageKey;
   });
   const stale = () => liveKey.current !== stageKey;
+  const ask = useAsk(stageKey, card?.id, picked?.value ?? null);
+  /** 틀린 문제(설명하기 빼고)는 그 개념을 AI에게 물을 수 있다. 오프라인이거나 서버 AI가 없으면 숨긴다 */
+  const canAsk = !!card && card.type !== 'explain' && picked !== null && !picked.correct && !offline && ask.available;
+  const openAsk = () => (wide ? setPanelTab('ask') : setAskOpen(true));
+  const closeAsk = () => {
+    setAskOpen(false);
+    askButton.current?.focus();
+  };
   const choices = useMemo(() => (card ? choicesOf(card) : []), [card]);
   /** 답을 본 카드 수. 지금 카드도 답을 봤으면 센다 */
   const done = index + (picked ? 1 : 0);
@@ -187,6 +201,8 @@ function Session({ initial, offline }: { initial: QueueCard[]; offline: boolean 
     setConfidence(null);
     setNotice(null);
     setReporting(false);
+    setAskOpen(false);
+    setPanelTab('concept');
     setIndex((value) => value + 1);
     moving.current = false;
   };
@@ -271,6 +287,8 @@ function Session({ initial, offline }: { initial: QueueCard[]; offline: boolean 
       setChosen(null);
       setConfidence(null);
       setPicked(null);
+      setAskOpen(false);
+      setPanelTab('concept');
     } catch (error) {
       setNotice(errorMessage(error));
     } finally {
@@ -282,6 +300,11 @@ function Session({ initial, offline }: { initial: QueueCard[]; offline: boolean 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (!card || event.ctrlKey || event.metaKey || event.altKey || event.repeat) return;
+      // 물어보기 시트가 열려 있으면 Esc는 시트만 닫고, 다른 키는 시트 안의 글쓰기에 맡긴다
+      if (askOpen) {
+        if (event.key === 'Escape') closeAsk();
+        return;
+      }
       const target = event.target as HTMLElement | null;
       if (target?.closest('input, textarea, select')) return;
       const key = event.key.toLowerCase();
@@ -311,6 +334,9 @@ function Session({ initial, offline }: { initial: QueueCard[]; offline: boolean 
       } else if (key === 'e' && picked.correct && !practice) {
         event.preventDefault();
         void next(true);
+      } else if (key === 'a' && canAsk) {
+        event.preventDefault();
+        openAsk();
       }
     };
     window.addEventListener('keydown', onKey);
@@ -441,6 +467,12 @@ function Session({ initial, offline }: { initial: QueueCard[]; offline: boolean 
                             너무 쉬웠어요
                           </button>
                         ) : null}
+                        {canAsk && !wide ? (
+                          <button ref={askButton} type="button" className="button soft" onClick={() => setAskOpen(true)}>
+                            <IconChat />
+                            이 개념 물어보기
+                          </button>
+                        ) : null}
                         <button type="button" className="button primary" onClick={() => void next(false)}>
                           다음
                         </button>
@@ -451,7 +483,7 @@ function Session({ initial, offline }: { initial: QueueCard[]; offline: boolean 
                   <p className="kbd-hint muted small">
                     {chosen
                       ? '키보드: 1 확실 · 2 반반 · 3 찍음'
-                      : `키보드: ${card.type === 'ox' ? 'O·X' : `1~${choices.length}`} 고르기 · Enter 다음${picked?.correct && !practice ? ' · E 너무 쉬웠어요' : ''} · Esc 그만하기`}
+                      : `키보드: ${card.type === 'ox' ? 'O·X' : `1~${choices.length}`} 고르기 · Enter 다음${picked?.correct && !practice ? ' · E 너무 쉬웠어요' : ''}${canAsk ? ' · A 물어보기' : ''} · Esc 그만하기`}
                   </p>
                 </>
               )}
@@ -459,8 +491,22 @@ function Session({ initial, offline }: { initial: QueueCard[]; offline: boolean 
           </AnimatePresence>
         </div>
         {/* 컴퓨터에서는 오른쪽에 이 카드의 개념을 둔다. 정답이 될 수 있는 내용은 답을 본 뒤에 연다 */}
-        {wide ? <ConceptPanel card={card} next={cards[index + 1]} revealed={picked !== null || explainShown === stageKey} /> : null}
+        {wide ? (
+          <ConceptPanel
+            card={card}
+            next={cards[index + 1]}
+            revealed={picked !== null || explainShown === stageKey}
+            ask={
+              canAsk && picked
+                ? { tab: panelTab, onTab: setPanelTab, fresh: ask.turns.length === 0, pending: ask.pending, chat: <AskChat card={card} picked={picked.value} ask={ask} /> }
+                : undefined
+            }
+          />
+        ) : null}
       </div>
+      <AskSheet open={askOpen && canAsk && !wide} pending={ask.pending} onClose={closeAsk}>
+        {picked ? <AskChat card={card} picked={picked.value} ask={ask} /> : null}
+      </AskSheet>
     </div>
   );
 }

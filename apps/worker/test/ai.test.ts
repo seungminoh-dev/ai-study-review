@@ -67,7 +67,7 @@ describe('AI grading', () => {
       .bind(crypto.randomUUID(), user.id, Date.now())
       .run();
     expect((await api(user, `/cards/${cardId}/grade-ai`, { method: 'POST', json: { answer: '설명' } })).status).toBe(429);
-    expect(await (await api(user, '/ai/status')).json()).toEqual({ available: true, over_budget: true });
+    expect(await (await api(user, '/ai/status')).json()).toEqual({ available: true, over_budget: true, ask_left: 50 });
     expect(fetch).not.toHaveBeenCalled();
   });
 
@@ -86,6 +86,54 @@ describe('AI grading', () => {
   it('only grades my own explain cards', async () => {
     const cardId = await explainCardId();
     expect((await api(await newUser(), `/cards/${cardId}/grade-ai`, { method: 'POST', json: { answer: '설명' } })).status).toBe(404);
+  });
+});
+
+describe('AI concept chat', () => {
+  async function mcqCardId(): Promise<string> {
+    await callTool(await mcpUrl(user), 'save_learning', example);
+    return (await env.DB.prepare("SELECT id FROM cards WHERE user_id = ?1 AND type = 'mcq'").bind(user.id).first<string>('id'))!;
+  }
+  const askCount = () => env.DB.prepare("SELECT count(*) AS n FROM llm_usage WHERE user_id = ?1 AND kind = 'ask'").bind(user.id).first<number>('n');
+
+  it('answers with the card as context, records the real cost and counts the question', async () => {
+    const cardId = await mcqCardId();
+    const fetch = mockClaude({ answer: '방어적 복사는 바깥과 나눠 쓰지 않으려고 복사하는 거예요.' });
+    const response = await api(user, `/cards/${cardId}/ask`, { method: 'POST', json: { question: '내 답은 왜 틀렸어요?', picked: '얕은 복사' } });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ answer: '방어적 복사는 바깥과 나눠 쓰지 않으려고 복사하는 거예요.', left: 49 });
+    const sent = JSON.parse(String((fetch.mock.calls[0]![1] as RequestInit).body)) as { messages: { content: string }[] };
+    expect(sent.messages[0]!.content).toContain('<card>');
+    expect(sent.messages[0]!.content).toContain('사용자가 고른 답: 얕은 복사');
+    // 미리 적어 둔 비용이 실제 비용으로 바뀐다: 1000×10 + 500×50 + 2000×1
+    const usage = await env.DB.prepare("SELECT model, cost_micro_usd FROM llm_usage WHERE user_id = ?1 AND kind = 'ask'").bind(user.id).first();
+    expect(usage).toEqual({ model: 'test-grader', cost_micro_usd: 37_000 });
+    // 남의 카드는 물을 수 없다
+    expect((await api(await newUser(), `/cards/${cardId}/ask`, { method: 'POST', json: { question: '왜요?' } })).status).toBe(404);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('stops at the monthly limit without calling the API, even with requests sent at once', async () => {
+    const cardId = await mcqCardId();
+    const fetch = mockClaude({ answer: '답' });
+    const now = Date.now();
+    await env.DB.batch(
+      Array.from({ length: 48 }, () =>
+        env.DB.prepare("INSERT INTO llm_usage (id, user_id, job_id, kind, model, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_micro_usd, created_at) VALUES (?1, ?2, 'x', 'ask', 'm', 0, 0, 0, 0, 0, ?3)").bind(crypto.randomUUID(), user.id, now),
+      ),
+    );
+    const statuses = await Promise.all(Array.from({ length: 5 }, () => api(user, `/cards/${cardId}/ask`, { method: 'POST', json: { question: '왜요?' } }).then((r) => r.status)));
+    expect(statuses.filter((status) => status === 200)).toHaveLength(2);
+    expect(statuses.filter((status) => status === 429)).toHaveLength(3);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(await askCount()).toBe(50);
+  });
+
+  it('does not count a question the API never answered', async () => {
+    const cardId = await mcqCardId();
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('overloaded', { status: 529 }));
+    expect((await api(user, `/cards/${cardId}/ask`, { method: 'POST', json: { question: '왜요?' } })).status).toBe(502);
+    expect(await askCount()).toBe(0);
   });
 });
 

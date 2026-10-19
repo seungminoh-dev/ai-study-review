@@ -1,0 +1,190 @@
+import type { AskResponse, QueueCard } from '@moai/shared';
+import { AnimatePresence } from 'motion/react';
+import * as m from 'motion/react-m';
+import { Fragment, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { aiStatus, forgetAiStatus } from '../ai';
+import { RequestError, errorMessage, request } from '../api';
+import { IconArrow } from '../icons';
+import { Mascot } from '../Mascot';
+import { LEAVE, SOFT } from '../motion';
+
+// AI 개념 채팅 (3단계 시안 "AI 개념 채팅"): 복습에서 틀린 문제의 개념을 묻는다.
+// 휴대폰은 답 아래 "이 개념 물어보기"로 여는 시트, 컴퓨터는 개념 패널의 "물어보기" 탭이다. 질문과 답은 기기에도 서버에도 남기지 않는다.
+
+interface Turn {
+  question: string;
+  answer: string | null;
+  error?: string;
+}
+
+/** 차이·예시·왜 틀렸나. 고르면 그대로 질문이 된다 */
+const SUGGESTIONS = ['내 답은 왜 틀렸어요?', '쉬운 예시로 설명해 줘요', '헷갈리기 쉬운 것과 뭐가 달라요?'];
+
+export interface Ask {
+  /** 서버 AI가 켜져 있고 이번 달 AI 한도가 남았다 */
+  available: boolean;
+  /** 이번 달 남은 질문 수 */
+  left: number;
+  turns: Turn[];
+  pending: boolean;
+  ask: (question: string) => Promise<void>;
+}
+
+/** 카드 자리(stageKey)마다 대화를 따로 둔다. 다음 카드로 가면 빈 대화가 된다 */
+export function useAsk(stageKey: string, cardId: string | undefined, picked: string | null): Ask {
+  const [status, setStatus] = useState({ available: false, left: 0 });
+  const [log, setLog] = useState<{ key: string; turns: Turn[] }>({ key: stageKey, turns: [] });
+
+  useEffect(() => {
+    void aiStatus().then((value) => setStatus({ available: value.available && !value.over_budget, left: value.ask_left }));
+  }, []);
+
+  const turns = log.key === stageKey ? log.turns : [];
+  const last = turns.at(-1);
+  const pending = last !== undefined && last.answer === null && !last.error;
+
+  const ask = async (question: string) => {
+    if (!cardId || pending || !question.trim()) return;
+    const key = stageKey;
+    // 앞서 주고받은 두 번까지 같이 보내서 "더 쉽게요" 같은 이어지는 질문도 알아듣게 한다
+    const history = turns.flatMap((turn) => (turn.answer ? [{ question: turn.question, answer: turn.answer }] : [])).slice(-2);
+    const settle = (patch: Partial<Turn>) =>
+      setLog((current) => (current.key === key ? { key, turns: current.turns.map((turn, index) => (index === current.turns.length - 1 ? { ...turn, ...patch } : turn)) } : current));
+    setLog({ key, turns: [...turns, { question: question.trim(), answer: null }] });
+    try {
+      const result = await request<AskResponse>(`/cards/${cardId}/ask`, { method: 'POST', json: { question: question.trim(), ...(picked ? { picked } : {}), history } });
+      setStatus((value) => ({ ...value, left: result.left }));
+      settle({ answer: result.answer });
+    } catch (error) {
+      if (error instanceof RequestError && error.status === 429) {
+        forgetAiStatus();
+        if (error.code === 'ask_limit') setStatus((value) => ({ ...value, left: 0 }));
+      }
+      settle({ error: errorMessage(error) });
+    }
+  };
+
+  return { ...status, turns, pending, ask };
+}
+
+/** 대화: 문제와 내 답, 추천 질문, 주고받은 말, 직접 묻는 칸 */
+export function AskChat({ card, picked, ask }: { card: QueueCard; picked: string; ask: Ask }) {
+  const [text, setText] = useState('');
+  const logRef = useRef<HTMLDivElement>(null);
+  const asked = new Set(ask.turns.map((turn) => turn.question));
+
+  useEffect(() => {
+    const element = logRef.current;
+    if (element) element.scrollTop = element.scrollHeight;
+  }, [ask.turns.length, ask.pending]);
+
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    if (ask.pending || ask.left === 0 || !text.trim()) return;
+    void ask.ask(text);
+    setText('');
+  };
+
+  return (
+    <div className="ask">
+      <div className="ask-log" ref={logRef}>
+        <p className="ask-context">
+          <b>문제</b>
+          <span>
+            {card.prompt} · 내 답: {card.type === 'ox' ? picked : `“${picked}”`}
+          </span>
+        </p>
+        <p className="bubble ai">어디가 헷갈렸어요? 아래에서 고르거나 직접 물어봐요.</p>
+        {ask.turns.map((turn, index) => (
+          <Fragment key={index}>
+            <p className="bubble me">{turn.question}</p>
+            {turn.answer ? (
+              <p className="bubble ai" aria-live="polite">
+                {turn.answer}
+              </p>
+            ) : turn.error ? (
+              <p className="notice bad" role="alert">
+                {turn.error}
+              </p>
+            ) : (
+              <div className="bubble ai typing" role="status" aria-label="답을 쓰는 중">
+                <span />
+                <span />
+                <span />
+              </div>
+            )}
+          </Fragment>
+        ))}
+        {!ask.pending && ask.left > 0 ? (
+          <div className="ask-suggest">
+            {SUGGESTIONS.filter((question) => !asked.has(question)).map((question) => (
+              <button key={question} type="button" className="ask-chip" onClick={() => void ask.ask(question)}>
+                {question}
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </div>
+      <form className="ask-form" onSubmit={submit}>
+        <div className="ask-row">
+          <label className="sr-only" htmlFor={`ask-${card.id}`}>
+            궁금한 것
+          </label>
+          <input
+            id={`ask-${card.id}`}
+            value={text}
+            maxLength={300}
+            enterKeyHint="send"
+            autoComplete="off"
+            placeholder={ask.left > 0 ? '궁금한 걸 직접 물어봐요' : '이번 달 질문을 다 썼어요'}
+            disabled={ask.left === 0}
+            onChange={(event) => setText(event.target.value)}
+          />
+          <button type="submit" className="ask-send" aria-label="보내기" disabled={ask.pending || ask.left === 0 || !text.trim()}>
+            <IconArrow />
+          </button>
+        </div>
+        <p className="ask-foot">이번 달 남은 질문 {ask.left}번 · AI 답은 틀릴 수 있어요</p>
+      </form>
+    </div>
+  );
+}
+
+/** 휴대폰: 아래에서 올라오는 시트. 닫아도 이 카드의 대화는 남는다 */
+export function AskSheet({ open, pending, onClose, children }: { open: boolean; pending: boolean; onClose: () => void; children: ReactNode }) {
+  const closeRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (open) closeRef.current?.focus();
+  }, [open]);
+  return (
+    <AnimatePresence>
+      {open ? (
+        <Fragment key="ask">
+          <m.div className="ask-backdrop" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: LEAVE }} onClick={onClose} />
+          <m.section
+            className="ask-sheet"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="ask-title"
+            initial={{ y: '100%' }}
+            animate={{ y: 0, transition: SOFT }}
+            exit={{ y: '100%', transition: LEAVE }}
+          >
+            <span className="ask-grip" aria-hidden="true" />
+            <header className="ask-head">
+              <Mascot mood={pending ? 'think' : 'happy'} size={40} />
+              <div className="grow">
+                <strong id="ask-title">개념 물어보기</strong>
+                <p>방금 문제와 내 답을 같이 보고 답해요</p>
+              </div>
+              <button ref={closeRef} type="button" className="icon-button" aria-label="닫기" onClick={onClose}>
+                ✕
+              </button>
+            </header>
+            {children}
+          </m.section>
+        </Fragment>
+      ) : null}
+    </AnimatePresence>
+  );
+}
