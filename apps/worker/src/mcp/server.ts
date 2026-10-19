@@ -8,6 +8,7 @@ import {
 import { ConceptKey, ReviewGrade, SaveLearningInput, checkSaveLearning } from '@moai/shared';
 import saveLearningExample from '@moai/shared/fixtures/immutable-object.json';
 import { z } from 'zod';
+import { raiseAlert } from '../domain/alerts';
 import { categoryOverview, updateCategories } from '../domain/categories';
 import { chatQueue, chatSubmit } from '../domain/chat-review';
 import { findConcepts, type FoundConcept } from '../domain/concepts';
@@ -139,6 +140,19 @@ function describeConcept(concept: FoundConcept): string {
 
 function buildServer(deps: McpDeps): McpServer {
   const server = new McpServer({ name: 'moai', version: '1.1.0' }, { instructions: SERVER_INSTRUCTIONS });
+  // 도구가 예외로 끝나면 SDK가 삼켜서 로그에도 알림에도 남지 않는다. 모든 도구를 한 곳에서 감싼다:
+  // 도구 이름과 오류 종류만 남기고(사용자 글은 남기지 않는다) 오너 알림을 올리고, Claude에게는 고정 문장을 돌려준다
+  const register = server.registerTool.bind(server);
+  server.registerTool = ((name: string, config: unknown, callback: (...args: unknown[]) => Promise<CallToolResult>) =>
+    register(name, config as never, (async (...args: unknown[]) => {
+      try {
+        return await callback(...args);
+      } catch (error) {
+        console.error(JSON.stringify({ event: 'mcp_tool_failed', tool: name, error: error instanceof Error ? error.name : 'unknown' }));
+        await raiseAlert(deps.env, 'mcp_failed');
+        return { isError: true, content: text('모아이 서버에서 문제가 생겨 처리하지 못했어요. 잠시 뒤에 다시 해 주세요.') };
+      }
+    }) as never)) as typeof server.registerTool;
 
   server.registerTool(
     'find_concepts',
@@ -183,6 +197,8 @@ function buildServer(deps: McpDeps): McpServer {
     async (input) => {
       const result = await saveLearning(deps.env, deps.userId, input, Date.now());
       if (!result.ok) {
+        // 입력을 고쳐 다시 부르면 되는 거절이라 알림은 올리지 않고 세기만 한다
+        console.log(JSON.stringify({ event: 'mcp_tool_rejected', tool: 'save_learning', problems: result.problems.length }));
         return { isError: true, content: text(`저장하지 않았어요. 아래를 고쳐서 다시 호출해 주세요.\n- ${result.problems.join('\n- ')}`) };
       }
       return {

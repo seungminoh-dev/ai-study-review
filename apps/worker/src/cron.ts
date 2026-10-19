@@ -27,28 +27,36 @@ export async function runCron(env: Env, now: number): Promise<void> {
   } catch (error) {
     console.error(JSON.stringify({ event: 'cron_alerts_failed', message: (error as Error).message }));
   }
-  // 매시 0분: 만료된 로그인 세션, 로그인 코드, 끝내지 않은 가입을 지운다
+  // 매시 0분 정리. 실패해도 다른 일은 이미 끝났고, 오너에게 알린다
   if (new Date(now).getUTCMinutes() === 0) {
-    const [sessions] = await env.DB.batch([
-      env.DB.prepare('DELETE FROM auth_sessions WHERE expires_at <= ?1').bind(now),
-      env.DB.prepare('DELETE FROM login_codes WHERE expires_at <= ?1').bind(now),
-      env.DB.prepare('DELETE FROM pending_signups WHERE expires_at <= ?1').bind(now),
-      // AI 작업 결과(채점 결과에는 사용자 문장이 들어 있다)는 30일 뒤 지운다. 비용 기록(llm_usage)은 남긴다
-      env.DB.prepare("DELETE FROM llm_jobs WHERE created_at <= ?1 AND status IN ('done', 'failed')").bind(now - 30 * DAY_MS),
-    ]);
-    if (sessions!.meta.changes > 0) console.log(JSON.stringify({ event: 'sessions_expired', removed: sessions!.meta.changes }));
-    try {
-      // 만료됐거나 주인 잃은 OAuth 권한·토큰을 조금씩 지운다
-      await oauthProvider(env).purgeExpiredData(env);
-    } catch (error) {
-      console.error(JSON.stringify({ event: 'cron_oauth_purge_failed', message: (error as Error).message }));
-    }
-    try {
-      const repaired = await repairLibrary(env);
-      if (repaired.normalized + repaired.adopted > 0) console.log(JSON.stringify({ event: 'library_repaired', ...repaired }));
-    } catch (error) {
-      console.error(JSON.stringify({ event: 'cron_repair_failed', message: (error as Error).message }));
+    await hourlyCleanup(env, now).catch(async (error: unknown) => {
+      console.error(JSON.stringify({ event: 'cron_cleanup_failed', message: error instanceof Error ? error.message : '' }));
       await raiseAlert(env, 'cron_failed');
-    }
+    });
+  }
+}
+
+/** 매시 0분: 만료된 로그인 세션, 로그인 코드, 끝내지 않은 가입을 지운다 */
+async function hourlyCleanup(env: Env, now: number): Promise<void> {
+  const [sessions] = await env.DB.batch([
+    env.DB.prepare('DELETE FROM auth_sessions WHERE expires_at <= ?1').bind(now),
+    env.DB.prepare('DELETE FROM login_codes WHERE expires_at <= ?1').bind(now),
+    env.DB.prepare('DELETE FROM pending_signups WHERE expires_at <= ?1').bind(now),
+    // AI 작업 결과(채점 결과에는 사용자 문장이 들어 있다)는 30일 뒤 지운다. 비용 기록(llm_usage)은 남긴다
+    env.DB.prepare("DELETE FROM llm_jobs WHERE created_at <= ?1 AND status IN ('done', 'failed')").bind(now - 30 * DAY_MS),
+  ]);
+  if (sessions!.meta.changes > 0) console.log(JSON.stringify({ event: 'sessions_expired', removed: sessions!.meta.changes }));
+  try {
+    // 만료됐거나 주인 잃은 OAuth 권한·토큰을 조금씩 지운다
+    await oauthProvider(env).purgeExpiredData(env);
+  } catch (error) {
+    console.error(JSON.stringify({ event: 'cron_oauth_purge_failed', message: (error as Error).message }));
+  }
+  try {
+    const repaired = await repairLibrary(env);
+    if (repaired.normalized + repaired.adopted > 0) console.log(JSON.stringify({ event: 'library_repaired', ...repaired }));
+  } catch (error) {
+    console.error(JSON.stringify({ event: 'cron_repair_failed', message: (error as Error).message }));
+    await raiseAlert(env, 'cron_failed');
   }
 }
