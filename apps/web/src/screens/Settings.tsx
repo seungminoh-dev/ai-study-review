@@ -19,7 +19,7 @@ export function Settings({ me, onLogout }: { me: Me; onLogout: () => void }) {
     <div className="screen">
       <h1>설정</h1>
       <Link className="notice link" href="/welcome">
-        설치, claude.ai 연결, 알림을 차례로 안내하는 시작 가이드 다시 보기 →
+        설치, 클로드 연결, 알림을 차례로 안내하는 시작 가이드 다시 보기 →
       </Link>
       <PushSection />
       <ReminderSection />
@@ -190,7 +190,7 @@ function ConnectorSection() {
 
   return (
     <section>
-      <h2>claude.ai 커넥터</h2>
+      <h2>클로드 커넥터</h2>
       <p className="small">커넥터 주소에 아래 주소를 넣고 연결하면 모아이 로그인 창이 떠요. 로그인하고 "허용"을 누르면 끝이에요.</p>
       <code className="secret-url">{address}</code>
       <div className="actions">

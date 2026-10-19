@@ -760,7 +760,7 @@ function Summary({
         <Link className="learn-suggest" href={materialReview(learnNext.title, learnNext.next.part)}>
           <span className="grow">
             <span className="learn-suggest-kicker">학습도 이어서 할까요?</span>
-            <strong>{learnNext.next.part ? partView(learnNext.next.part, Math.max(learnNext.parts.indexOf(learnNext.next.part), 0)).name : '안 푼 카드'}</strong>
+            <strong>{learnNext.next.part ? partView(learnNext.next.part, Math.max(learnNext.parts.indexOf(learnNext.next.part), 0), learnNext.part_labels[learnNext.next.part]).name : '안 푼 카드'}</strong>
             <span className="muted small">새 카드 {learnNext.next.unsolved_open}장</span>
           </span>
           <IconArrow />

@@ -23,7 +23,7 @@ function MaterialCard({ material }: { material: MaterialSummary }) {
   const sections = Math.max(material.parts.length, 1);
   const done = material.cards > 0 && material.unsolved_open === 0;
   const percent = material.cards === 0 ? 0 : Math.round((material.solved / material.cards) * 100);
-  const next = material.next ? partView(material.next.part, Math.max(material.parts.indexOf(material.next.part), 0)) : null;
+  const next = material.next ? partView(material.next.part, Math.max(material.parts.indexOf(material.next.part), 0), material.part_labels[material.next.part]) : null;
   return (
     <article className="material-item">
       <div className="material-item-head">
@@ -92,7 +92,7 @@ export function Materials() {
       </div>
       <div className="material-tip">
         <Mascot mood="study" size={56} />
-        <p className="small">claude.ai에 PDF를 올리고 "이 PDF로 모아이 카드 만들어줘"라고 하면 여기에 생겨요.</p>
+        <p className="small">클로드에 PDF를 올리고 "이 PDF로 모아이 카드 만들어줘"라고 하면 여기에 생겨요.</p>
       </div>
     </div>
   );

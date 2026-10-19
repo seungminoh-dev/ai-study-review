@@ -255,6 +255,8 @@ export interface MaterialSummary {
   created_at: number;
   /** 이어서 풀 섹션: 안 푼 열린 카드가 남은 첫 섹션 */
   next: { part: string; unsolved_open: number } | null;
+  /** 섹션 원래 이름 → 사용자가 바꾼 이름. 바꾼 섹션만 있다 */
+  part_labels: Record<string, string>;
 }
 
 export interface MaterialConcept {
@@ -292,6 +294,8 @@ export const ConceptCategoryBody = z.object({ category: z.string().trim().max(80
 export const MaterialBody = z.object({ title: z.string().trim().min(1).max(120) });
 /** 자료 이름 바꾸기. 비우면 원래 이름(PDF 이름)으로 돌아간다 */
 export const MaterialLabelBody = z.object({ title: z.string().trim().min(1).max(120), label: z.string().trim().max(80) });
+/** 자료 섹션 이름 바꾸기. part는 원래 섹션 이름(이름 없는 섹션은 빈 문자열), 비우면 원래 이름으로 돌아간다 */
+export const MaterialPartLabelBody = z.object({ title: z.string().trim().min(1).max(120), part: z.string().max(80), label: z.string().trim().max(80) });
 /** 저장한 대화 이름 바꾸기 */
 export const SessionTopicBody = z.object({ topic: z.string().trim().min(1).max(200) });
 

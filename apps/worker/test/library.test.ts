@@ -205,6 +205,20 @@ describe('renaming', () => {
     expect(await (await rename(user, '')).json()).toEqual({ name: '쿠버네티스 입문' });
   });
 
+  it('renames a material section for display only', async () => {
+    await callTool(url, 'save_learning', pdf('1장'));
+    const rename = (who: TestUser, part: string, label: string) =>
+      api(who, '/materials/part-label', { method: 'PUT', json: { title: '쿠버네티스 입문.pdf', part, label } });
+    expect((await rename(await newUser(), '1장', '남의 것')).status).toBe(404);
+    expect((await rename(user, '없는 장', '파드')).status).toBe(404);
+    expect(await (await rename(user, '1장', '파드 기초')).json()).toEqual({ label: '파드 기초' });
+    const { materials } = (await (await api(user, '/materials')).json()) as { materials: MaterialSummary[] };
+    expect(materials[0]).toMatchObject({ parts: ['1장'], part_labels: { '1장': '파드 기초' } });
+    // 복습 주소는 원래 섹션 이름 그대로다
+    expect(materials[0]!.next).toMatchObject({ part: '1장' });
+    expect(await (await rename(user, '1장', '')).json()).toEqual({ label: null });
+  });
+
   it('renames only my own saved conversation', async () => {
     const saved = await callTool(url, 'save_learning', pdf('1장'));
     const id = saved.structuredContent.session_id as string;

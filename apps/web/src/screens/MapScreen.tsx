@@ -106,7 +106,7 @@ export function MapScreen() {
     return (
       <div className="screen">
         <h1>지식 지도</h1>
-        <p className="muted">아직 저장한 개념이 없어요. claude.ai에서 공부하고 "모아이에 저장해줘"라고 해 보세요.</p>
+        <p className="muted">아직 저장한 개념이 없어요. 클로드에서 공부하고 "모아이에 저장해줘"라고 해 보세요.</p>
       </div>
     );
   }

@@ -59,8 +59,8 @@ function Onboarding({ saved }: { saved: boolean }) {
   // 누르면 시작 가이드의 그 단계로 간다
   const items: { key: keyof Steps; label: string; href: string }[] = [
     { key: 'installed', label: '홈 화면에 추가하기', href: '/welcome?step=1' },
-    { key: 'connector', label: 'claude.ai에 모아이 연결하기', href: '/welcome?step=2' },
-    { key: 'saved', label: 'claude.ai에서 공부하고 "모아이에 저장해줘"', href: '/welcome?step=3' },
+    { key: 'connector', label: '클로드에 모아이 연결하기', href: '/welcome?step=2' },
+    { key: 'saved', label: '클로드에서 공부하고 "모아이에 저장해줘"', href: '/welcome?step=3' },
     { key: 'push', label: '이 기기에서 알림 켜기', href: '/welcome?step=4' },
   ];
   const count = Object.values(steps).filter(Boolean).length;
@@ -111,7 +111,7 @@ export function ReviewHero({ data, className = '' }: { data: TodayResponse; clas
         <div>
           <p className="hero-count text">{data.reviewed_today > 0 ? '다 했어요' : '카드가 없어요'}</p>
           <p className="hero-sub">
-            {data.reviewed_today > 0 ? `오늘 ${data.reviewed_today}장을 풀었어요. 다음 카드는 알림으로 알려 드릴게요.` : 'claude.ai에서 공부하고 "모아이에 저장해줘"라고 하면 카드가 여기로 와요.'}
+            {data.reviewed_today > 0 ? `오늘 ${data.reviewed_today}장을 풀었어요. 다음 카드는 알림으로 알려 드릴게요.` : '클로드에서 공부하고 "모아이에 저장해줘"라고 하면 카드가 여기로 와요.'}
           </p>
         </div>
       ) : (
@@ -169,7 +169,7 @@ function LearnCard({ materials }: { materials: MaterialSummary[] }) {
 
 function NextPart({ material, next }: { material: MaterialSummary; next: NonNullable<MaterialSummary['next']> }) {
   const index = Math.max(material.parts.indexOf(next.part), 0);
-  const view = partView(next.part, index);
+  const view = partView(next.part, index, material.part_labels[next.part]);
   const sections = Math.max(material.parts.length, 1);
   return (
     <>

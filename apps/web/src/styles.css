@@ -6410,6 +6410,15 @@ a.notice.link:active,
   background: var(--accent);
 }
 
+/* 태블릿(700~1023px): 한 줄로 쌓되 복습·학습 카드는 나란히 */
+@media (min-width: 700px) and (max-width: 1023.98px) {
+  .today-pair {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+  }
+}
+
 /* 왼쪽 칸이 좁으면(1024px 언저리) 위아래로, 넓으면 나란히 */
 @media (min-width: 1024px) {
   .today-pair {
@@ -6784,4 +6793,13 @@ a.notice.link:active,
 
 .title-edit p {
   margin: 0;
+}
+
+.title-row.small-title {
+  gap: 2px 10px;
+}
+
+.title-row.small-title .text-button {
+  min-height: 32px;
+  font-size: 0.8125rem;
 }

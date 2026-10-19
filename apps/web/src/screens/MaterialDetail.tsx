@@ -62,7 +62,7 @@ export function MaterialDetail({ title }: { title: string }) {
   if (!data) return <Loading />;
 
   const parts = data.parts;
-  const views = parts.map((part, index) => partView(part.name, index));
+  const views = parts.map((part, index) => partView(part.name, index, data.part_labels[part.name]));
   const viewOf = (part: MaterialPart) => views[parts.indexOf(part)]!;
   const next = parts.find((part) => part.unsolved_open > 0) ?? null;
   const count = (kind: Filter) => (kind === 'all' ? parts.length : parts.filter((part) => kindOf(part) === kind).length);

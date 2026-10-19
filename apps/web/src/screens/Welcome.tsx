@@ -87,7 +87,7 @@ function Hello({ name, onNext, onLater }: { name: string; onNext: () => void; on
           </li>
           <li>
             <span>2</span>
-            <strong>claude.ai에 연결하기</strong>
+            <strong>클로드에 연결하기</strong>
             <small>1분</small>
           </li>
           <li>
@@ -200,11 +200,11 @@ function ConnectorStep({ onNext }: { onNext: () => void }) {
   return (
     <>
       <div className="welcome-body">
-        <span className="welcome-label">2/4 · claude.ai 연결</span>
+        <span className="welcome-label">2/4 · 클로드 연결</span>
         <div className="welcome-row">
           <Mascot mood="claude" size={84} />
           <div>
-            <h2>claude.ai에 모아이를 연결해요</h2>
+            <h2>클로드에 모아이를 연결해요</h2>
             <p className="muted small">연결하면 채팅에서 "모아이에 저장해줘"라고 할 수 있어요.</p>
           </div>
         </div>
@@ -294,7 +294,7 @@ function SaveStep({ onNext }: { onNext: () => void }) {
           <Mascot mood={saved ? 'cheer' : 'study'} size={84} />
           <div>
             <h2>첫 공부를 저장해 봐요</h2>
-            <p className="muted small">claude.ai에서 아무 주제나 공부하고, 끝에 이렇게 말해 보세요.</p>
+            <p className="muted small">클로드에서 아무 주제나 공부하고, 끝에 이렇게 말해 보세요.</p>
           </div>
         </div>
         <div className="chat-mock">
@@ -457,7 +457,7 @@ function Ready({ installedNow, onFinish, onRestart }: { installedNow: boolean; o
       ]);
       setRows([
         { label: '홈 화면 앱', ok: installedNow || isStandalone() },
-        { label: 'claude.ai 연결', ok: token?.connected ?? false },
+        { label: '클로드 연결', ok: token?.connected ?? false },
         { label: '첫 저장', ok: (sessions?.sessions.length ?? 0) > 0 },
         { label: '알림', ok: push === 'on' && (reminders?.reminders.length ?? 0) > 0 },
       ]);

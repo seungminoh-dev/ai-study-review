@@ -86,7 +86,7 @@ export function Reviews() {
           </Link>
         </div>
         {saved && chats.length === 0 ? (
-          <p className="muted small">아직 저장한 대화가 없어요. claude.ai에서 공부하고 "모아이에 저장해줘"라고 해 보세요.</p>
+          <p className="muted small">아직 저장한 대화가 없어요. 클로드에서 공부하고 "모아이에 저장해줘"라고 해 보세요.</p>
         ) : (
           <ul className="list">
             {chats.map((session) => (

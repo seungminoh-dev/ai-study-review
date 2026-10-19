@@ -49,7 +49,7 @@ export function Concept({ conceptKey }: { conceptKey: string }) {
 
       <section>
         <h2>Claude에서 이어서 공부하기</h2>
-        <p className="muted small">아래 글을 claude.ai 채팅에 붙여 넣으면, Claude가 예전 기록부터 확인하고 틀렸던 지점을 먼저 물어봐요.</p>
+        <p className="muted small">아래 글을 클로드 채팅에 붙여 넣으면, 예전 기록부터 확인하고 틀렸던 지점을 먼저 물어봐요.</p>
         <code className="secret-url">{data.continue_prompt}</code>
         <div className="actions">
           <button type="button" className="button primary" onClick={() => void copyText(data.continue_prompt).then(setCopied)}>

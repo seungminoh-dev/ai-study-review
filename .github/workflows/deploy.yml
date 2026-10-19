@@ -56,3 +56,24 @@ jobs:
         if: steps.check.outputs.skip != 'true'
         working-directory: apps/worker
         run: npx wrangler deploy
+      # 배포한 것이 실제로 나가는지 본다: 화면 JS가 이번 빌드와 같고, 인증이 필요한 곳은 막혀 있다
+      - name: Check production
+        if: steps.check.outputs.skip != 'true'
+        run: |
+          origin=$(grep -o '"APP_ORIGIN": *"[^"]*"' apps/worker/wrangler.jsonc | sed 's/.*"\(https[^"]*\)"/\1/')
+          local_js=$(ls apps/web/dist/assets | grep -E '^index-.*\.js$')
+          for i in $(seq 1 10); do
+            prod_js=$(curl -fsS "$origin/" | grep -o '/assets/index-[^"]*\.js' | head -1 | sed 's#/assets/##')
+            [ "$prod_js" = "$local_js" ] && break
+            sleep 6
+          done
+          [ "$prod_js" = "$local_js" ] || { echo "::error::운영 화면 JS($prod_js)가 이번 빌드($local_js)와 달라요."; exit 1; }
+          expect() {
+            code=$(curl -s -o /dev/null -w '%{http_code}' "${@:3}" "$origin$2")
+            [ "$code" = "$1" ] || { echo "::error::$2 응답이 $code예요 (기대 $1)."; exit 1; }
+          }
+          expect 200 "/assets/$local_js"
+          expect 200 /.well-known/oauth-authorization-server
+          expect 401 /api/me
+          expect 401 /mcp -X POST -H 'content-type: application/json' -d '{}'
+          echo "운영 확인: $origin, $local_js"

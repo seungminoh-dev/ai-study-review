@@ -47,7 +47,7 @@ export function Sessions() {
       <Link href="/import" className="notice link">
         커넥터 없이 공부한 대화를 붙여 넣어 카드로 만들기 →
       </Link>
-      {data.sessions.length === 0 ? <p className="muted">아직 저장한 세션이 없어요. claude.ai에서 공부하고 "정리해줘"라고 해 보세요.</p> : null}
+      {data.sessions.length === 0 ? <p className="muted">아직 저장한 세션이 없어요. 클로드에서 공부하고 "정리해줘"라고 해 보세요.</p> : null}
       <ul className="list">
         {rowsOf(data.sessions).map((row) =>
           row.kind === 'session' ? (

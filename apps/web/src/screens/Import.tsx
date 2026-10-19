@@ -62,7 +62,7 @@ export function Import() {
           onChange={(event) => setText(event.target.value)}
           rows={10}
           maxLength={MAX_IMPORT_CHARS}
-          placeholder="claude.ai 대화를 복사해서 붙여 넣으세요"
+          placeholder="클로드 대화를 복사해서 붙여 넣으세요"
           aria-label="대화"
           required
         />

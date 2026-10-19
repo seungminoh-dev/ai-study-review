@@ -9,6 +9,7 @@ export function EditableTitle({
   onSave,
   hint,
   allowEmpty = false,
+  as: Heading = 'h1',
 }: {
   value: string;
   maxLength: number;
@@ -17,6 +18,8 @@ export function EditableTitle({
   hint?: string;
   /** 비워서 저장할 수 있다 (원래 이름으로 돌리기) */
   allowEmpty?: boolean;
+  /** 화면 제목은 h1, 카드 안 이름은 strong */
+  as?: 'h1' | 'strong';
 }) {
   const [shown, setShown] = useState(value);
   const [editing, setEditing] = useState(false);
@@ -42,8 +45,8 @@ export function EditableTitle({
 
   if (!editing) {
     return (
-      <div className="title-row">
-        <h1>{shown}</h1>
+      <div className={`title-row ${Heading === 'strong' ? 'small-title' : ''}`}>
+        <Heading>{shown}</Heading>
         <button
           type="button"
           className="text-button"

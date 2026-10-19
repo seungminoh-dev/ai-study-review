@@ -78,7 +78,7 @@ export function Landing({ github }: { github: boolean }) {
             <br />
             <mark>잊히기 전에</mark>
           </h1>
-          <p className="landing-lede">claude.ai에서 공부하고 "모아이에 저장해줘"라고 말하세요. 개념과 내 오답을 카드로 만들어, 잊을 때쯤 2~3분씩 다시 보여 줘요.</p>
+          <p className="landing-lede">클로드에서 공부하고 "모아이에 저장해줘"라고 말하세요. 개념과 내 오답을 카드로 만들어, 잊을 때쯤 2~3분씩 다시 보여 줘요.</p>
           <div className="landing-ctas">
             {start('button primary')}
             {github ? (
@@ -87,7 +87,7 @@ export function Landing({ github }: { github: boolean }) {
               </Link>
             ) : null}
           </div>
-          <p className="muted small">지금은 초대받은 분만 가입할 수 있어요.</p>
+          <p className="muted small">지금은 초대받은 분만 가입할 수 있어요. 광고도, 다른 회사로 보내는 추적도 없어요.</p>
         </div>
         <PhoneScene />
       </section>

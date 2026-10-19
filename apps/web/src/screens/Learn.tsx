@@ -1,5 +1,7 @@
 import type { MaterialDetail, MaterialPart, MaterialSummary } from '@moai/shared';
 import { useState, type CSSProperties } from 'react';
+import { request } from '../api';
+import { EditableTitle } from '../EditableTitle';
 import { IconCheck, IconChevron } from '../icons';
 import { Loading } from '../Loading';
 import { Mascot } from '../Mascot';
@@ -35,7 +37,7 @@ export function Learn({ title }: { title: string | null }) {
         <div className="empty-state">
           <Mascot mood="claude" size={96} />
           <p>
-            아직 자료가 없어요. claude.ai에 PDF를 올리고 "모아이 카드로 만들어줘"라고 하거나, Claude Code에서 <code>/moai:pdf</code>를 쓰면 여기에 생겨요.
+            아직 자료가 없어요. 클로드에 PDF를 올리고 "모아이 카드로 만들어줘"라고 하거나, Claude Code에서 <code>/moai:pdf</code>를 쓰면 여기에 생겨요.
           </p>
         </div>
       </div>
@@ -47,7 +49,7 @@ export function Learn({ title }: { title: string | null }) {
 }
 
 function MaterialPath({ material, materials }: { material: MaterialSummary; materials: MaterialSummary[] }) {
-  const { data } = useApi<MaterialDetail>(`/materials/detail?${new URLSearchParams({ title: material.title })}`);
+  const { data, reload } = useApi<MaterialDetail>(`/materials/detail?${new URLSearchParams({ title: material.title })}`);
   const [switching, setSwitching] = useState(false);
   const [picked, setPicked] = useState<number | null>(null);
   const parts = data?.parts ?? [];
@@ -95,10 +97,12 @@ function MaterialPath({ material, materials }: { material: MaterialSummary; mate
         <Loading />
       ) : (
         <>
-          {parts[selected] ? <PartCard title={material.title} part={parts[selected]} index={selected} current={selected === current} /> : null}
+          {parts[selected] ? (
+            <PartCard key={parts[selected].name} title={material.title} part={parts[selected]} index={selected} current={selected === current} label={data.part_labels[parts[selected].name]} onRenamed={reload} />
+          ) : null}
           <ol className="path" aria-label="섹션 길">
             {parts.map((part, index) => {
-              const view = partView(part.name, index);
+              const view = partView(part.name, index, data.part_labels[part.name]);
               const done = doneOf(part);
               const isCurrent = index === current;
               const className = ['path-step', done ? 'done' : isCurrent ? 'current' : '', index === selected ? 'selected' : ''].filter(Boolean).join(' ');
@@ -129,15 +133,29 @@ function MaterialPath({ material, materials }: { material: MaterialSummary; mate
 
       <div className="claude-tip">
         <Mascot mood="claude" size={48} />
-        <span>새 자료는 claude.ai에 PDF를 올리고 "모아이 카드로 만들어줘"라고 하면 여기에 생겨요. 한 번 푼 카드는 복습으로 넘어가요.</span>
+        <span>새 자료는 클로드에 PDF를 올리고 "모아이 카드로 만들어줘"라고 하면 여기에 생겨요. 한 번 푼 카드는 복습으로 넘어가요.</span>
       </div>
     </div>
   );
 }
 
 /** 고른 섹션: 개념과 풀기 버튼 */
-function PartCard({ title, part, index, current }: { title: string; part: MaterialPart; index: number; current: boolean }) {
-  const view = partView(part.name, index);
+function PartCard({
+  title,
+  part,
+  index,
+  current,
+  label,
+  onRenamed,
+}: {
+  title: string;
+  part: MaterialPart;
+  index: number;
+  current: boolean;
+  label: string | undefined;
+  onRenamed: () => void;
+}) {
+  const view = partView(part.name, index, label);
   const done = doneOf(part);
   const minutes = Math.max(1, Math.round(part.unsolved_open / 3));
   return (
@@ -145,7 +163,18 @@ function PartCard({ title, part, index, current }: { title: string; part: Materi
       <div className="part-card-head">
         <span className="part-no">{view.no}</span>
         <div className="grow">
-          <strong>{view.name}</strong>
+          <EditableTitle
+            as="strong"
+            value={view.name}
+            maxLength={80}
+            allowEmpty
+            hint="보여 줄 이름만 바뀌어요. 비우면 원래 이름으로 돌아가요."
+            onSave={async (next) => {
+              await request('/materials/part-label', { method: 'PUT', json: { title, part: part.name, label: next } });
+              onRenamed();
+              return partView(part.name, index, next).name;
+            }}
+          />
           <span className="muted small">
             {view.pages ? `${view.pages} · ` : ''}
             {done ? `${part.cards}장 다 풂` : `새 카드 ${part.unsolved_open}장${part.solved > 0 ? ` · 푼 카드 ${part.solved}장` : ''} · 약 ${minutes}분`}

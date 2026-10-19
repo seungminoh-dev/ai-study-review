@@ -85,7 +85,7 @@ ${loopback}
 <button type="submit" name="decision" value="approve" class="primary">허용</button>
 </div>
 </form>
-<p class="muted" style="margin-top:16px">연결한 앱은 모아이 설정 → claude.ai 커넥터에서 언제든 끊을 수 있어요.</p>`,
+<p class="muted" style="margin-top:16px">연결한 앱은 모아이 설정 → 클로드 커넥터에서 언제든 끊을 수 있어요.</p>`,
   );
 }
 
