@@ -410,8 +410,9 @@ function PushStep({ onNext }: { onNext: () => void }) {
         current = await enablePush();
         setState(current);
       }
-      // 이미 정해 둔 시간은 두고 고른 시간을 더한다
-      const times = [...new Set([...(existing ?? []), time])].sort().slice(0, MAX_REMINDERS);
+      // 이미 정해 둔 시간은 두고 고른 시간을 더한다. 모두 정각에 몰리지 않게 0~14분 사이로 흩는다 (설정에서 바꿀 수 있다)
+      const spread = `${time.slice(0, 3)}${String(Math.floor(Math.random() * 15)).padStart(2, '0')}`;
+      const times = [...new Set([...(existing ?? []), spread])].sort().slice(0, MAX_REMINDERS);
       await request('/reminders', { method: 'PUT', json: { times } });
       if (current === 'on') return onNext();
       setSaved(true);

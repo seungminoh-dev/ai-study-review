@@ -5,9 +5,9 @@ import { pushToUser } from './push';
 // 오너에게 보내는 서버 문제 알림. 생길 때마다 수만 올리고, 매분 Cron이 종류마다 한 시간에 한 번만 모아서 푸시한다.
 // 로그처럼 내용은 남기지 않는다. 자세한 것은 Cloudflare 로그에서 본다.
 
-export type AlertKind = 'server_error' | 'cron_failed' | 'llm_failed' | 'mcp_failed';
+export type AlertKind = 'server_error' | 'cron_failed' | 'llm_failed' | 'mcp_failed' | 'reminder_late';
 
-const LABEL: Record<AlertKind, string> = { server_error: '서버 오류', cron_failed: '매분 작업 실패', llm_failed: 'AI 호출 실패', mcp_failed: 'MCP 도구 실패' };
+const LABEL: Record<AlertKind, string> = { server_error: '서버 오류', cron_failed: '매분 작업 실패', llm_failed: 'AI 호출 실패', mcp_failed: 'MCP 도구 실패', reminder_late: '복습 알림 지연' };
 /** 같은 종류는 이만큼 지나야 다시 알린다 */
 export const ALERT_QUIET_MS = 60 * MINUTE_MS;
 
