@@ -237,9 +237,9 @@ function Session({ initial, offline, before, exam }: { initial: QueueCard[]; off
   const stale = () => liveKey.current !== stageKey;
   /** 맞혔어도 찍었거나 반반이었다. "너무 쉬웠어요"는 등급을 바꾸지 못해 숨기고, 대신 물어보기를 연다 */
   const unsure = picked?.correct === true && (confidence === 'guess' || confidence === 'unsure');
-  /** 개념을 AI에게 물을 수 있는 때: 틀렸을 때, 찍어서 맞혔을 때, 설명하기를 비교한 뒤. 오프라인이거나 서버 AI가 없으면 숨긴다 */
+  /** 개념을 AI에게 물을 수 있는 때: 답을 고른 뒤(틀림·반반·찍음·맞음 모두), 설명하기를 비교한 뒤. 오프라인이거나 서버 AI가 없으면 숨긴다 */
   const askMode: AskMode | null =
-    card?.type === 'explain' ? (explainShown === stageKey ? 'explain' : null) : picked === null ? null : !picked.correct ? 'wrong' : unsure ? 'unsure' : null;
+    card?.type === 'explain' ? (explainShown === stageKey ? 'explain' : null) : picked === null ? null : !picked.correct ? 'wrong' : unsure ? 'unsure' : 'right';
   const askPicked = card?.type === 'explain' ? explainText : (picked?.value ?? '');
   const ask = useAsk(stageKey, card?.id, askPicked || null);
   const canAsk = askMode !== null && !offline && ask.available;
@@ -568,6 +568,12 @@ function Session({ initial, offline, before, exam }: { initial: QueueCard[]; off
                         </div>
                       </div>
                       {card.explain ? <p className="explain">{card.explain}</p> : null}
+                      {/* 확실히 맞힌 답은 버튼 줄을 늘리지 않고 해설 아래 작은 링크로 연다 */}
+                      {canAsk && !wide && askMode === 'right' ? (
+                        <button ref={askButton} type="button" className="text-button ask-more" onClick={() => setAskOpen(true)}>
+                          <IconChat />더 궁금하면 AI에게 물어보기
+                        </button>
+                      ) : null}
                       {notice ? <p className="notice bad">{notice}</p> : null}
                       <div className="actions">
                         {canEasy ? (
@@ -575,7 +581,7 @@ function Session({ initial, offline, before, exam }: { initial: QueueCard[]; off
                             너무 쉬웠어요
                           </button>
                         ) : null}
-                        {canAsk && !wide ? (
+                        {canAsk && !wide && askMode !== 'right' ? (
                           <button ref={askButton} type="button" className="button soft" onClick={() => setAskOpen(true)}>
                             <IconChat />
                             이 개념 물어보기
@@ -606,7 +612,7 @@ function Session({ initial, offline, before, exam }: { initial: QueueCard[]; off
             revealed={picked !== null || explainShown === stageKey}
             ask={
               canAsk && askMode
-                ? { tab: panelTab, onTab: setPanelTab, fresh: ask.turns.length === 0, pending: ask.pending, chat: <AskChat card={card} mode={askMode} picked={askPicked} ask={ask} /> }
+                ? { tab: panelTab, onTab: setPanelTab, fresh: askMode !== 'right' && ask.turns.length === 0, pending: ask.pending, chat: <AskChat card={card} mode={askMode} picked={askPicked} ask={ask} /> }
                 : undefined
             }
           />

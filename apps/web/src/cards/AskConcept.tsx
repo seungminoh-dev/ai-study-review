@@ -10,7 +10,7 @@ import { Mascot } from '../Mascot';
 import { Link } from '../router';
 import { LEAVE, SOFT } from '../motion';
 
-// AI 개념 채팅 (3단계 시안 "AI 개념 채팅"): 복습에서 틀렸거나, 찍어서 맞혔거나, 설명하기를 비교한 카드의 개념을 묻는다.
+// AI 개념 채팅 (3단계 시안 "AI 개념 채팅"): 복습에서 답을 고른 카드(틀렸든 맞혔든)나 설명하기를 비교한 카드의 개념을 묻는다.
 // 휴대폰은 답 아래 "이 개념 물어보기"로 여는 시트, 컴퓨터는 개념 패널의 "물어보기" 탭이다. 질문과 답은 기기에도 서버에도 남기지 않는다.
 
 interface Turn {
@@ -19,19 +19,21 @@ interface Turn {
   error?: string;
 }
 
-/** 틀림, 맞혔지만 찍음·반반, 설명하기 */
-export type AskMode = 'wrong' | 'unsure' | 'explain';
+/** 틀림, 맞혔지만 찍음·반반, 확실히 맞힘(확신도를 묻지 않는 연습·시험 포함), 설명하기 */
+export type AskMode = 'wrong' | 'unsure' | 'right' | 'explain';
 
 /** 고르면 그대로 질문이 된다 */
 const SUGGESTIONS: Record<AskMode, string[]> = {
   wrong: ['내 답은 왜 틀렸어요?', '쉬운 예시로 설명해 줘요', '헷갈리기 쉬운 것과 뭐가 달라요?'],
   unsure: ['이게 왜 정답이에요?', '쉬운 예시로 설명해 줘요', '헷갈리기 쉬운 것과 뭐가 달라요?'],
+  right: ['이게 왜 정답이에요?', '실제로는 어디에 쓰여요?', '헷갈리기 쉬운 것과 뭐가 달라요?'],
   explain: ['내 설명에서 빠진 게 뭐예요?', '더 짧게 말하려면요?', '쉬운 예시로 설명해 줘요'],
 };
 
 const INTRO: Record<AskMode, string> = {
   wrong: '어디가 헷갈렸어요? 아래에서 고르거나 직접 물어봐요.',
   unsure: '맞혔지만 확신은 없었죠? 아래에서 고르거나 직접 물어봐요.',
+  right: '맞혔어요. 더 알고 싶은 게 있으면 고르거나 직접 물어봐요.',
   explain: '내 설명과 비교해서 궁금한 걸 물어봐요.',
 };
 

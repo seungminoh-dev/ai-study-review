@@ -5992,6 +5992,16 @@ a.notice.link:active,
   }
 }
 
+/* 확실히 맞힌 답의 "더 궁금하면 AI에게 물어보기": 버튼 줄 대신 해설 아래 작은 링크 */
+.ask-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--accent-ink);
+  font-weight: 700;
+  text-decoration: none;
+}
+
 /* 대화로 카드 만들기 (2차) */
 .ask-chip.make {
   justify-content: center;

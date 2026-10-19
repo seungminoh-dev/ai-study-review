@@ -10,8 +10,8 @@ import { fail, meteredCall, type Failure } from './metered';
 import { ASK_SYSTEM, askInput } from './prompts';
 import { toOutputSchema } from './schema';
 
-// AI 개념 채팅 (3단계 시안): 복습에서 틀렸거나, 찍어서 맞혔거나, 설명하기를 비교한 카드의 개념을 묻는다.
-// 질문과 답은 저장하지 않는다. 한 달 50번과 예산은 metered.ts가 본다.
+// AI 개념 채팅 (3단계 시안): 복습에서 답을 고른 카드(틀렸든 맞혔든)나 설명하기를 비교한 카드의 개념을 묻는다.
+// 질문과 답은 저장하지 않는다. 크레딧과 예산은 metered.ts가 본다.
 
 const MAX_TOKENS = 2048;
 const TIMEOUT_MS = 45_000;
