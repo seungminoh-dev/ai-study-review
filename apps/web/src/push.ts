@@ -101,6 +101,16 @@ export async function disablePush(): Promise<PushState> {
   return 'off';
 }
 
+/** 이 기기의 푸시 주소. 다른 기기에서 모두 로그아웃할 때 이 기기의 구독은 남긴다 */
+export async function currentEndpoint(): Promise<string | null> {
+  try {
+    const registration = await navigator.serviceWorker?.getRegistration();
+    return (await registration?.pushManager.getSubscription())?.endpoint ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /** 로그아웃용: 이 기기의 구독을 브라우저에서 끊고, 서버에서 지울 수 있게 endpoint를 돌려준다. 실패해도 로그아웃은 막지 않는다 */
 export async function dropLocalPush(): Promise<string | null> {
   try {

@@ -1,6 +1,9 @@
+import type { LoginSummary, MemberSummary } from '@moai/shared';
 import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
 import example from '../../../packages/shared/fixtures/immutable-object.json';
+import { hashToken } from '../src/lib/crypto';
+import { findMcpUser } from '../src/mcp/route';
 import { api, callTool, fakeSubscription, mcpUrl, newUser, type TestUser } from './helpers';
 
 // 계정 지우기는 되돌릴 수 없다. 그 사람의 행이 하나도 남지 않고, 다른 사람의 데이터는 그대로인지 확인한다.
@@ -136,5 +139,68 @@ describe('export', () => {
     for (const { name } of tables) if (await env.DB.prepare(`SELECT name FROM pragma_table_info('${name}') WHERE name = 'user_id'`).first()) withUser.push(name);
     expect(withUser.sort()).toEqual([...Object.keys(exported), ...skipped].sort());
     for (const key of Object.values(exported)) expect(body).toHaveProperty(key);
+  });
+});
+
+/** 같은 사람의 다른 기기 로그인 */
+async function anotherLogin(user: TestUser, createdAt = Date.now()): Promise<TestUser> {
+  const token = crypto.randomUUID();
+  await env.DB.prepare('INSERT INTO auth_sessions (token_hash, user_id, created_at, last_seen_at, expires_at) VALUES (?1, ?2, ?3, ?3, ?4)')
+    .bind(await hashToken(env.TOKEN_PEPPER, token), user.id, createdAt, Date.now() + 86_400_000)
+    .run();
+  return { id: user.id, cookie: `__Host-sid=${token}` };
+}
+
+const endpoints = async (userId: string) =>
+  (await env.DB.prepare('SELECT endpoint FROM push_subscriptions WHERE user_id = ?1').bind(userId).all<{ endpoint: string }>()).results.map((row) => row.endpoint);
+
+describe('logins', () => {
+  it('logs out every other device but this one and drops their push subscriptions', async () => {
+    const phone = await newUser();
+    const laptop = await anotherLogin(phone);
+    const { logins } = (await (await api(phone, '/logins')).json()) as { logins: LoginSummary[] };
+    expect(logins.map((login) => login.current).sort()).toEqual([false, true]);
+    const mine = await fakeSubscription();
+    await api(phone, '/push/subscriptions', { method: 'POST', json: mine });
+    await api(laptop, '/push/subscriptions', { method: 'POST', json: await fakeSubscription() });
+
+    expect(await (await api(phone, '/logins', { method: 'DELETE', json: { endpoint: mine.endpoint } })).json()).toEqual({ ended: 1 });
+    expect((await api(laptop, '/me')).status).toBe(401);
+    expect((await api(phone, '/me')).status).toBe(200);
+    expect(await endpoints(phone.id)).toEqual([mine.endpoint]);
+  });
+
+  it('ends a login a year after it started even if it was used every day', async () => {
+    const user = await newUser();
+    expect((await api(await anotherLogin(user, Date.now() - 366 * 86_400_000), '/me')).status).toBe(401);
+    expect((await api(user, '/me')).status).toBe(200);
+  });
+});
+
+describe('suspension', () => {
+  it('cuts every way in until the owner reopens it', async () => {
+    const owner = await newUser('오너', 'owner');
+    const member = await newUser('멈출사람');
+    const token = new URL(await mcpUrl(member)).pathname.split('/').pop()!;
+    await api(member, '/login-codes', { method: 'POST' });
+    await api(member, '/push/subscriptions', { method: 'POST', json: await fakeSubscription() });
+
+    expect((await api(member, `/members/${owner.id}/disable`, { method: 'POST' })).status).toBe(403);
+    expect((await api(owner, `/members/${owner.id}/disable`, { method: 'POST' })).status).toBe(404);
+    expect((await api(owner, `/members/${member.id}/disable`, { method: 'POST' })).status).toBe(204);
+
+    expect((await api(member, '/me')).status).toBe(401);
+    // 멈춘 뒤에 생긴 로그인도 쓰지 못한다
+    expect((await api(await anotherLogin(member), '/me')).status).toBe(401);
+    expect(await findMcpUser(env, token)).toBeNull();
+    expect(await env.DB.prepare('SELECT count(*) AS n FROM login_codes WHERE user_id = ?1').bind(member.id).first<number>('n')).toBe(0);
+    expect(await endpoints(member.id)).toEqual([]);
+    const { members } = (await (await api(owner, '/members')).json()) as { members: MemberSummary[] };
+    expect(members.find((item) => item.id === member.id)?.disabled_at).toEqual(expect.any(Number));
+
+    expect((await api(owner, `/members/${member.id}/enable`, { method: 'POST' })).status).toBe(204);
+    expect((await api(await anotherLogin(member), '/me')).status).toBe(200);
+    // 끊은 커넥터 주소는 다시 열리지 않는다
+    expect(await findMcpUser(env, token)).toBeNull();
   });
 });

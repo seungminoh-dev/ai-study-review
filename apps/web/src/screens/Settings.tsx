@@ -1,4 +1,4 @@
-import type { AuthOptions, BetaMetrics, CreditAdminRow, InviteSummary, LoginCode, McpTokenStatus, Me, MemberSummary, Reminder, UsageReport } from '@moai/shared';
+import type { AuthOptions, BetaMetrics, CreditAdminRow, InviteSummary, LoginCode, LoginSummary, McpTokenStatus, Me, MemberSummary, Reminder, UsageReport } from '@moai/shared';
 import { MAX_REMINDERS } from '@moai/shared/client';
 import { useEffect, useState, type FormEvent } from 'react';
 import { RequestError, errorMessage, request } from '../api';
@@ -6,7 +6,7 @@ import { COACH_INSTRUCTIONS } from '../coach';
 import { forgetAiStatus } from '../ai';
 import { copyText } from '../copy';
 import { clearDeviceData, flushReviews, pendingCount } from '../offline/store';
-import { disablePush, dropLocalPush, enablePush, isStandalone, pushState, type PushState } from '../push';
+import { currentEndpoint, disablePush, dropLocalPush, enablePush, isStandalone, pushState, type PushState } from '../push';
 import { Link, useLocation } from '../router';
 import { formatDate, formatDateTime, useApi } from '../useApi';
 import { setSound, setTheme, setVibrate, soundOn, theme, vibrateOn, type Theme } from '../prefs';
@@ -40,6 +40,7 @@ export function Settings({ me, onLogout }: { me: Me; onLogout: () => void }) {
         <div className="admin">
           <h2 className="admin-title">관리</h2>
           <InviteSection />
+          <MemberSection />
           <MetricsSection />
           <UsageSection />
           <CreditAdminSection />
@@ -407,10 +408,45 @@ function AccountSection({ me, onLogout }: { me: Me; onLogout: () => void }) {
         </div>
       )}
       {message ? <Status text={message.text} tone={message.tone} /> : null}
+      <Logins />
       <button type="button" className="text-button" onClick={() => void logout()}>
         이 기기에서 로그아웃
       </button>
     </section>
+  );
+}
+
+/** 로그인한 기기와 다른 기기 모두 로그아웃 (잃어버린 기기를 끊을 때). 기기 이름은 저장하지 않아서 마지막 사용일만 보여 준다 */
+function Logins() {
+  const { data, reload } = useApi<{ logins: LoginSummary[] }>('/logins');
+  const [message, setMessage] = useState<{ text: string; tone: 'good' | 'bad' } | null>(null);
+  if (!data) return null;
+  const others = data.logins.filter((login) => !login.current);
+
+  const endOthers = async () => {
+    if (!confirm('이 기기만 남기고 다른 기기에서 모두 로그아웃할까요? 다른 기기의 알림도 꺼져요. Claude 커넥터는 그대로예요.')) return;
+    try {
+      const endpoint = await currentEndpoint();
+      const result = await request<{ ended: number }>('/logins', { method: 'DELETE', json: endpoint ? { endpoint } : {} });
+      setMessage({ text: `${result.ended}곳에서 로그아웃했어요.`, tone: 'good' });
+      reload();
+    } catch (error) {
+      setMessage({ text: errorMessage(error), tone: 'bad' });
+    }
+  };
+
+  return (
+    <>
+      <p className="muted small">
+        로그인한 곳: 이 기기{others.map((login) => ` · 다른 기기(마지막 사용 ${formatDate(login.last_seen_at)})`).join('')}
+      </p>
+      {others.length > 0 ? (
+        <button type="button" className="text-button danger-text" onClick={() => void endOthers()}>
+          다른 기기 모두 로그아웃
+        </button>
+      ) : null}
+      {message ? <Status text={message.text} tone={message.tone} /> : null}
+    </>
   );
 }
 
@@ -425,7 +461,7 @@ function inviteState(invite: InviteSummary): string {
 function InviteSection() {
   const { data, reload } = useApi<{ invites: InviteSummary[] }>('/invites');
   const [label, setLabel] = useState('');
-  const [created, setCreated] = useState<{ label: string; code: string } | null>(null);
+  const [created, setCreated] = useState<{ label: string; code: string; recovery: boolean } | null>(null);
   const [message, setMessage] = useState<{ text: string; tone: 'good' | 'bad' } | null>(null);
 
   const { data: members } = useApi<{ members: MemberSummary[] }>('/members');
@@ -439,7 +475,7 @@ function InviteSection() {
         method: 'POST',
         json: bind ? { label, bind_user_id: bind } : { label },
       });
-      setCreated({ label: result.invite.label, code: result.code });
+      setCreated({ label: result.invite.label, code: result.code, recovery: result.invite.bind_name !== null });
       setLabel('');
       reload();
     } catch (error) {
@@ -459,13 +495,13 @@ function InviteSection() {
 
   // 코드는 링크에 넣지 않는다. 받은 사람이 앱 안에서 직접 입력한다 (설계서 §8.4)
   const shareText = created
-    ? `모아이 초대 코드: ${created.code}\n${location.origin} 을 Chrome이나 Safari로 열어서(카톡 안에서는 설치와 알림이 안 돼요) "GitHub로 계속하기"를 누른 뒤 이 코드를 넣어 주세요. 7일 동안 한 번 쓸 수 있어요.`
+    ? `모아이 초대 코드: ${created.code}\n${location.origin} 을 Chrome이나 Safari로 열어서(카톡 안에서는 설치와 알림이 안 돼요) "GitHub로 계속하기"를 누른 뒤 이 코드를 넣어 주세요. ${created.recovery ? '24시간' : '7일'} 동안 한 번 쓸 수 있어요.`
     : '';
 
   return (
     <section>
       <h2>초대</h2>
-      <p className="muted small">초대 코드는 한 사람이 한 번 써요. 7일 동안 유효하고, 만들 때 한 번만 보여요.</p>
+      <p className="muted small">초대 코드는 한 사람이 한 번 써요. 새 친구 초대는 7일, 기기 복구 초대는 24시간 동안 유효하고, 만들 때 한 번만 보여요.</p>
       {created ? (
         <div className="secret">
           <p className="small">{created.label}님에게 보낼 코드예요.</p>
@@ -530,6 +566,48 @@ function InviteSection() {
 const GOALS = [3, 5, 10, 15, 20];
 
 /** 하루 목표: 이만큼 복습한 날이 이어지면 스트릭이 된다 (설계서 §9.6) */
+/** 회원 이용 멈추기·다시 열기 (이용약관의 이용 정지). 멈추면 그 회원의 로그인·커넥터·알림이 모두 끊긴다 */
+function MemberSection() {
+  const { data, reload } = useApi<{ members: MemberSummary[] }>('/members');
+  const [message, setMessage] = useState<{ text: string; tone: 'good' | 'bad' } | null>(null);
+  if (!data || data.members.length === 0) return null;
+
+  const toggle = async (member: MemberSummary) => {
+    const disable = member.disabled_at === null;
+    if (disable && !confirm(`${member.display_name}님의 이용을 멈출까요? 그 사람의 로그인, 커넥터, 알림이 모두 끊기고 다시 열 때까지 로그인할 수 없어요. 데이터는 지우지 않아요.`)) return;
+    try {
+      await request(`/members/${member.id}/${disable ? 'disable' : 'enable'}`, { method: 'POST' });
+      setMessage({ text: disable ? `${member.display_name}님의 이용을 멈췄어요.` : `${member.display_name}님이 다시 로그인할 수 있어요.`, tone: 'good' });
+      reload();
+    } catch (error) {
+      setMessage({ text: errorMessage(error), tone: 'bad' });
+    }
+  };
+
+  return (
+    <section>
+      <h2>회원</h2>
+      <ul className="list invites">
+        {data.members.map((member) => (
+          <li key={member.id}>
+            <div>
+              <strong>{member.display_name}</strong>
+              <p className="muted small">
+                {member.github_login ? `@${member.github_login} · ` : ''}
+                {member.disabled_at ? `${formatDate(member.disabled_at)}부터 멈춤` : `${formatDate(member.created_at)} 가입`}
+              </p>
+            </div>
+            <button type="button" className={member.disabled_at ? 'text-button' : 'text-button danger-text'} onClick={() => void toggle(member)}>
+              {member.disabled_at ? '다시 열기' : '이용 멈추기'}
+            </button>
+          </li>
+        ))}
+      </ul>
+      {message ? <Status text={message.text} tone={message.tone} /> : null}
+    </section>
+  );
+}
+
 function GoalSection({ initial }: { initial: number }) {
   const [goal, setGoal] = useState(initial);
   const [message, setMessage] = useState<{ text: string; tone: 'good' | 'bad' } | null>(null);

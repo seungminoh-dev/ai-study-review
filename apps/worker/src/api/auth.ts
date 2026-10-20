@@ -2,7 +2,7 @@ import { JoinBody, LoginCodeBody, LogoutBody, TERMS_VERSION, type AuthOptions, t
 import { Hono, type Context } from 'hono';
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import { authorizeUrl, fetchGithubUser, githubConfigured, pkceChallenge, type GithubUser } from '../auth/github';
-import { revokeAllGrants } from '../auth/grants';
+import { revokeAccessStatements, revokeAllGrants } from '../auth/grants';
 import { currentSession, endSession, startSession } from '../auth/session';
 import type { AppEnv } from '../context';
 import { loadMe } from '../domain/users';
@@ -100,9 +100,12 @@ async function linkGithub(c: Context<AppEnv>, github: GithubUser, now: number): 
 }
 
 async function loginWithGithub(c: Context<AppEnv>, github: GithubUser, now: number): Promise<Response> {
-  const identity = await c.env.DB.prepare("SELECT user_id, login FROM user_identities WHERE provider = 'github' AND subject = ?1")
+  const identity = await c.env.DB.prepare(
+    "SELECT i.user_id, i.login, u.disabled_at FROM user_identities i JOIN users u ON u.id = i.user_id WHERE i.provider = 'github' AND i.subject = ?1",
+  )
     .bind(github.id)
-    .first<{ user_id: string; login: string }>();
+    .first<{ user_id: string; login: string; disabled_at: number | null }>();
+  if (identity?.disabled_at) return c.redirect('/?auth=disabled');
   if (identity) {
     if (identity.login !== github.login) {
       await c.env.DB.prepare("UPDATE user_identities SET login = ?2 WHERE provider = 'github' AND subject = ?1").bind(github.id, github.login).run();
@@ -212,6 +215,7 @@ auth.post('/join', async (c) => {
 async function recoverAccount(c: Context<AppEnv>, pending: PendingRow, invite: string, userId: string, now: number): Promise<Response> {
   // 초대를 이 요청이 차지했을 때만 나머지를 쓴다 (used_at·used_by가 이 요청 값이면 차지한 것)
   const claimed = 'EXISTS (SELECT 1 FROM invites WHERE id = ?1 AND used_by = ?2 AND used_at = ?3)';
+  const claimedFor = { sql: 'EXISTS (SELECT 1 FROM invites WHERE id = ?2 AND used_by = ?1 AND used_at = ?3)', values: [invite, now] };
   let claim: D1Result | undefined;
   try {
     [claim] = await c.env.DB.batch([
@@ -225,10 +229,7 @@ async function recoverAccount(c: Context<AppEnv>, pending: PendingRow, invite: s
       pending.login,
     ),
     // 잃어버린 기기에 남은 접근을 모두 끊는다: 로그인, 로그인 코드, 커넥터 URL, 푸시 구독
-    c.env.DB.prepare(`DELETE FROM auth_sessions WHERE user_id = ?2 AND ${claimed}`).bind(invite, userId, now),
-    c.env.DB.prepare(`DELETE FROM login_codes WHERE user_id = ?2 AND ${claimed}`).bind(invite, userId, now),
-    c.env.DB.prepare(`UPDATE mcp_tokens SET revoked_at = ?3 WHERE user_id = ?2 AND revoked_at IS NULL AND ${claimed}`).bind(invite, userId, now),
-    c.env.DB.prepare(`DELETE FROM push_subscriptions WHERE user_id = ?2 AND ${claimed}`).bind(invite, userId, now),
+    ...revokeAccessStatements(c.env, userId, claimedFor),
     ]);
   } catch {
     // 그사이 이 GitHub가 다른 계정에 이어졌다. batch 전체가 되돌아갔다

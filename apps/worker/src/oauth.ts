@@ -16,8 +16,8 @@ function options(env: Env): OAuthProviderOptions<Env> {
     apiHandler: {
       fetch: async (request, workerEnv, ctx) => {
         const { userId } = (ctx as ExecutionContext & { props: { userId: string } }).props;
-        // 계정을 지울 때 권한도 끊지만, 남은 토큰이 있어도 없는 사용자로는 쓰지 않는다
-        const user = await workerEnv.DB.prepare('SELECT 1 FROM users WHERE id = ?1').bind(userId).first();
+        // 계정을 지우거나 이용을 멈출 때 권한도 끊지만, 남은 토큰이 있어도 없거나 멈춘 사용자로는 쓰지 않는다
+        const user = await workerEnv.DB.prepare('SELECT 1 FROM users WHERE id = ?1 AND disabled_at IS NULL').bind(userId).first();
         if (!user) return new Response(null, { status: 401 });
         return serveMcp(request, workerEnv, userId);
       },

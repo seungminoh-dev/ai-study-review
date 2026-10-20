@@ -249,7 +249,30 @@ openssl enc -aes-256-cbc -pbkdf2 -salt -in ~/moai-backups/moai-$(date +%F).sql -
 
 ### 친구가 기기를 다 잃었을 때
 
-설정 → 초대 → 종류에서 **기기 복구: 이름**을 고르고 코드를 만들어 보낸다. 친구가 GitHub로 계속한 뒤 그 코드를 넣으면 원래 계정으로 들어가고, 잃어버린 기기의 로그인은 끝난다.
+설정 → 초대 → 종류에서 **기기 복구: 이름**을 고르고 코드를 만들어 보낸다(24시간 유효). 친구가 GitHub로 계속한 뒤 그 코드를 넣으면 원래 계정으로 들어가고, 잃어버린 기기의 로그인·커넥터 URL·알림은 끊긴다.
+기기 하나만 잃었고 다른 기기가 남아 있으면, 남은 기기에서 설정 → 계정 → **다른 기기 모두 로그아웃**을 누르게 하면 된다.
+
+### 회원 계정이 털렸을 때 (또는 이용을 멈춰야 할 때)
+
+1. 설정 → 관리 → 회원 → **이용 멈추기**. 그 사람의 로그인·로그인 코드·커넥터 URL·OAuth 연결·알림 구독이 바로 끊기고, 다시 열 때까지 로그인과 커넥터를 받지 않는다. 데이터는 그대로다.
+2. 친구가 GitHub 비밀번호를 바꾸고 GitHub의 다른 세션을 정리한다.
+3. 설정 → 초대에서 **기기 복구** 코드를 만들어 보낸다. 친구가 코드를 넣으면 그 계정에 친구의 GitHub가 새로 이어진다(누가 다른 GitHub를 이어 두었어도 바뀐다).
+4. **다시 열기**. 3에서 들어온 로그인이 그때부터 쓰인다. 커넥터는 친구가 다시 잇는다.
+
+### 비밀값이 새었을 때
+
+새 값을 먼저 넣고(`npx wrangler secret put …`은 바로 새 버전으로 나간다, `apps/worker`에서), 그다음 발급한 곳에서 옛 값을 지운다. 값은 레포·로그·채팅에 남기지 않는다.
+
+| 값 | 바꾸는 법 | 바꾸면 생기는 일 |
+|---|---|---|
+| `TOKEN_PEPPER` | `npm run gen:token`으로 만들어 `secret put` | 모든 로그인, 로그인 코드, 초대 코드, 비밀 커넥터 URL이 한꺼번에 무효가 된다. 다들 GitHub로 다시 로그인하고 비밀 URL은 다시 만든다. OAuth 연결은 그대로다 |
+| `GITHUB_CLIENT_SECRET` | GitHub → Developer settings → OAuth Apps → 모아이 → 새 client secret → `secret put` → 옛 비밀 지우기 | 없음 |
+| `VAPID_PRIVATE_KEY` | `npm run gen:vapid` → 개인 키는 `secret put`, 공개 키는 `wrangler.jsonc`의 `VAPID_PUBLIC_KEY`에 넣어 push | 기존 알림 구독은 몇 번 실패한 뒤 지워진다. 오늘 화면의 "알림이 꺼졌어요"를 보고 각자 다시 켠다 |
+| `ANTHROPIC_API_KEY` | Console에서 새 키 → `secret put` → 옛 키 지우기 | 없음 |
+| `BOOTSTRAP_CODE` | `npm run gen:token` → `secret put` | 없음 (오너가 있으면 설정 API는 이미 410이다) |
+| `CLOUDFLARE_API_TOKEN` (GitHub secret) | Cloudflare → My Profile → API Tokens → Roll → GitHub 저장소 secret 바꾸기 | 없음 |
+
+커넥터 URL 하나나 연결한 앱 하나만 새었으면 아래 두 항목처럼 그것만 끊으면 된다.
 
 ### 커넥터 URL이 새었을 때
 

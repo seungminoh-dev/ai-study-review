@@ -24,7 +24,9 @@ export const MCP_TOKEN_IDLE_MS = 90 * DAY_MS;
 export async function findMcpUser(env: Env, token: string, now = Date.now()): Promise<string | null> {
   if (!token || !env.TOKEN_PEPPER) return null;
   const hash = await hashToken(env.TOKEN_PEPPER, token);
-  const row = await env.DB.prepare('SELECT user_id, last_used_at FROM mcp_tokens WHERE token_hash = ?1 AND revoked_at IS NULL')
+  const row = await env.DB.prepare(
+    'SELECT t.user_id, t.last_used_at FROM mcp_tokens t JOIN users u ON u.id = t.user_id WHERE t.token_hash = ?1 AND t.revoked_at IS NULL AND u.disabled_at IS NULL',
+  )
     .bind(hash)
     .first<{ user_id: string; last_used_at: number | null }>();
   if (!row) return null;

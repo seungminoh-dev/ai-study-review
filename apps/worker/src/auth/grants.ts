@@ -24,7 +24,21 @@ export async function listConnectedApps(env: Env, userId: string): Promise<Conne
   return apps;
 }
 
-/** 이 사람의 연결을 모두 끊는다 (계정 지우기, 기기 복구). 끊은 수를 돌려준다 */
+/**
+ * 이 사람의 로그인과 접근을 모두 끊는 문장: 로그인 세션, 로그인 코드, 커넥터 URL, 푸시 구독 (기기 복구, 이용 정지).
+ * OAuth 권한은 KV에 있어서 revokeAllGrants로 따로 끊는다. when을 주면 그 조건이 맞을 때만 끊는다 (?1은 사람, ?2부터 when.values)
+ */
+export function revokeAccessStatements(env: Env, userId: string, when?: { sql: string; values: unknown[] }): D1PreparedStatement[] {
+  const run = (sql: string) => env.DB.prepare(when ? `${sql} AND ${when.sql}` : sql).bind(userId, ...(when?.values ?? []));
+  return [
+    run('DELETE FROM auth_sessions WHERE user_id = ?1'),
+    run('DELETE FROM login_codes WHERE user_id = ?1'),
+    run('UPDATE mcp_tokens SET revoked_at = unixepoch() * 1000 WHERE user_id = ?1 AND revoked_at IS NULL'),
+    run('DELETE FROM push_subscriptions WHERE user_id = ?1'),
+  ];
+}
+
+/** 이 사람의 연결을 모두 끊는다 (계정 지우기, 기기 복구, 이용 정지). 끊은 수를 돌려준다 */
 export async function revokeAllGrants(env: Env, userId: string): Promise<number> {
   const helpers = env.OAUTH_PROVIDER;
   if (!helpers) return 0;

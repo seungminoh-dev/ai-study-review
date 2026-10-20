@@ -391,6 +391,16 @@ export interface MemberSummary {
   display_name: string;
   github_login: string | null;
   created_at: number;
+  /** 오너가 이용을 멈춘 때. 비어 있으면 쓸 수 있다 */
+  disabled_at: number | null;
+}
+
+/** 내 로그인 하나 (설정의 로그인한 기기). 기기 이름은 저장하지 않는다 */
+export interface LoginSummary {
+  /** 지금 이 기기 */
+  current: boolean;
+  created_at: number;
+  last_seen_at: number;
 }
 
 export interface InviteSummary {

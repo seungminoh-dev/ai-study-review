@@ -1,4 +1,4 @@
-import { DeleteAccountBody, TERMS_VERSION } from '@moai/shared';
+import { DeleteAccountBody, LogoutBody, TERMS_VERSION, type LoginSummary } from '@moai/shared';
 import { Hono } from 'hono';
 import { deleteCookie } from 'hono/cookie';
 import { revokeAllGrants } from '../auth/grants';
@@ -127,6 +127,31 @@ export function deleteUserStatements(env: Env, userId: string): D1PreparedStatem
     run('DELETE FROM users WHERE id = ?1'),
   ];
 }
+
+/** 내 로그인 목록 (설정의 로그인한 기기). 기기 이름은 저장하지 않아서 시각만 보여 준다 */
+me.get('/logins', async (c) => {
+  const { results } = await c.env.DB.prepare(
+    'SELECT token_hash = ?2 AS current, created_at, last_seen_at FROM auth_sessions WHERE user_id = ?1 AND expires_at > ?3 ORDER BY last_seen_at DESC',
+  )
+    .bind(c.var.userId, c.var.sessionHash, Date.now())
+    .all<{ current: number; created_at: number; last_seen_at: number }>();
+  const logins: LoginSummary[] = results.map((row) => ({ current: row.current === 1, created_at: row.created_at, last_seen_at: row.last_seen_at }));
+  return c.json({ logins });
+});
+
+/**
+ * 이 기기만 남기고 다른 기기에서 모두 로그아웃하고, 이 기기(보낸 endpoint) 말고는 알림 구독도 지운다.
+ * 커넥터(claude.ai)는 그대로다. 끊으려면 설정의 커넥터에서 따로 끊는다
+ */
+me.delete('/logins', async (c) => {
+  const body = c.req.header('content-type')?.includes('application/json') ? await readJson(c, LogoutBody) : {};
+  if (body instanceof Response) return body;
+  const [ended] = await c.env.DB.batch([
+    c.env.DB.prepare('DELETE FROM auth_sessions WHERE user_id = ?1 AND token_hash != ?2').bind(c.var.userId, c.var.sessionHash),
+    c.env.DB.prepare('DELETE FROM push_subscriptions WHERE user_id = ?1 AND endpoint != ?2').bind(c.var.userId, body.endpoint ?? ''),
+  ]);
+  return c.json({ ended: ended!.meta.changes });
+});
 
 /** 바뀐 약관·처리방침을 확인했다 (오늘 화면의 확인 카드). 지금 시행일을 적는다 */
 me.put('/me/terms', async (c) => {
