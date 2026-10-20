@@ -6,9 +6,9 @@ import type { EdgeType, JudgmentLabel } from './save-learning';
 
 // REST API(PWA용) 요청 스키마와 응답 타입 (설계서 §7). Worker와 PWA가 같이 쓴다.
 
-import { MAX_ELAPSED_MS, MAX_REMINDERS, PERFECT_MIN_ANSWERS, PERFECT_XP, REVIEWS_PER_REQUEST, isHhmm } from './limits';
+import { MAX_ELAPSED_MS, MAX_REMINDERS, PERFECT_MIN_ANSWERS, PERFECT_XP, REVIEWS_PER_REQUEST, TERMS_VERSION, isHhmm } from './limits';
 
-export { MAX_ELAPSED_MS, MAX_REMINDERS, PERFECT_MIN_ANSWERS, PERFECT_XP, REVIEWS_PER_REQUEST, isHhmm };
+export { MAX_ELAPSED_MS, MAX_REMINDERS, PERFECT_MIN_ANSWERS, PERFECT_XP, REVIEWS_PER_REQUEST, TERMS_VERSION, isHhmm };
 
 export const SetupBody = z.object({
   code: z.string().trim().min(1).max(200),
@@ -20,6 +20,8 @@ export type SetupBody = z.infer<typeof SetupBody>;
 export const JoinBody = z.object({
   code: z.string().trim().min(1).max(40),
   display_name: z.string().trim().min(1).max(30),
+  /** 만 14세 이상이고 이용약관·개인정보 처리방침에 동의했다 */
+  agree: z.literal(true, { error: '만 14세 이상이고 약관에 동의해야 가입할 수 있어요.' }),
 });
 export type JoinBody = z.infer<typeof JoinBody>;
 
@@ -146,6 +148,8 @@ export interface Me {
   daily_goal: number;
   /** 연결한 GitHub 계정. 없으면 null */
   github_login: string | null;
+  /** 마지막으로 확인한 약관·처리방침 시행일 (TERMS_VERSION). 아직 확인하지 않았으면 null */
+  terms_version: string | null;
 }
 
 export interface StatsDay {

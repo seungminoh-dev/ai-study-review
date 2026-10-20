@@ -7729,3 +7729,41 @@ a.notice.link:active,
   margin: -6px -6px 0 0;
   font-size: 1rem;
 }
+
+/* 약관 변경 확인 카드 (오늘 화면) */
+.terms-notice {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.terms-notice p {
+  margin: 0;
+}
+
+.terms-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  margin-top: 6px;
+}
+
+.terms-actions .button {
+  flex: 0 0 auto;
+  min-height: 40px;
+  margin-left: auto;
+}
+
+/* 가입: 만 14세 이상·약관 동의 */
+.join-agree {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 8px 0;
+  font-size: 0.875rem;
+}
+
+.join-agree input {
+  margin-top: 4px;
+}

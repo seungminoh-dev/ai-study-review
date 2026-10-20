@@ -327,7 +327,7 @@ export function App() {
       />
     );
   }
-  else screen = <Today name={auth.me.display_name} />;
+  else screen = <Today name={auth.me.display_name} termsVersion={auth.me.terms_version} />;
 
   // 복습, 모의면접, 시작 가이드는 메뉴 없이 집중한다. 오늘·성장·지도는 컴퓨터에서 넓게 쓴다
   const focus = path === '/review' || path === '/interview' || path === '/welcome';

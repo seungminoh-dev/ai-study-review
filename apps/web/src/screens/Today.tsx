@@ -1,5 +1,5 @@
 import type { LevelUp, MaterialSummary, McpTokenStatus, StatsResponse, SurveyStatus, TodayResponse } from '@moai/shared';
-import { QUEST_XP, isPdf } from '@moai/shared/client';
+import { QUEST_XP, TERMS_VERSION, isPdf } from '@moai/shared/client';
 import { useEffect, useState } from 'react';
 import { aiStatus, canUseAi } from '../ai';
 import { errorMessage, request } from '../api';
@@ -86,6 +86,38 @@ function Onboarding({ saved }: { saved: boolean }) {
       <button type="button" className="text-button" onClick={hide}>
         그만 보기
       </button>
+    </section>
+  );
+}
+
+/** 약관·처리방침이 바뀌면 오늘 화면에서 한 번 알린다 (이용약관 10조). 확인하면 서버에 시행일을 적는다 */
+function TermsNotice() {
+  const [done, setDone] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  if (done) return null;
+  const [year, month, day] = TERMS_VERSION.split('-');
+  return (
+    <section className="notice warn terms-notice o-badges" aria-labelledby="terms-notice-title">
+      <strong id="terms-notice-title">이용약관과 개인정보 처리방침이 바뀌었어요</strong>
+      <p className="small">
+        시행일 {year}년 {Number(month)}월 {Number(day)}일. 바뀐 내용을 한 번 확인해 주세요.
+      </p>
+      {error ? <p className="small">{error}</p> : null}
+      <div className="terms-actions">
+        <Link href="/privacy">처리방침 보기</Link>
+        <Link href="/terms">약관 보기</Link>
+        <button
+          type="button"
+          className="button"
+          onClick={() =>
+            void request('/me/terms', { method: 'PUT' })
+              .then(() => setDone(true))
+              .catch((reason: unknown) => setError(errorMessage(reason)))
+          }
+        >
+          확인했어요
+        </button>
+      </div>
     </section>
   );
 }
@@ -483,7 +515,7 @@ export function InterviewLink({ className = '' }: { className?: string }) {
   );
 }
 
-export function Today({ name }: { name: string }) {
+export function Today({ name, termsVersion }: { name: string; termsVersion: string | null }) {
   const { data, error } = useApi<TodayResponse>('/today');
   const { data: stats } = useApi<StatsResponse>('/stats');
   const { data: materials } = useApi<{ materials: MaterialSummary[] }>('/materials');
@@ -537,6 +569,7 @@ export function Today({ name }: { name: string }) {
             <ReviewHero data={data} className="o-hero" />
             {materials ? <LearnCard materials={materials.materials} /> : null}
           </div>
+          {termsVersion !== TERMS_VERSION ? <TermsNotice /> : null}
           {/* 첫 저장처럼 복습 밖에서 이룬 이정표는 여기서 축하한다 */}
           {stats ? <NewBadges badges={stats.badges} link className="o-badges" /> : null}
           {stats ? <NewAchievements achievements={stats.achievements.earned} className="o-badges" /> : null}

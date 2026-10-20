@@ -73,7 +73,9 @@ describe('account deletion', () => {
     expect(await rowsOf(user.id)).toEqual({});
     expect(await rowsOf(other.id)).toEqual(before);
     expect(await env.DB.prepare("SELECT sum(cost_micro_usd) AS n FROM llm_usage WHERE user_id = 'deleted'").first<number>('n')).toBeGreaterThanOrEqual(1234);
-    expect(await env.DB.prepare("SELECT count(*) AS n FROM invites WHERE label = '지울사람' AND used_at = 0").first<number>('n')).toBe(1);
+    // 쓴 초대는 남지만 이름이 든 라벨은 지운다
+    expect(await env.DB.prepare("SELECT count(*) AS n FROM invites WHERE label = '지울사람'").first<number>('n')).toBe(0);
+    expect(await env.DB.prepare("SELECT count(*) AS n FROM invites WHERE label = '지운 회원' AND used_at = 0").first<number>('n')).toBe(1);
     expect((await api(user, '/me')).status).toBe(401);
   });
 

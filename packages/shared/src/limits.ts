@@ -9,6 +9,11 @@ export const PERFECT_MIN_ANSWERS = 5;
 export const PERFECT_XP = 10;
 /** 알림 시간은 사용자당 3개까지다 (설계서 §10.1) */
 export const MAX_REMINDERS = 3;
+/**
+ * 이용약관·개인정보 처리방침의 시행일. 문서를 바꾸면 이 값도 바꾼다.
+ * 회원이 확인한 값(users.terms_version)과 다르면 오늘 화면에 바뀐 것을 알리는 카드가 뜬다
+ */
+export const TERMS_VERSION = '2026-10-20';
 
 const HHMM = /^([01]\d|2[0-3]):([0-5]\d)$/;
 

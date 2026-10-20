@@ -1,4 +1,4 @@
-import type { InviteSummary, LoginCode, Me, PendingJoin } from '@moai/shared';
+import { TERMS_VERSION, type InviteSummary, type LoginCode, type Me, type PendingJoin } from '@moai/shared';
 import { env } from 'cloudflare:workers';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { formatCode, normalizeCode } from '../src/lib/codes';
@@ -182,15 +182,18 @@ describe('joining with an invite', () => {
     const join = await arriveAtJoin();
     expect(await (await api(asUser(join), '/auth/join')).json()).toEqual({ github_login: 'newbie', suggested_name: '옥토캣' } satisfies PendingJoin);
 
-    const wrong = await api(asUser(join), '/auth/join', { method: 'POST', json: { code: 'AAAAA-AAAAA', display_name: '민수' } });
+    const wrong = await api(asUser(join), '/auth/join', { method: 'POST', json: { agree: true, code: 'AAAAA-AAAAA', display_name: '민수' } });
     expect(wrong.status).toBe(403);
     expect(((await wrong.json()) as { error: { message: string } }).error.message).toContain('남은 시도 4번');
 
     const { code } = await newInvite(owner);
     expect(code).toMatch(/^[0-9A-HJKMNP-TV-Z]{5}-[0-9A-HJKMNP-TV-Z]{5}$/);
-    const joined = await api(asUser(join), '/auth/join', { method: 'POST', json: { code: code.toLowerCase().replace('-', ' '), display_name: ' 민수 ' } });
+    // 만 14세 이상·약관 동의 없이는 가입하지 않는다 (틀린 횟수에도 넣지 않는다)
+    expect((await api(asUser(join), '/auth/join', { method: 'POST', json: { code, display_name: '민수' } })).status).toBe(400);
+    const joined = await api(asUser(join), '/auth/join', { method: 'POST', json: { agree: true, code: code.toLowerCase().replace('-', ' '), display_name: ' 민수 ' } });
     expect(joined.status).toBe(201);
-    expect(await joined.json()).toMatchObject({ display_name: '민수', role: 'member', github_login: 'newbie' });
+    // 가입할 때 지금 약관을 확인한 것으로 적는다
+    expect(await joined.json()).toMatchObject({ display_name: '민수', role: 'member', github_login: 'newbie', terms_version: TERMS_VERSION });
     const session = cookieOf(joined, '__Host-sid')!;
     expect(((await (await api(asUser(session), '/me')).json()) as Me).display_name).toBe('민수');
     // 가입 쿠키는 지운다
@@ -201,29 +204,29 @@ describe('joining with an invite', () => {
 
     // 같은 코드는 한 번만 쓴다
     const another = await arriveAtJoin(githubUser('late'));
-    expect((await api(asUser(another), '/auth/join', { method: 'POST', json: { code, display_name: '늦은' } })).status).toBe(403);
+    expect((await api(asUser(another), '/auth/join', { method: 'POST', json: { agree: true, code, display_name: '늦은' } })).status).toBe(403);
   });
 
   it('does not take an expired invite', async () => {
     const join = await arriveAtJoin();
     const { invite, code } = await newInvite(owner);
     await env.DB.prepare('UPDATE invites SET expires_at = 1 WHERE id = ?1').bind(invite.id).run();
-    expect((await api(asUser(join), '/auth/join', { method: 'POST', json: { code, display_name: '민수' } })).status).toBe(403);
+    expect((await api(asUser(join), '/auth/join', { method: 'POST', json: { agree: true, code, display_name: '민수' } })).status).toBe(403);
   });
 
   it('stops after five wrong codes', async () => {
     const join = await arriveAtJoin();
     for (let i = 0; i < 5; i += 1) {
-      expect((await api(asUser(join), '/auth/join', { method: 'POST', json: { code: 'AAAAAAAAAA', display_name: '민수' } })).status).toBe(403);
+      expect((await api(asUser(join), '/auth/join', { method: 'POST', json: { agree: true, code: 'AAAAAAAAAA', display_name: '민수' } })).status).toBe(403);
     }
     const { code } = await newInvite(owner);
-    expect((await api(asUser(join), '/auth/join', { method: 'POST', json: { code, display_name: '민수' } })).status).toBe(429);
+    expect((await api(asUser(join), '/auth/join', { method: 'POST', json: { agree: true, code, display_name: '민수' } })).status).toBe(429);
   });
 
   it('needs a GitHub check first', async () => {
     expect((await api(null, '/auth/join')).status).toBe(410);
     const { code } = await newInvite(owner);
-    expect((await api(null, '/auth/join', { method: 'POST', json: { code, display_name: '민수' } })).status).toBe(410);
+    expect((await api(null, '/auth/join', { method: 'POST', json: { agree: true, code, display_name: '민수' } })).status).toBe(410);
   });
 });
 
@@ -238,7 +241,7 @@ describe('recovery invites', () => {
 
     const response = await viaGithub(githubUser('new-account'));
     const join = cookieOf(response, '__Host-moai-join')!;
-    const joined = await api(asUser(join), '/auth/join', { method: 'POST', json: { code, display_name: '무시되는 이름' } });
+    const joined = await api(asUser(join), '/auth/join', { method: 'POST', json: { agree: true, code, display_name: '무시되는 이름' } });
     expect(await joined.json()).toMatchObject({ id: member.id, display_name: '민수', github_login: 'new-account' });
     expect((await api(member, '/me')).status).toBe(401);
     expect((await api(asUser(cookieOf(joined, '__Host-sid')!), '/me')).status).toBe(200);

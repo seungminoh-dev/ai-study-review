@@ -1,4 +1,4 @@
-import { JoinBody, LoginCodeBody, LogoutBody, type AuthOptions, type PendingJoin } from '@moai/shared';
+import { JoinBody, LoginCodeBody, LogoutBody, TERMS_VERSION, type AuthOptions, type PendingJoin } from '@moai/shared';
 import { Hono, type Context } from 'hono';
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import { authorizeUrl, fetchGithubUser, githubConfigured, pkceChallenge, type GithubUser } from '../auth/github';
@@ -188,8 +188,8 @@ auth.post('/join', async (c) => {
   const userId = crypto.randomUUID();
   const [created] = await c.env.DB.batch([
     c.env.DB.prepare(
-      "INSERT INTO users (id, display_name, role, created_at) SELECT ?1, ?2, 'member', ?3 WHERE EXISTS (SELECT 1 FROM invites WHERE id = ?4 AND used_at IS NULL)",
-    ).bind(userId, body.display_name, now, invite),
+      "INSERT INTO users (id, display_name, role, created_at, terms_version, terms_accepted_at) SELECT ?1, ?2, 'member', ?3, ?5, ?3 WHERE EXISTS (SELECT 1 FROM invites WHERE id = ?4 AND used_at IS NULL)",
+    ).bind(userId, body.display_name, now, invite, TERMS_VERSION),
     c.env.DB.prepare(
       "INSERT INTO user_identities (provider, subject, user_id, login, created_at) SELECT 'github', ?2, ?1, ?3, ?4 WHERE EXISTS (SELECT 1 FROM users WHERE id = ?1)",
     ).bind(userId, pending.subject, pending.login, now),

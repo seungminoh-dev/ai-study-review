@@ -72,7 +72,8 @@ app.route('/api', settings);
 
 app.notFound((c) => errorJson(404, 'not_found', `${c.req.path.startsWith('/mcp/') ? '/mcp/u/:token' : c.req.path}을(를) 찾지 못했어요.`));
 app.onError((error, c) => {
-  console.error(JSON.stringify({ event: 'unhandled_error', path: c.req.path.startsWith('/mcp/') ? '/mcp/u/:token' : c.req.path, message: error.message }));
+  // 주소에 든 개념 key·카드 id 같은 값은 남기지 않게 라우트 모양(/api/cards/:id)으로 적는다
+  console.error(JSON.stringify({ event: 'unhandled_error', path: c.req.routePath || '(unknown)', message: error.message }));
   c.executionCtx.waitUntil(raiseAlert(c.env, 'server_error'));
   return errorJson(500, 'internal', '서버에서 문제가 생겼어요.');
 });

@@ -1,4 +1,4 @@
-import { DeleteAccountBody } from '@moai/shared';
+import { DeleteAccountBody, TERMS_VERSION } from '@moai/shared';
 import { Hono } from 'hono';
 import { deleteCookie } from 'hono/cookie';
 import { revokeAllGrants } from '../auth/grants';
@@ -109,7 +109,8 @@ export function deleteUserStatements(env: Env, userId: string): D1PreparedStatem
     run('DELETE FROM category_aliases WHERE user_id = ?1'),
     run('DELETE FROM llm_jobs WHERE user_id = ?1'),
     run("UPDATE llm_usage SET user_id = 'deleted' WHERE user_id = ?1"),
-    run('UPDATE invites SET used_by = NULL WHERE used_by = ?1'),
+    // 쓴 초대는 남기되(초대한 사람의 목록), 이름이 든 라벨은 지운다
+    run("UPDATE invites SET used_by = NULL, label = '지운 회원' WHERE used_by = ?1"),
     // 이 사람에게 묶인 안 쓴 복구 초대는 지운다. 남겨 두면 묶임이 풀린 채 새 가입 초대가 된다
     run('DELETE FROM invites WHERE bind_user_id = ?1 AND used_at IS NULL'),
     run('UPDATE invites SET bind_user_id = NULL WHERE bind_user_id = ?1'),
@@ -117,6 +118,12 @@ export function deleteUserStatements(env: Env, userId: string): D1PreparedStatem
     run('DELETE FROM users WHERE id = ?1'),
   ];
 }
+
+/** 바뀐 약관·처리방침을 확인했다 (오늘 화면의 확인 카드). 지금 시행일을 적는다 */
+me.put('/me/terms', async (c) => {
+  await c.env.DB.prepare('UPDATE users SET terms_version = ?2, terms_accepted_at = ?3 WHERE id = ?1').bind(c.var.userId, TERMS_VERSION, Date.now()).run();
+  return c.json({ terms_version: TERMS_VERSION });
+});
 
 me.delete('/me', async (c) => {
   const body = await readJson(c, DeleteAccountBody);

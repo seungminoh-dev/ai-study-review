@@ -41,6 +41,7 @@ export function Join({ onDone }: { onDone: (me: Me) => void }) {
   const [name, setName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [agree, setAgree] = useState(false);
 
   useEffect(() => {
     request<PendingJoin>('/auth/join')
@@ -56,7 +57,7 @@ export function Join({ onDone }: { onDone: (me: Me) => void }) {
     setBusy(true);
     setError(null);
     try {
-      const me = await request<Me>('/auth/join', { method: 'POST', json: { code, display_name: name } });
+      const me = await request<Me>('/auth/join', { method: 'POST', json: { code, display_name: name, agree } });
       if (next) location.assign(next);
       else onDone(me);
     } catch (reason) {
@@ -114,18 +115,21 @@ export function Join({ onDone }: { onDone: (me: Me) => void }) {
       </label>
       {error ? <p className="notice bad">{error}</p> : null}
       <p className="muted small">초대 코드는 모아이를 쓰는 친구나 운영자에게 받아요.</p>
-      <p className="muted small">
+      <label className="toggle join-agree">
+        <input type="checkbox" checked={agree} onChange={(event) => setAgree(event.target.checked)} required />
         {/* 새 탭으로 연다. 이 화면을 떠나면 넣던 초대 코드가 사라진다 */}
-        가입하면{' '}
-        <a href="/terms" target="_blank" rel="noreferrer">
-          이용약관
-        </a>
-        과{' '}
-        <a href="/privacy" target="_blank" rel="noreferrer">
-          개인정보 처리방침
-        </a>
-        에 동의하게 돼요.
-      </p>
+        <span>
+          만 14세 이상이고,{' '}
+          <a href="/terms" target="_blank" rel="noreferrer">
+            이용약관
+          </a>
+          과{' '}
+          <a href="/privacy" target="_blank" rel="noreferrer">
+            개인정보 처리방침
+          </a>
+          에 동의해요.
+        </span>
+      </label>
       <div className="bottom-actions">
         <button type="submit" className="button primary" disabled={busy}>
           {busy ? '가입하는 중…' : '가입하고 시작하기'}

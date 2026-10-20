@@ -1,4 +1,4 @@
-import { SetupBody, type Me } from '@moai/shared';
+import { SetupBody, TERMS_VERSION, type Me } from '@moai/shared';
 import { Hono } from 'hono';
 import { startSession } from '../auth/session';
 import type { AppEnv } from '../context';
@@ -23,12 +23,12 @@ setup.post('/', async (c) => {
   if (!(await safeEqual(body.code, c.env.BOOTSTRAP_CODE))) return errorJson(403, 'wrong_code', '설정 코드가 맞지 않아요.');
 
   const now = Date.now();
-  const me: Me = { id: crypto.randomUUID(), display_name: body.display_name, role: 'owner', daily_new_limit: 10, daily_review_limit: 30, daily_goal: 5, github_login: null };
+  const me: Me = { id: crypto.randomUUID(), display_name: body.display_name, role: 'owner', daily_new_limit: 10, daily_review_limit: 30, daily_goal: 5, github_login: null, terms_version: TERMS_VERSION };
   // 동시에 두 번 눌러도 오너는 한 명만 생긴다
   const inserted = await c.env.DB.prepare(
-    "INSERT INTO users (id, display_name, role, created_at) SELECT ?1, ?2, 'owner', ?3 WHERE NOT EXISTS (SELECT 1 FROM users WHERE role = 'owner')",
+    "INSERT INTO users (id, display_name, role, created_at, terms_version, terms_accepted_at) SELECT ?1, ?2, 'owner', ?3, ?4, ?3 WHERE NOT EXISTS (SELECT 1 FROM users WHERE role = 'owner')",
   )
-    .bind(me.id, me.display_name, now)
+    .bind(me.id, me.display_name, now, TERMS_VERSION)
     .run();
   if (inserted.meta.changes === 0) return errorJson(410, 'already_set_up', '이미 오너 계정이 있어요.');
   await startSession(c, me.id, now);
