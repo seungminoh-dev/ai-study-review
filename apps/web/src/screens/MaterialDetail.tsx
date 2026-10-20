@@ -76,7 +76,7 @@ export function MaterialDetail({ title }: { title: string }) {
   const started = parts.filter((part) => part.solved > 0).length;
 
   const suspend = async () => {
-    if (!confirm(`"${data.name}"에서 아직 안 푼 카드를 모두 끌까요? 이미 푼 카드는 그대로예요. 기록 탭에서 다시 켤 수 있어요.`)) return;
+    if (!confirm(`"${data.name}"에서 아직 안 푼 카드를 모두 끌까요? 이미 푼 카드는 그대로예요. 섹션의 카드 보기에서 다시 켤 수 있어요.`)) return;
     try {
       const result = await request<{ suspended: number }>('/materials/suspend-unsolved', { method: 'POST', json: { title: data.title } });
       setMessage({ text: `${result.suspended}장을 껐어요.`, tone: 'good' });

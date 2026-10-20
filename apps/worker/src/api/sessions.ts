@@ -5,7 +5,7 @@ import { setCardSuspended } from '../domain/reviews';
 import type { Env } from '../env';
 import { errorJson, readJson } from '../lib/http';
 
-// 저장 기록과 카드 끄기 (설계서 §7.2, §12.1)
+// 공부한 대화와 카드 끄기 (설계서 §7.2, §12.1)
 
 export const sessions = new Hono<AppEnv>();
 
@@ -92,7 +92,7 @@ sessions.get('/sessions/:id', async (c) => {
     ).bind(id, userId),
   ]);
   const row = session!.results[0] as { id: string; topic: string; source: string; final_answer: string | null; key_terms: string; created_at: number } | undefined;
-  if (!row) return errorJson(404, 'not_found', '저장 기록을 찾지 못했어요.');
+  if (!row) return errorJson(404, 'not_found', '공부한 대화를 찾지 못했어요.');
 
   const cardRows = cards!.results as unknown as CardRow[];
   const judgmentRows = judgments!.results as unknown as { id: string; concept_key: string; concept_name: string; label: JudgmentLabel; said: string | null; note: string }[];

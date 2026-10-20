@@ -50,7 +50,7 @@ export function Import() {
   return (
     <div className="screen">
       <BackLink href="/sessions" className="back">
-        ← 저장 기록
+        ← 공부한 대화
       </BackLink>
       <h1>대화 붙여넣기</h1>
       <p className="muted small">

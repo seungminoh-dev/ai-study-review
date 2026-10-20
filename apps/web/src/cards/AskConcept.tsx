@@ -254,7 +254,7 @@ function MakeCards({ ask }: { ask: Ask }) {
     return (
       <p className="notice good">
         {making.summary.split('\n')[0]}{' '}
-        <Link href={`/sessions/${making.sessionId}`}>저장 기록에서 보기</Link>
+        <Link href={`/sessions/${making.sessionId}`}>공부한 대화에서 보기</Link>
       </p>
     );
   }

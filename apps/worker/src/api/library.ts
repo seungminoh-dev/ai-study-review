@@ -203,7 +203,7 @@ library.put('/materials/part-label', async (c) => {
   return c.json({ label: body.label || null });
 });
 
-/** 자료에서 아직 안 푼 카드를 모두 끈다. 잘못 가져온 자료를 치울 때 쓴다. 기록 탭에서 다시 켤 수 있다 */
+/** 자료에서 아직 안 푼 카드를 모두 끈다. 잘못 가져온 자료를 치울 때 쓴다. 자료 상세의 섹션 카드 보기에서 다시 켤 수 있다 */
 library.post('/materials/suspend-unsolved', async (c) => {
   const body = await readJson(c, MaterialBody);
   if (body instanceof Response) return body;

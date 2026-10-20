@@ -8,7 +8,7 @@ import { materialHref } from '../materials';
 import { BackLink, Link } from '../router';
 import { formatDate, formatDateTime, useApi } from '../useApi';
 
-// 저장 기록 (설계서 §12.1): 세션별 개념·판정·카드, 카드 고치기·끄기
+// 공부한 대화 (설계서 §12.1): 세션별 개념·판정·카드, 카드 고치기·끄기
 // 자료(PDF)는 섹션마다 저장이 하나씩 생겨서, 목록에서는 자료 하나로 묶고 누르면 자료 상세로 간다.
 
 type Row =
@@ -43,11 +43,11 @@ export function Sessions() {
   if (!data) return <Loading />;
   return (
     <div className="screen">
-      <h1>저장 기록</h1>
+      <h1>공부한 대화</h1>
       <Link href="/import" className="notice link">
         커넥터 없이 공부한 대화를 붙여 넣어 카드로 만들기 →
       </Link>
-      {data.sessions.length === 0 ? <p className="muted">아직 저장한 세션이 없어요. 클로드에서 공부하고 "정리해줘"라고 해 보세요.</p> : null}
+      {data.sessions.length === 0 ? <p className="muted">아직 저장한 대화가 없어요. 클로드에서 공부하고 "모아이에 저장해줘"라고 해 보세요.</p> : null}
       <ul className="list">
         {rowsOf(data.sessions).map((row) =>
           row.kind === 'session' ? (
@@ -298,7 +298,7 @@ export function SessionDetail({ id }: { id: string }) {
   return (
     <div className="screen">
       <BackLink href="/sessions" className="back">
-        ← 저장 기록
+        ← 공부한 대화
       </BackLink>
       <EditableTitle
         value={data.topic}

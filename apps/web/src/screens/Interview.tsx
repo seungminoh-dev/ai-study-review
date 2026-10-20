@@ -221,7 +221,7 @@ function Summary({ summary, saving, onSave }: { summary: InterviewSummary; savin
       {saving.state === 'saving' ? <p className="notice">판정과 카드로 정리하는 중이에요. 1~2분 걸리고, 다 되면 알림으로도 알려 드려요.</p> : null}
       {saving.state === 'done' ? (
         <p className="notice good">
-          {saving.summary} <Link href={`/sessions/${saving.sessionId}`}>저장 기록에서 보기</Link>
+          {saving.summary} <Link href={`/sessions/${saving.sessionId}`}>공부한 대화에서 보기</Link>
         </p>
       ) : null}
       {saving.state === 'failed' ? <p className="notice bad">{saving.message}</p> : null}

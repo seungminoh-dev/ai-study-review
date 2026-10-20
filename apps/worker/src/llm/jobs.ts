@@ -184,7 +184,7 @@ async function runImport(env: Env, job: JobRow): Promise<void> {
       if (!saved.ok) return finish(env, job.id, { error: 'invalid_output' }, Date.now());
       const body: ImportResult = { session_id: saved.session_id, summary: saved.summary, duplicate: saved.duplicate };
       await finish(env, job.id, { result: body }, Date.now());
-      await pushToUser(env, job.user_id, { title: '가져오기 완료', body: saved.summary.split('\n')[0]!.slice(0, 120), url: `/sessions/${saved.session_id}`, tag: 'import' }, Date.now()).catch(
+      await pushToUser(env, job.user_id, { title: '카드를 만들었어요', body: saved.summary.split('\n')[0]!.slice(0, 120), url: `/sessions/${saved.session_id}`, tag: 'import' }, Date.now()).catch(
         () => undefined,
       );
       return;
@@ -193,7 +193,7 @@ async function runImport(env: Env, job: JobRow): Promise<void> {
     user = repairInput(job.input!, result.text.slice(0, 40_000), problems);
   }
   await finish(env, job.id, { error: 'invalid_output' }, Date.now());
-  await pushToUser(env, job.user_id, { title: '가져오기 실패', body: '대화에서 카드를 만들지 못했어요. 앱에서 확인해 주세요.', url: '/import', tag: 'import' }, Date.now()).catch(
+  await pushToUser(env, job.user_id, { title: '카드를 만들지 못했어요', body: '대화에서 카드를 만들지 못했어요. 앱에서 확인해 주세요.', url: '/import', tag: 'import' }, Date.now()).catch(
     () => undefined,
   );
 }

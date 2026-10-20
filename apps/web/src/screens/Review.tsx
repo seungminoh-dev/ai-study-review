@@ -440,7 +440,7 @@ function Session({ initial, offline, before, exam }: { initial: QueueCard[]; off
 
   const reportArea = reporting ? (
     <div className="report-panel">
-      <p className="small">무엇이 문제인가요? 신고하면 이 카드는 바로 꺼져요. 기록 탭에서 고치거나 다시 켤 수 있어요.</p>
+      <p className="small">무엇이 문제인가요? 신고하면 이 카드는 바로 꺼져요. 복습 탭의 공부한 대화(자료 카드는 학습 탭의 자료)에서 고치거나 다시 켤 수 있어요.</p>
       {REPORT_REASONS.map((item) => (
         <button key={item.reason} type="button" className="button" disabled={busy} onClick={() => void report(item.reason)}>
           {item.label}
