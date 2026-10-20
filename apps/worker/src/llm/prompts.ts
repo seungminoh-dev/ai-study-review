@@ -2,6 +2,13 @@ import { SAVE_LEARNING_DESCRIPTION } from '../mcp/descriptions.ko';
 
 // 서버 LLM 시스템 프롬프트 (설계서 부록 C, §11.4). 고정 문자열이라 프롬프트 캐시에 걸린다.
 
+/**
+ * 사용자 글과 저장된 기록을 프롬프트의 태그 안에 넣기 전에, 우리가 경계로 쓰는 태그 이름만 무해하게 바꾼다.
+ * 글 안에 "</card>" 같은 것이 있어도 경계를 넘어 지시처럼 읽히지 않게 한다. 다른 꺾쇠(코드, HTML)는 그대로 둔다
+ */
+const BOUNDARY = /<(\/?)(card|my_notes|history|question|order|context|transcript|conversation|previous|problems|final_version|checklist|user_answer)\b/gi;
+export const tagSafe = (text: string) => text.replace(BOUNDARY, '‹$1$2');
+
 export const GRADER_SYSTEM = `너는 기술 면접 개념 코치의 채점 보조다. 사용자가 개념을 30초 분량으로 설명한 글을 채점한다.
 기준 자료로 사용자가 예전에 확정한 최종 버전과 핵심 요소 체크리스트가 함께 온다.
 
@@ -21,10 +28,10 @@ export const GRADER_SYSTEM = `너는 기술 면접 개념 코치의 채점 보�
 
 export function gradingInput(card: { prompt: string; final_answer: string | null; checklist: string[] }, answer: string): string {
   return [
-    `<question>${card.prompt}</question>`,
-    `<final_version>${card.final_answer ?? '(확정한 최종 버전 없음. 체크리스트만 기준으로 본다)'}</final_version>`,
-    `<checklist>\n${card.checklist.map((item) => `- ${item}`).join('\n')}\n</checklist>`,
-    `<user_answer>${answer}</user_answer>`,
+    `<question>${tagSafe(card.prompt)}</question>`,
+    `<final_version>${tagSafe(card.final_answer ?? '(확정한 최종 버전 없음. 체크리스트만 기준으로 본다)')}</final_version>`,
+    `<checklist>\n${tagSafe(card.checklist.map((item) => `- ${item}`).join('\n'))}\n</checklist>`,
+    `<user_answer>${tagSafe(answer)}</user_answer>`,
   ].join('\n');
 }
 
@@ -70,10 +77,10 @@ export function askInput(context: AskContext): string {
     context.checklist ? `사용자가 쓴 설명: ${context.picked || '(머릿속으로만 설명함)'}` : `사용자가 고른 답: ${context.picked ?? '(없음)'}`,
   ];
   return [
-    `<card>\n${card.join('\n')}\n</card>`,
-    `<my_notes>${context.notes ?? '(정리한 답 없음)'}</my_notes>`,
-    ...(context.history.length > 0 ? [`<history>\n${context.history.map((turn) => `질문: ${turn.question}\n답: ${turn.answer}`).join('\n\n')}\n</history>`] : []),
-    `<question>${context.question}</question>`,
+    `<card>\n${tagSafe(card.join('\n'))}\n</card>`,
+    `<my_notes>${tagSafe(context.notes ?? '(정리한 답 없음)')}</my_notes>`,
+    ...(context.history.length > 0 ? [`<history>\n${tagSafe(context.history.map((turn) => `질문: ${turn.question}\n답: ${turn.answer}`).join('\n\n'))}\n</history>`] : []),
+    `<question>${tagSafe(context.question)}</question>`,
   ].join('\n');
 }
 
@@ -90,9 +97,9 @@ export const INTERVIEW_SYSTEM = `너는 기술 면접관이다. 사용자가 공
 
 export function interviewInput(order: { key: string; name: string }[], context: string, turns: { question: string; answer: string }[], final: boolean): string {
   return [
-    `<order>\n${order.map((item, index) => `${index + 1}. \`${item.key}\` ${item.name}`).join('\n')}\n</order>`,
-    `<context>\n${context}\n</context>`,
-    `<transcript>\n${turns.length > 0 ? turns.map((turn) => `면접관: ${turn.question}\n사용자: ${turn.answer || '(답하지 않음)'}`).join('\n\n') : '(아직 없음)'}\n</transcript>`,
+    `<order>\n${tagSafe(order.map((item, index) => `${index + 1}. \`${item.key}\` ${item.name}`).join('\n'))}\n</order>`,
+    `<context>\n${tagSafe(context)}\n</context>`,
+    `<transcript>\n${turns.length > 0 ? tagSafe(turns.map((turn) => `면접관: ${turn.question}\n사용자: ${turn.answer || '(답하지 않음)'}`).join('\n\n')) : '(아직 없음)'}\n</transcript>`,
     final ? '이제 마지막이다. 질문하지 말고 good과 fix로 정리한다.' : `다음 질문을 하나 한다. (지금 ${turns.length + 1}번째 질문)`,
   ].join('\n');
 }
@@ -112,9 +119,9 @@ export const IMPORT_SYSTEM = `너는 사용자가 AI와 공부한 대화를 복�
 ${SAVE_LEARNING_DESCRIPTION}`;
 
 export function importInput(text: string): string {
-  return `<conversation>\n${text}\n</conversation>`;
+  return `<conversation>\n${tagSafe(text)}\n</conversation>`;
 }
 
 export function repairInput(text: string, previous: string, problems: readonly string[]): string {
-  return `${importInput(text)}\n\n앞서 만든 JSON이 검사에 걸렸다. 아래를 고쳐서 JSON 전체를 다시 만든다.\n<previous>${previous}</previous>\n<problems>\n${problems.map((problem) => `- ${problem}`).join('\n')}\n</problems>`;
+  return `${importInput(text)}\n\n앞서 만든 JSON이 검사에 걸렸다. 아래를 고쳐서 JSON 전체를 다시 만든다.\n<previous>${tagSafe(previous)}</previous>\n<problems>\n${problems.map((problem) => `- ${problem}`).join('\n')}\n</problems>`;
 }
