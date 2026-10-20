@@ -5,10 +5,11 @@ import { CodeBlock } from '../cards/CodeBlock';
 import { EditableTitle } from '../EditableTitle';
 import { Loading } from '../Loading';
 import { materialHref } from '../materials';
-import { BackLink, Link } from '../router';
+import { forgetAnswered } from '../offline/store';
+import { BackLink, Link, goBack } from '../router';
 import { formatDate, formatDateTime, useApi } from '../useApi';
 
-// 공부한 대화 (설계서 §12.1): 세션별 개념·판정·카드, 카드 고치기·끄기
+// 공부한 대화 (설계서 §12.1): 세션별 개념·판정·카드, 카드 고치기·끄기, 대화 지우기
 // 자료(PDF)는 섹션마다 저장이 하나씩 생겨서, 목록에서는 자료 하나로 묶고 누르면 자료 상세로 간다.
 
 type Row =
@@ -293,8 +294,21 @@ export function CardRow({ card: initial }: { card: SessionCard }) {
 
 export function SessionDetail({ id }: { id: string }) {
   const { data, error } = useApi<Detail>(`/sessions/${id}`);
+  const [notice, setNotice] = useState<string | null>(null);
   if (error) return <div className="screen"><p className="notice bad">{error}</p></div>;
   if (!data) return <Loading />;
+
+  const remove = async () => {
+    if (!confirm('이 대화를 지울까요? 카드·판정·다음에 볼 질문과 그 카드의 복습 기록까지 지워지고, 되돌릴 수 없어요. 다른 대화에도 나온 개념은 남아요.')) return;
+    try {
+      await request(`/sessions/${id}`, { method: 'DELETE' });
+      // 기기에 남겨 둔 오프라인 큐에서도 뺀다
+      await forgetAnswered(data.cards.map((card) => card.id)).catch(() => undefined);
+      goBack('/sessions');
+    } catch (reason) {
+      setNotice(errorMessage(reason));
+    }
+  };
   return (
     <div className="screen">
       <BackLink href="/sessions" className="back">
@@ -358,6 +372,10 @@ export function SessionDetail({ id }: { id: string }) {
           </ul>
         </section>
       ) : null}
+      {notice ? <p className="notice bad">{notice}</p> : null}
+      <button type="button" className="text-button danger-text" onClick={() => void remove()}>
+        이 대화 지우기
+      </button>
     </div>
   );
 }

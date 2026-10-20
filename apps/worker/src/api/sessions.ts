@@ -1,6 +1,7 @@
 import { SessionTopicBody, materialLabel, type CardStatus, type CardType, type JudgmentLabel, type McqOption, type SessionCard, type SessionDetail, type SessionSummary } from '@moai/shared';
 import { Hono } from 'hono';
 import type { AppEnv } from '../context';
+import { cardsToUnlock, stuckCards, type LadderCard } from '../domain/ladder';
 import { setCardSuspended } from '../domain/reviews';
 import type { Env } from '../env';
 import { errorJson, readJson } from '../lib/http';
@@ -53,6 +54,74 @@ sessions.patch('/sessions/:id', async (c) => {
     .run();
   if (meta.changes === 0) return errorJson(404, 'not_found', '이 기록을 찾지 못했어요.');
   return c.json({ topic: body.topic });
+});
+
+/**
+ * 공부한 대화(자료는 섹션)를 지운다. 되돌릴 수 없어서 한 batch(트랜잭션)로 한다 (개선점 18).
+ * 대화의 카드와 그 복습 기록·신고·끝난 AI 작업, 판정, 다음에 볼 질문을 지운다. 그 대화가 다룬 개념(과 연결로 이어진 개념) 중
+ * 다른 대화에 카드·판정·질문이 남지 않은 것은 연결과 함께 지운다. 개념이 남으면 사다리를 다시 맞춘다 (아래 단계가 지워져 잠긴 채 남는 카드를 연다)
+ */
+export async function deleteSessions(env: Env, userId: string, ids: readonly string[], now: number): Promise<void> {
+  const list = JSON.stringify(ids);
+  const inList = 'SELECT value FROM json_each(?2)';
+  const [candidates, ladder] = await env.DB.batch([
+    env.DB.prepare(
+      `WITH touched AS (
+         SELECT concept_id AS id FROM cards WHERE user_id = ?1 AND session_id IN (${inList})
+         UNION SELECT concept_id FROM judgments WHERE user_id = ?1 AND session_id IN (${inList})
+         UNION SELECT concept_id FROM followups WHERE user_id = ?1 AND session_id IN (${inList}))
+       SELECT id FROM touched
+       UNION SELECT to_id FROM edges WHERE user_id = ?1 AND from_id IN (SELECT id FROM touched)
+       UNION SELECT from_id FROM edges WHERE user_id = ?1 AND to_id IN (SELECT id FROM touched)`,
+    ).bind(userId, list),
+    env.DB.prepare(
+      `SELECT id, concept_id, session_id, rung, status, stability, origin, state FROM cards
+        WHERE user_id = ?1 AND concept_id IN (SELECT concept_id FROM cards WHERE user_id = ?1 AND session_id IN (${inList}))`,
+    ).bind(userId, list),
+  ]);
+  const concepts = JSON.stringify((candidates!.results as { id: string }[]).map((row) => row.id));
+  const gone = new Set(ids);
+  const left = (ladder!.results as (LadderCard & { session_id: string })[]).filter((card) => !gone.has(card.session_id));
+  const unlock = [...cardsToUnlock(left), ...stuckCards(left)];
+
+  const sessionCards = `SELECT id FROM cards WHERE user_id = ?1 AND session_id IN (${inList})`;
+  const orphans = `SELECT t.value FROM json_each(?2) t
+      WHERE NOT EXISTS (SELECT 1 FROM cards WHERE concept_id = t.value) AND NOT EXISTS (SELECT 1 FROM judgments WHERE concept_id = t.value)
+        AND NOT EXISTS (SELECT 1 FROM followups WHERE concept_id = t.value)`;
+  const run = (sql: string, values = list) => env.DB.prepare(sql).bind(userId, values);
+  await env.DB.batch([
+    // 그 카드의 AI 채점과 그 대화를 만든 가져오기 (결과에 요약이 남는다). 진행 중인 작업은 끝난 뒤 30일 정리가 지운다
+    run(
+      `DELETE FROM llm_jobs WHERE user_id = ?1 AND status IN ('done', 'failed')
+         AND (card_id IN (${sessionCards}) OR CASE WHEN json_valid(result) THEN json_extract(result, '$.session_id') END IN (${inList}))`,
+    ),
+    run(`DELETE FROM review_logs WHERE card_id IN (${sessionCards})`),
+    run(`DELETE FROM card_reports WHERE card_id IN (${sessionCards})`),
+    run(`DELETE FROM cards WHERE user_id = ?1 AND session_id IN (${inList})`),
+    run(`DELETE FROM judgments WHERE user_id = ?1 AND session_id IN (${inList})`),
+    run(`DELETE FROM followups WHERE user_id = ?1 AND session_id IN (${inList})`),
+    run(`DELETE FROM edges WHERE user_id = ?1 AND (from_id IN (${orphans}) OR to_id IN (${orphans}))`, concepts),
+    run(`DELETE FROM concepts WHERE user_id = ?1 AND id IN (${orphans})`, concepts),
+    run(`DELETE FROM learning_sessions WHERE user_id = ?1 AND id IN (${inList})`),
+    // 섹션이 하나도 남지 않은 자료의 바꾼 이름
+    env.DB.prepare('DELETE FROM material_labels WHERE user_id = ?1 AND NOT EXISTS (SELECT 1 FROM learning_sessions s WHERE s.user_id = ?1 AND s.material = material_labels.material)').bind(userId),
+    env.DB.prepare(
+      `DELETE FROM material_part_labels WHERE user_id = ?1
+          AND NOT EXISTS (SELECT 1 FROM learning_sessions s WHERE s.user_id = ?1 AND s.material = material_part_labels.material AND coalesce(s.material_part, '') = material_part_labels.part)`,
+    ).bind(userId),
+    ...(unlock.length > 0
+      ? [env.DB.prepare("UPDATE cards SET status = 'active', due = ?3 WHERE user_id = ?1 AND status = 'locked' AND id IN (SELECT value FROM json_each(?2))").bind(userId, JSON.stringify(unlock), now)]
+      : []),
+  ]);
+}
+
+/** 공부한 대화 하나를 지운다. 자료 섹션이면 그 섹션만 (자료 전체는 POST /materials/delete) */
+sessions.delete('/sessions/:id', async (c) => {
+  const id = c.req.param('id');
+  const found = await c.env.DB.prepare('SELECT id FROM learning_sessions WHERE id = ?1 AND user_id = ?2').bind(id, c.var.userId).first();
+  if (!found) return errorJson(404, 'not_found', '공부한 대화를 찾지 못했어요.');
+  await deleteSessions(c.env, c.var.userId, [id], Date.now());
+  return c.body(null, 204);
 });
 
 interface CardRow {

@@ -1,6 +1,7 @@
 import type { MapResponse, MaterialSummary, QueueResponse } from '@moai/shared';
 import { env } from 'cloudflare:workers';
 import { beforeEach, describe, expect, it } from 'vitest';
+import example from '../../../packages/shared/fixtures/immutable-object.json';
 import { repairLibrary } from '../src/domain/categories';
 import { loadMaterialQueue, loadTodayQueue } from '../src/domain/queue';
 import { api, callTool, mcpUrl, newUser, type TestUser } from './helpers';
@@ -249,5 +250,55 @@ describe('category manage', () => {
     expect((await manage()).categories).toEqual([{ path: '인프라/컨테이너', concepts: 0, material: 1 }]);
     // 다른 사람의 분류는 그대로다
     expect((await (await api(await newUser(), '/categories/rename', { method: 'POST', json: { from: '인프라/컨테이너', to: 'x' } })).json()) as { renamed: number }).toMatchObject({ renamed: 0 });
+  });
+});
+
+// 지우기는 되돌릴 수 없다. 다른 대화가 쓰는 개념은 남고, 외래 키가 깨지지 않는지 본다
+describe('deleting', () => {
+  const count = (table: string) => env.DB.prepare(`SELECT count(*) AS n FROM ${table} WHERE user_id = ?1`).bind(user.id).first<number>('n');
+  const keys = async () => (await env.DB.prepare('SELECT key FROM concepts WHERE user_id = ?1 ORDER BY key').bind(user.id).all<{ key: string }>()).results.map((row) => row.key);
+  const foreignKeys = async () => (await env.DB.prepare('PRAGMA foreign_key_check').all()).results;
+
+  it('removes one conversation, keeps concepts another conversation still uses and reopens their ladder', async () => {
+    await callTool(url, 'save_learning', example);
+    // 다른 대화의 같은 개념 설명하기 카드. 아래 단계가 이미 있어서 잠긴 채 저장된다
+    await callTool(url, 'save_learning', {
+      topic: '깊은 복사 설명',
+      concepts: [{ key: 'deep-copy', name: '깊은 복사', final_answer: '깊은 복사는 중첩 객체까지 새로 만들어 원본과 상태를 나누지 않는다.' }],
+      cards: [{ type: 'explain', concept: 'deep-copy', prompt: '깊은 복사를 30초로 설명해 보세요.', checklist: ['중첩 객체까지 새로 만든다', '원본과 상태를 나누지 않는다'] }],
+    });
+    const explain = () =>
+      env.DB.prepare("SELECT c.status FROM cards c JOIN concepts k ON k.id = c.concept_id WHERE c.user_id = ?1 AND k.key = 'deep-copy' AND c.type = 'explain'").bind(user.id).first<string>('status');
+    expect(await explain()).toBe('locked');
+    const target = (await env.DB.prepare('SELECT id FROM learning_sessions WHERE user_id = ?1 AND topic = ?2').bind(user.id, example.topic).first<string>('id'))!;
+    const card = await env.DB.prepare('SELECT id FROM cards WHERE session_id = ?1 LIMIT 1').bind(target).first<string>('id');
+    await api(user, '/reviews', { method: 'POST', json: { reviews: [{ id: crypto.randomUUID(), card_id: card, grade: 3, reviewed_at: Date.now() }] } });
+    await api(user, `/cards/${card}/report`, { method: 'POST', json: { reason: 'unclear' } });
+
+    expect((await api(await newUser(), `/sessions/${target}`, { method: 'DELETE' })).status).toBe(404);
+    expect((await api(user, `/sessions/${target}`, { method: 'DELETE' })).status).toBe(204);
+
+    expect(await keys()).toEqual(['deep-copy']);
+    expect(await explain()).toBe('active');
+    for (const table of ['judgments', 'followups', 'review_logs', 'card_reports', 'edges']) expect([table, await count(table)]).toEqual([table, 0]);
+    expect(await count('cards')).toBe(1);
+    expect(await foreignKeys()).toEqual([]);
+    expect((await api(user, `/sessions/${target}`)).status).toBe(404);
+  });
+
+  it('removes a whole material with its section names', async () => {
+    const title = '쿠버네티스 입문.pdf';
+    await callTool(url, 'save_learning', pdf('1장'));
+    await callTool(url, 'save_learning', pdf('2장', 'service'));
+    await api(user, '/materials/label', { method: 'PUT', json: { title, label: '쿠버 책' } });
+    await api(user, '/materials/part-label', { method: 'PUT', json: { title, part: '1장', label: '첫 장' } });
+    expect(await count('material_part_labels')).toBe(1);
+
+    expect((await api(await newUser(), '/materials/delete', { method: 'POST', json: { title } })).status).toBe(404);
+    expect(await (await api(user, '/materials/delete', { method: 'POST', json: { title } })).json()).toEqual({ deleted: 2 });
+
+    expect(await keys()).toEqual([]);
+    for (const table of ['learning_sessions', 'cards', 'material_labels', 'material_part_labels']) expect([table, await count(table)]).toEqual([table, 0]);
+    expect(await foreignKeys()).toEqual([]);
   });
 });

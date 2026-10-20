@@ -19,6 +19,7 @@ import { Hono } from 'hono';
 import type { AppEnv } from '../context';
 import { categoryLookupQueries, categoryOverview, resolveCategories, updateCategories } from '../domain/categories';
 import { errorJson, readJson } from '../lib/http';
+import { deleteSessions } from './sessions';
 
 // 자료(PDF 등)와 분류 (설계서 §5.6). 자료 카드는 풀기 전까지 내 지식이 아니다. 분류는 저장할 때 정하고 여기서 고친다.
 // 자료 하나는 섹션(저장 하나 = learning_sessions.material_part)이 여러 개다. 섹션은 이름 끝의 쪽수 순서로 늘어놓는다.
@@ -216,6 +217,16 @@ library.post('/materials/suspend-unsolved', async (c) => {
     .bind(c.var.userId, body.title)
     .run();
   return c.json({ suspended: result.meta.changes });
+});
+
+/** 자료를 모든 섹션째 지운다. 되돌릴 수 없다 (개선점 18) */
+library.post('/materials/delete', async (c) => {
+  const body = await readJson(c, MaterialBody);
+  if (body instanceof Response) return body;
+  const { results } = await c.env.DB.prepare('SELECT id FROM learning_sessions WHERE user_id = ?1 AND material = ?2').bind(c.var.userId, body.title).all<{ id: string }>();
+  if (results.length === 0) return errorJson(404, 'not_found', '자료를 찾지 못했어요.');
+  await deleteSessions(c.env, c.var.userId, results.map((row) => row.id), Date.now());
+  return c.json({ deleted: results.length });
 });
 
 /** 내 지식의 분류와 개념 수. 분류 필터에 쓴다 */

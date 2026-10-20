@@ -11,7 +11,7 @@ import { materialReview, partView, rememberMaterial } from '../materials';
 import { LEAVE, Presence, SNAPPY, SOFT } from '../motion';
 import { Ring } from '../progress';
 import { EditableTitle } from '../EditableTitle';
-import { BackLink, Link } from '../router';
+import { BackLink, Link, goBack } from '../router';
 import { formatDate, useApi } from '../useApi';
 import { BookTile } from './Materials';
 
@@ -81,6 +81,16 @@ export function MaterialDetail({ title }: { title: string }) {
       const result = await request<{ suspended: number }>('/materials/suspend-unsolved', { method: 'POST', json: { title: data.title } });
       setMessage({ text: `${result.suspended}장을 껐어요.`, tone: 'good' });
       reload();
+    } catch (reason) {
+      setMessage({ text: errorMessage(reason), tone: 'bad' });
+    }
+  };
+
+  const remove = async () => {
+    if (!confirm(`"${data.name}" 자료를 통째로 지울까요? 모든 섹션의 카드와 그 복습 기록이 지워지고, 되돌릴 수 없어요. 다른 대화에도 나온 개념은 남아요.`)) return;
+    try {
+      await request('/materials/delete', { method: 'POST', json: { title: data.title } });
+      goBack('/materials');
     } catch (reason) {
       setMessage({ text: errorMessage(reason), tone: 'bad' });
     }
@@ -231,6 +241,9 @@ export function MaterialDetail({ title }: { title: string }) {
           안 푼 카드 모두 끄기
         </button>
       ) : null}
+      <button type="button" className="text-button danger-text" onClick={() => void remove()}>
+        자료 지우기
+      </button>
     </div>
   );
 }
