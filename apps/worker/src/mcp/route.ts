@@ -13,13 +13,30 @@ function summarize(body: unknown): { method: string | null; tool: string | null 
   };
 }
 
-/** 커넥터 URL의 토큰으로 사용자를 찾는다. 모르거나 취소된 토큰이면 null이다 (설계서 §6.1). */
-export async function findMcpUser(env: Env, token: string): Promise<string | null> {
+const DAY_MS = 24 * 60 * 60 * 1000;
+/** 이만큼 안 쓴 비밀 주소는 끊는다. 주소가 새어도 모르는 채로 영원히 남지 않게 */
+export const MCP_TOKEN_IDLE_MS = 90 * DAY_MS;
+
+/**
+ * 커넥터 URL의 토큰으로 사용자를 찾는다. 모르거나 취소된 토큰이면 null이다 (설계서 §6.1).
+ * 마지막 사용 시각을 하루 한 번 적고, 90일 동안 안 쓴 토큰은 그 자리에서 끊는다 (처음 보는 빈 값은 지금부터 센다)
+ */
+export async function findMcpUser(env: Env, token: string, now = Date.now()): Promise<string | null> {
   if (!token || !env.TOKEN_PEPPER) return null;
-  const row = await env.DB.prepare('SELECT user_id FROM mcp_tokens WHERE token_hash = ?1 AND revoked_at IS NULL')
-    .bind(await hashToken(env.TOKEN_PEPPER, token))
-    .first<{ user_id: string }>();
-  return row?.user_id ?? null;
+  const hash = await hashToken(env.TOKEN_PEPPER, token);
+  const row = await env.DB.prepare('SELECT user_id, last_used_at FROM mcp_tokens WHERE token_hash = ?1 AND revoked_at IS NULL')
+    .bind(hash)
+    .first<{ user_id: string; last_used_at: number | null }>();
+  if (!row) return null;
+  if (row.last_used_at !== null && now - row.last_used_at > MCP_TOKEN_IDLE_MS) {
+    await env.DB.prepare('UPDATE mcp_tokens SET revoked_at = ?2 WHERE token_hash = ?1 AND revoked_at IS NULL').bind(hash, now).run();
+    console.log(JSON.stringify({ event: 'mcp_token_expired', user_id: row.user_id }));
+    return null;
+  }
+  if (row.last_used_at === null || now - row.last_used_at > DAY_MS) {
+    await env.DB.prepare('UPDATE mcp_tokens SET last_used_at = ?2 WHERE token_hash = ?1').bind(hash, now).run();
+  }
+  return row.user_id;
 }
 
 /** 커넥터 URL로 온 MCP 요청 (설계서 §6.1, §6.2). 토큰으로 사용자를 찾고 serveMcp에 넘긴다 */

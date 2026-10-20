@@ -2,6 +2,7 @@ import type { McpTokenStatus, Reminder } from '@moai/shared';
 import { env } from 'cloudflare:workers';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { nextKstTime } from '../src/lib/kst';
+import { findMcpUser } from '../src/mcp/route';
 import { api, fakeSubscription, newUser, type TestUser } from './helpers';
 
 let user: TestUser;
@@ -84,7 +85,7 @@ describe('push subscriptions', () => {
 
 describe('connector URL', () => {
   it('issues, reissues and revokes the URL', async () => {
-    expect(await (await api(user, '/mcp-token')).json()).toEqual({ active: false, created_at: null, connected: false });
+    expect(await (await api(user, '/mcp-token')).json()).toEqual({ active: false, created_at: null, last_used_at: null, connected: false });
     const issued = (await (await api(user, '/mcp-token', { method: 'POST' })).json()) as { url: string };
     expect(issued.url).toMatch(/^https:\/\/moai\.test\/mcp\/u\/[\w-]{43}$/);
     expect(((await (await api(user, '/mcp-token')).json()) as McpTokenStatus).active).toBe(true);
@@ -92,6 +93,15 @@ describe('connector URL', () => {
     const stored = await env.DB.prepare('SELECT token_hash FROM mcp_tokens WHERE user_id = ?1').bind(user.id).first<{ token_hash: string }>();
     expect(issued.url.endsWith(stored!.token_hash)).toBe(false);
 
+    // 쓰면 마지막 사용을 적고, 90일 동안 안 쓰면 그 자리에서 끊는다
+    const token = issued.url.split('/').pop()!;
+    expect(await findMcpUser(env, token)).toBe(user.id);
+    expect(((await (await api(user, '/mcp-token')).json()) as McpTokenStatus).last_used_at).not.toBeNull();
+    await env.DB.prepare('UPDATE mcp_tokens SET last_used_at = ?2 WHERE user_id = ?1').bind(user.id, Date.now() - 91 * 86_400_000).run();
+    expect(await findMcpUser(env, token)).toBeNull();
+    expect(((await (await api(user, '/mcp-token')).json()) as McpTokenStatus).active).toBe(false);
+
+    await api(user, '/mcp-token', { method: 'POST' });
     await api(user, '/mcp-token', { method: 'DELETE' });
     expect(((await (await api(user, '/mcp-token')).json()) as McpTokenStatus).active).toBe(false);
   });

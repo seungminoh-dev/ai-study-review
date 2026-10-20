@@ -266,7 +266,9 @@ function LegacyConnector() {
     <details className="legacy-connector" open={Boolean(data?.active) || undefined}>
       <summary>예전 방식: 비밀 주소로 연결</summary>
       {data ? (
-        <p className="muted small">{data.active && data.created_at ? `${formatDateTime(data.created_at)}에 만든 비밀 주소를 쓰고 있어요. 로그인으로 연결했다면 이 주소는 지워도 돼요.` : '비밀 주소가 없어요. 위의 로그인 연결을 권해요.'}</p>
+        <p className="muted small">{data.active && data.created_at
+            ? `${formatDateTime(data.created_at)}에 만든 비밀 주소를 쓰고 있어요 (마지막 사용 ${data.last_used_at ? formatDate(data.last_used_at) : '아직 없음'}). 90일 동안 안 쓰면 저절로 끊겨요. 로그인으로 연결했다면 이 주소는 지워도 돼요.`
+            : '비밀 주소가 없어요. 위의 로그인 연결을 권해요.'}</p>
       ) : null}
       {url ? (
         <div className="secret">

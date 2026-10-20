@@ -64,11 +64,16 @@ settings.delete('/oauth/apps/:id', async (c) => {
 });
 
 settings.get('/mcp-token', async (c) => {
-  const row = await c.env.DB.prepare('SELECT created_at FROM mcp_tokens WHERE user_id = ?1 AND revoked_at IS NULL ORDER BY created_at DESC LIMIT 1')
+  const row = await c.env.DB.prepare('SELECT created_at, last_used_at FROM mcp_tokens WHERE user_id = ?1 AND revoked_at IS NULL ORDER BY created_at DESC LIMIT 1')
     .bind(c.var.userId)
-    .first<{ created_at: number }>();
+    .first<{ created_at: number; last_used_at: number | null }>();
   const grants = row ? null : await c.env.OAUTH_PROVIDER?.listUserGrants(c.var.userId, { limit: 1 });
-  const body: McpTokenStatus = { active: row !== null, created_at: row?.created_at ?? null, connected: row !== null || (grants?.items.length ?? 0) > 0 };
+  const body: McpTokenStatus = {
+    active: row !== null,
+    created_at: row?.created_at ?? null,
+    last_used_at: row?.last_used_at ?? null,
+    connected: row !== null || (grants?.items.length ?? 0) > 0,
+  };
   return c.json(body);
 });
 

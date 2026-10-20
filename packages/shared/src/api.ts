@@ -530,6 +530,8 @@ export interface McpTokenStatus {
   /** 예전 방식 비밀 주소가 살아 있다 */
   active: boolean;
   created_at: number | null;
+  /** 비밀 주소를 마지막으로 쓴 때 (하루 단위). 90일 동안 안 쓰면 끊긴다 */
+  last_used_at: number | null;
   /** 비밀 주소든 로그인(OAuth)이든 claude.ai에 연결돼 있다 */
   connected: boolean;
 }
