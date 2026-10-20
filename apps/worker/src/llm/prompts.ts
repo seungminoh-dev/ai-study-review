@@ -123,5 +123,5 @@ export function importInput(text: string): string {
 }
 
 export function repairInput(text: string, previous: string, problems: readonly string[]): string {
-  return `${importInput(text)}\n\n앞서 만든 JSON이 검사에 걸렸다. 아래를 고쳐서 JSON 전체를 다시 만든다.\n<previous>${tagSafe(previous)}</previous>\n<problems>\n${problems.map((problem) => `- ${problem}`).join('\n')}\n</problems>`;
+  return `${importInput(text)}\n\n앞서 만든 JSON이 검사에 걸렸다. 아래를 고쳐서 JSON 전체를 다시 만든다.\n<previous>${tagSafe(previous)}</previous>\n<problems>\n${tagSafe(problems.map((problem) => `- ${problem}`).join('\n'))}\n</problems>`;
 }

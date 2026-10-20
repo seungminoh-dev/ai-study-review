@@ -90,9 +90,12 @@ function Onboarding({ saved }: { saved: boolean }) {
   );
 }
 
+/** 이번 실행에서 약관 확인을 마쳤다. 다른 탭에 갔다 와도 내 정보(me)를 다시 읽기 전까지 카드가 다시 뜨지 않게 */
+let termsAcknowledged = false;
+
 /** 약관·처리방침이 바뀌면 오늘 화면에서 한 번 알린다 (이용약관 10조). 확인하면 서버에 시행일을 적는다 */
 function TermsNotice() {
-  const [done, setDone] = useState(false);
+  const [done, setDone] = useState(termsAcknowledged);
   const [error, setError] = useState<string | null>(null);
   if (done) return null;
   const [year, month, day] = TERMS_VERSION.split('-');
@@ -111,7 +114,10 @@ function TermsNotice() {
           className="button"
           onClick={() =>
             void request('/me/terms', { method: 'PUT' })
-              .then(() => setDone(true))
+              .then(() => {
+                termsAcknowledged = true;
+                setDone(true);
+              })
               .catch((reason: unknown) => setError(errorMessage(reason)))
           }
         >
