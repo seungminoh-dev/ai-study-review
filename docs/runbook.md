@@ -228,6 +228,16 @@ openssl enc -aes-256-cbc -pbkdf2 -salt -in ~/moai-backups/moai-$(date +%F).sql -
 - **제자리 복원**이다. 그 시점 뒤의 모든 쓰기(복습, 저장, 가입)가 사라진다. 복원 결과에 나오는 이전 bookmark로 복원 자체를 되돌릴 수 있다.
 - 코드만 잘못 나간 것이면 DB는 두고 Worker만 되돌린다 (아래 "배포가 잘못 나갔을 때").
 
+### 상태 확인 (🤖 자동)
+
+- `GET /api/health`는 D1이 응답하고 매분 Cron이 5분 안에 돌았으면 200, 아니면 503이다. Cron은 돌 때마다 `alerts`의 `cron_heartbeat` 행에 시각을 남긴다.
+- Deploy의 "Check production"이 배포 직후 200인지 본다. Actions의 **Health** 워크플로가 3시간마다 밖에서 본다(한 달 약 250분). 실패하면 GitHub가 메일을 보낸다.
+- 503이면:
+  1. 응답의 `db`가 false면 D1 문제다. Cloudflare 대시보드 → D1 → moai 상태와 오류를 본다.
+  2. `cron`이 false면 매분 Cron이 멈췄거나 매번 죽는다. 대시보드 → Workers → moai → Triggers에 Cron이 있는지, Logs에서 `cron_failed`·CPU 초과가 나는지 본다. `npx wrangler tail`로 실시간으로 본다.
+  3. 코드 문제면 "배포가 잘못 나갔을 때" 순서로 앞 버전으로 되돌린다.
+- 알림은 모두 이 Cron이 보내므로, Cron이 멈추면 오너 알림도 오지 않는다. 그래서 밖에서 따로 본다.
+
 ### 로그
 
 - 호출 로그(invocation logs)는 끈다. 요청 URL에 커넥터 토큰이 들어 있기 때문이다.

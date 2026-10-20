@@ -124,7 +124,7 @@
     - 개념 이름이 곧 정답인 문제가 많아서, 복습 카드의 개념 칩과 컴퓨터 개념 패널의 이름은 답한 뒤에 보여 준다(설명하기는 문제에 이름이 있어 그대로). 복습 탭 "틀린 것" 목록도 문제만 보여 준다. 채팅 복습 안내(MCP)에도 개념 이름을 먼저 말하지 말라고 적었다.
     - 복습 탭의 "공부한 대화"는 대화만 보여 준다. 자료 섹션은 학습 탭에 있다.
   - 컴퓨터 화면 폭 (2026-10-19): `.app`이 `.shell` 그리드 칸에서 내용 폭으로 줄던 것을 `width: 100%`로 고쳤다. 이제 화면마다 760px(넓은 화면 1120px)까지 칸을 채운다. 내 성장은 오늘 화면처럼 두 칸(왼쪽 이정표·분류별 진행, 오른쪽 최근 12주)이고, 최근 12주 히트맵은 컴퓨터에서 칸 폭에 맞춰 날짜 칸을 키운다. 휴대폰은 그대로다.
-- **테스트**: worker 152개, shared 23개 통과. CI·Deploy 모두 초록.
+- **테스트**: worker 155개, shared 23개 통과. CI·Deploy 모두 초록.
 - **브랜치**: `main`만 쓴다. 열린 PR은 없다.
 - **확인 못 한 것**:
   1. 실제 카톡 링크 미리보기. 주소를 한 번 보내 본다. 예전 미리보기가 캐시돼 있으면 카카오 개발자 사이트의 공유 디버거로 지운다.
@@ -197,7 +197,8 @@
 
 - `main`에 push하면 **Deploy**가 `npm ci` → 빌드 → 테스트 → `wrangler d1 migrations apply moai --remote` → `wrangler deploy` → 운영 확인(화면 JS 일치, 401 등)을 한다. GitHub 저장소 secret(`CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`)은 이미 들어 있다. **CI**는 `main`·`claude/**` push마다 돈다. 결과는 `gh run list`, `gh run view <id> --log`로 본다.
 - 마이그레이션은 **열·테이블 추가만** 한다. 기존 행을 바꾸는 UPDATE가 필요하면 결과를 미리 확인한다.
-- **운영 비슷한 데이터로 미리 돌려 보기** (마이그레이션이 있을 때마다):
+- **업그레이드 테스트 (🤖 자동, 2026-10-20)**: `test/migrations.test.ts`가 테스트용 두 번째 D1(`UPGRADE_DB`)에 마지막 마이그레이션 직전까지 적용하고, 지금 코드(`saveLearning`, `recordReviews`)로 데이터를 채운 뒤 마지막 마이그레이션을 얹는다. 외래 키 검사가 비어 있는지, 있던 테이블의 행 수가 그대로인지 본다. 채우는 코드가 새 마이그레이션의 열·테이블을 쓰기 시작하면 이 테스트가 깨지니, 그때는 채우는 단계를 직전 모양에 맞춘다.
+- **운영 비슷한 데이터로 미리 돌려 보기** (기존 행을 바꾸는 마이그레이션이 있을 때. 열·테이블을 더하기만 하면 위 업그레이드 테스트로 충분하다):
   1. 지금 배포된 코드를 따로 꺼낸다: `git worktree add ../moai-deployed origin/main` (머지 전 기준). 거기서 `npm ci`와 `npm run build`를 하고, `apps/worker/.dev.vars`를 복사해 둔다.
   2. 빈 폴더를 정해 그 코드로 띄운다: `cd ../moai-deployed/apps/worker && npx wrangler d1 migrations apply moai --local --persist-to <폴더>` → `npx wrangler dev --local-upstream localhost:8787 --persist-to <폴더>`. `--local-upstream`이 없으면 wrangler가 Host와 Origin을 운영 주소로 바꿔서 API가 403(wrong_origin), MCP가 421을 준다.
   3. API로 데이터를 채운다:
@@ -268,7 +269,8 @@
 2026-10-20에 레포 전체를 8개 관점으로 분석해 우선순위를 매긴 개선점 56개가 [Improvement.md](../Improvement.md)에 있다.
 - 2026-10-20에 1~8번(P0과 작업량 S인 P1)을 고쳤다: OAuth 리디렉트 주소 제한, MCP 도구 실패·Hono 밖 오류 기록(`mcp_failed` 알림), 백업 파일 규칙·복구 절차·Deploy bookmark, 카톡 인앱 브라우저·iPhone 홈 화면 앱·iPad 안내(`InAppNotice.tsx`, 가입 뒤 커넥터 허용 화면으로 복귀), 푸시 구독 다시 맞추기(하루 한 번, `pushsubscriptionchange`, `/api/today`의 `push_lost`), 복습 알림 1분 20명·5명씩 병렬·구독 없는 사람 빼기(`reminder_late` 알림), Deploy 타입 검사·롤백 절차, 설명하기 카드 잠김(`stuckCards`).
 - 그때 하지 않은 것: 4번 실제 카톡 Android·iPhone 확인, 2번 관리자 지표의 도구 실패 수, 5번 오너 지표의 구독 수·마지막 성공 시각, 6·8번 운영 D1 읽기 확인(이 컴퓨터 wrangler에 운영 D1 권한이 없다).
-- 다음은 9~11번(M)과 P2에서 고른다.
+- 2026-10-20에 9~11번도 고쳤다: 다음에 볼 질문 닫기(판정이 새로 오면 그 개념의 예전 질문을 닫음, 오늘 화면 ✓, 코칭 문맥은 개념마다 최근 3개·60일), 마이그레이션 업그레이드 테스트(`test/migrations.test.ts`), Cron heartbeat와 `/api/health`(D1·Cron 5분, Deploy 확인과 3시간마다의 Actions **Health**). 운영에 이미 쌓인 열린 질문은 일괄로 닫지 않았다(운영 D1 권한 없음). 그 개념을 다시 공부하거나 오늘 화면에서 닫으면 줄어든다.
+- 다음은 P2(12~31번)에서 고른다.
 
 | 작업 | 메모 |
 |---|---|
