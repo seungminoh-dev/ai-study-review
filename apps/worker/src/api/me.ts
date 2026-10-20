@@ -28,9 +28,10 @@ me.get('/export', async (c) => {
     query('SELECT id, concept_id, session_id, question, created_at, resolved_at FROM followups WHERE user_id = ?1 ORDER BY created_at'),
     query(
       `SELECT id, concept_id, session_id, rung, type, prompt, code, answer, options, explain, checklist, status, due, stability, difficulty,
-              reps, lapses, state, last_review, created_at, edited_at, origin FROM cards WHERE user_id = ?1 ORDER BY created_at`,
+              elapsed_days, scheduled_days, learning_steps, reps, lapses, state, last_review, created_at, edited_at, origin
+         FROM cards WHERE user_id = ?1 ORDER BY created_at`,
     ),
-    query('SELECT id, card_id, grade, response, confidence, elapsed_ms, reviewed_at FROM review_logs WHERE user_id = ?1 ORDER BY reviewed_at'),
+    query('SELECT id, card_id, grade, response, confidence, elapsed_ms, reviewed_at, run_id, prev_card FROM review_logs WHERE user_id = ?1 ORDER BY reviewed_at'),
     query('SELECT local_time, enabled FROM reminder_slots WHERE user_id = ?1'),
     query('SELECT day FROM streak_freezes WHERE user_id = ?1 ORDER BY day'),
     query('SELECT card_id, reason, note, created_at FROM card_reports WHERE user_id = ?1 ORDER BY created_at'),
@@ -42,12 +43,18 @@ me.get('/export', async (c) => {
     query('SELECT week, used, note, created_at FROM survey_answers WHERE user_id = ?1 ORDER BY week'),
     query('SELECT amount, kind, note, created_at FROM credit_ledger WHERE user_id = ?1 ORDER BY created_at'),
     query('SELECT achievement, earned_at FROM achievements WHERE user_id = ?1 ORDER BY earned_at'),
+    // AI 작업은 결과만, 사용량은 달·종류별 합계만 (입력 원문과 비용은 넣지 않는다)
+    query('SELECT id, kind, status, card_id, result, error, created_at, updated_at FROM llm_jobs WHERE user_id = ?1 ORDER BY created_at'),
+    query(
+      `SELECT strftime('%Y-%m', created_at / 1000, 'unixepoch') AS month, kind, count(*) AS calls, sum(input_tokens) AS input_tokens, sum(output_tokens) AS output_tokens
+         FROM llm_usage WHERE user_id = ?1 GROUP BY month, kind ORDER BY month, kind`,
+    ),
   ]);
-  const [user, identity, sessions, concepts, edges, judgments, followups, cards, reviews, reminders, freezes, reports, shared, categoryAliases, badges, materialLabels, partLabels, surveyAnswers, credits, achievements] = results.map(
+  const [user, identity, sessions, concepts, edges, judgments, followups, cards, reviews, reminders, freezes, reports, shared, categoryAliases, badges, materialLabels, partLabels, surveyAnswers, credits, achievements, aiJobs, aiUsage] = results.map(
     (result) => result.results,
   );
   const body = {
-    format: 'moai-export-v1',
+    format: 'moai-export-v2',
     exported_at: new Date().toISOString(),
     user: user![0] ?? null,
     github_login: (identity![0] as { login?: string } | undefined)?.login ?? null,
@@ -69,9 +76,11 @@ me.get('/export', async (c) => {
     survey_answers: surveyAnswers,
     credit_ledger: credits,
     achievements,
+    ai_jobs: aiJobs,
+    ai_usage: aiUsage,
   };
   const day = new Date().toISOString().slice(0, 10);
-  return new Response(JSON.stringify(body, null, 2), {
+  return new Response(JSON.stringify(body), {
     headers: {
       'content-type': 'application/json; charset=utf-8',
       'content-disposition': `attachment; filename="moai-export-${day}.json"`,

@@ -296,10 +296,17 @@ describe('card ladder', () => {
     expect((await cardOf('deep-copy', 'mcq')).reps).toBe(1);
   });
 
-  it("returns 404 for another user's card", async () => {
+  it("returns 404 for another user's card and leaves it as it was", async () => {
     await saveExample();
-    const card = await cardOf('deep-copy', 'mcq');
-    expect((await api(await newUser(), `/cards/${card.id}/suspend`, { method: 'POST' })).status).toBe(404);
+    const card = await cardOf('final-variable', 'ox');
+    const edit = { type: 'ox', prompt: '남이 바꾼 문제', answer: 'O', explain: '남이 바꾼 해설' };
+    const stranger = await newUser();
+    expect((await api(stranger, `/cards/${card.id}/suspend`, { method: 'POST' })).status).toBe(404);
+    expect((await api(stranger, `/cards/${card.id}`, { method: 'PATCH', json: edit })).status).toBe(404);
+    expect(await cardOf('final-variable', 'ox')).toEqual(card);
+    // 같은 내용을 주인이 보내면 고쳐진다
+    expect((await api(user, `/cards/${card.id}`, { method: 'PATCH', json: edit })).status).toBe(204);
+    expect((await cardOf('final-variable', 'ox')).prompt).toBe('남이 바꾼 문제');
   });
 });
 

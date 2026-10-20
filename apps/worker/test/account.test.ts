@@ -94,9 +94,47 @@ describe('export', () => {
     expect(response.headers.get('content-disposition')).toMatch(/^attachment; filename="moai-export-\d{4}-\d{2}-\d{2}\.json"$/);
     const text = await response.text();
     const body = JSON.parse(text);
-    expect(body).toMatchObject({ format: 'moai-export-v1', user: { display_name: '내보낼사람' }, github_login: 'gone' });
+    expect(body).toMatchObject({ format: 'moai-export-v2', user: { display_name: '내보낼사람' }, github_login: 'gone' });
     expect(body.cards.length).toBeGreaterThan(0);
-    expect(body.review_logs).toHaveLength(1);
-    for (const secret of ['token_hash', 'code_hash', 'p256dh', 'endpoint', 'prev_card']) expect(text).not.toContain(secret);
+    expect(body.cards[0]).toHaveProperty('learning_steps');
+    expect(body.review_logs).toMatchObject([{ prev_card: expect.any(String), run_id: null }]);
+    expect(body.ai_jobs).toMatchObject([{ kind: 'grade', status: 'done' }]);
+    expect(body.ai_usage).toMatchObject([{ kind: 'grade', calls: 1 }]);
+    for (const secret of ['token_hash', 'code_hash', 'p256dh', 'endpoint', 'input_hash', 'cost_micro_usd']) expect(text).not.toContain(secret);
+  });
+
+  it('covers every table that holds a user_id, except the ones left out on purpose', async () => {
+    const body = await (await api(await newUser(), '/export')).json();
+    /** 테이블 → 내보내기 키 */
+    const exported: Record<string, string> = {
+      user_identities: 'github_login',
+      learning_sessions: 'sessions',
+      concepts: 'concepts',
+      edges: 'edges',
+      judgments: 'judgments',
+      followups: 'followups',
+      cards: 'cards',
+      review_logs: 'review_logs',
+      reminder_slots: 'reminders',
+      streak_freezes: 'streak_freezes',
+      card_reports: 'card_reports',
+      shared_questions: 'shared_questions',
+      category_aliases: 'category_aliases',
+      badges: 'badges',
+      material_labels: 'material_labels',
+      material_part_labels: 'material_part_labels',
+      survey_answers: 'survey_answers',
+      credit_ledger: 'credit_ledger',
+      achievements: 'achievements',
+      llm_jobs: 'ai_jobs',
+      llm_usage: 'ai_usage',
+    };
+    /** 로그인·기기에 쓰는 값. 백업해도 다시 쓸 수 없다 */
+    const skipped = ['auth_sessions', 'login_codes', 'mcp_tokens', 'push_subscriptions'];
+    const { results: tables } = await env.DB.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%'").all<{ name: string }>();
+    const withUser: string[] = [];
+    for (const { name } of tables) if (await env.DB.prepare(`SELECT name FROM pragma_table_info('${name}') WHERE name = 'user_id'`).first()) withUser.push(name);
+    expect(withUser.sort()).toEqual([...Object.keys(exported), ...skipped].sort());
+    for (const key of Object.values(exported)) expect(body).toHaveProperty(key);
   });
 });
