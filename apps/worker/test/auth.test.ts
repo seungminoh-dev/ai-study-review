@@ -327,3 +327,14 @@ describe('logout', () => {
     expect((await api(phone, '/me')).status).toBe(200);
   });
 });
+
+describe('request size', () => {
+  it('refuses a huge body before reading it, even where no login is needed', async () => {
+    const response = await workerFetch(`${ORIGIN}/api/auth/login`, {
+      method: 'POST',
+      headers: { origin: ORIGIN, 'content-type': 'application/json' },
+      body: JSON.stringify({ code: 'x'.repeat(300 * 1024) }),
+    });
+    expect(response.status).toBe(413);
+  });
+});

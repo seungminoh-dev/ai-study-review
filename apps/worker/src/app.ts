@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { bodyLimit } from 'hono/body-limit';
 import { account } from './api/account';
 import { ai } from './api/ai';
 import { auth } from './api/auth';
@@ -24,6 +25,10 @@ export const app = new Hono<AppEnv>();
 app.all('/mcp/u/:token', handleMcp);
 // OAuth 커넥터의 허용 화면. 토큰·등록·메타데이터는 OAuthProvider가 이 앱 앞에서 받는다 (oauth.ts)
 app.route('/authorize', authorize);
+
+// 로그인 없이 부를 수 있는 곳(/api/auth, /api/setup)도 있어서, 큰 본문을 보내 요청마다 CPU를 쓰게 하지 못하게 막는다.
+// 가장 큰 요청(대화 붙여넣기 6만 자, 한글이면 약 180KB)도 넉넉히 들어간다
+app.use('/api/*', bodyLimit({ maxSize: 256 * 1024, onError: () => errorJson(413, 'too_large', '보낸 내용이 너무 커요.') }));
 
 // 상태를 바꾸는 API 요청은 우리 Origin에서만 받는다 (설계서 §7.1).
 app.use('/api/*', async (c, next) => {
