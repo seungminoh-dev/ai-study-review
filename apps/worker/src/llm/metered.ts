@@ -53,6 +53,7 @@ export async function meteredCall(env: Env, userId: string, kind: MeteredKind, r
   console.log(JSON.stringify({ event: kind, user_id: userId, ok: result.ok, ...(result.ok ? {} : { error: result.error }) }));
 
   if (!result.ok) {
+    if (result.error === 'budget') return fail(429, 'budget', '이번 달 AI 한도에 닿았어요. 운영자에게 알렸어요.');
     if (result.error === 'refusal') return fail(502, 'refusal', 'AI가 이 질문에는 답하지 않겠다고 했어요. 다르게 해 주세요.');
     if (result.error === 'truncated') return fail(502, 'truncated', 'AI 답이 너무 길어서 잘렸어요.');
     return fail(502, 'api', 'AI 서버에 연결하지 못했어요. 잠시 뒤에 다시 해 주세요.');

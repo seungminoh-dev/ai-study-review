@@ -20,7 +20,12 @@ export type CallResult =
   /** 돈은 들었지만 쓸 수 없는 응답 (거절, 잘림) */
   | { ok: false; error: 'refusal' | 'truncated' | 'empty'; model: string; usage: Usage }
   /** 요청이 실패했다. retry면 잠시 뒤에 다시 해 볼 만하다 */
-  | { ok: false; error: 'api'; retry: boolean; status: number; timedOut?: boolean; model?: undefined; usage?: undefined };
+  | { ok: false; error: 'api'; retry: boolean; status: number; timedOut?: boolean; model?: undefined; usage?: undefined }
+  /** Anthropic 콘솔의 결제(지출) 한도나 크레딧이 바닥났다. 다시 보내도 안 된다 */
+  | { ok: false; error: 'budget'; model?: undefined; usage?: undefined };
+
+/** 400 본문이 결제·지출 한도 때문인지 (다시 보내지 않고 따로 알린다) */
+const SPEND_LIMIT = /credit balance|spend(ing)? limit|usage limit|billing/i;
 
 export function llmConfigured(env: Env): boolean {
   return Boolean(env.ANTHROPIC_API_KEY && env.GRADER_MODEL);
@@ -57,6 +62,11 @@ export async function callClaude(env: Env, request: CallRequest): Promise<CallRe
     // 모델이 effort나 fallback을 받지 않으면 400이 온다. 그때는 형식만 남기고 한 번 더 보낸다
     if (response.status === 400) {
       const reason = await response.text();
+      if (SPEND_LIMIT.test(reason)) {
+        console.error(JSON.stringify({ event: 'llm_spend_limit', message: reason.slice(0, 300) }));
+        await raiseAlert(env, 'llm_spend');
+        return { ok: false, error: 'budget' };
+      }
       console.warn(JSON.stringify({ event: 'llm_bad_request', retrying: true, message: reason.slice(0, 300) }));
       response = await post(env, { ...base, output_config: { format: { type: 'json_schema', schema: request.schema } } }, false, request.timeoutMs);
     }

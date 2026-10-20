@@ -1,6 +1,7 @@
 import { raiseAlert, sendAlerts } from './domain/alerts';
 import { repairLibrary } from './domain/categories';
 import { deliverDueReminders } from './domain/reminders';
+import { notifyBudget } from './llm/budget';
 import { runPendingJobs } from './llm/jobs';
 import { oauthProvider } from './oauth';
 import type { Env } from './env';
@@ -56,6 +57,11 @@ async function hourlyCleanup(env: Env, now: number): Promise<void> {
     await oauthProvider(env).purgeExpiredData(env);
   } catch (error) {
     console.error(JSON.stringify({ event: 'cron_oauth_purge_failed', message: (error as Error).message }));
+  }
+  try {
+    await notifyBudget(env, now);
+  } catch (error) {
+    console.error(JSON.stringify({ event: 'cron_budget_failed', message: (error as Error).message }));
   }
   try {
     const repaired = await repairLibrary(env);

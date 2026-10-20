@@ -140,7 +140,8 @@ AI 채점과 대화 붙여넣기 가져오기만 서버 AI를 쓴다. 넣지 않
    npx wrangler secret put ANTHROPIC_API_KEY   # Console의 API 키
    npx wrangler secret put GRADER_MODEL        # 쓸 모델 ID (기획서 §10.1에서 고른 것)
    ```
-3. 서비스 전체 한도를 바꾸려면 `wrangler.jsonc`의 `vars`에 `"LLM_MONTHLY_CAP_USD": "90"`처럼 넣는다 (없으면 이 값). 비용은 넉넉한 단가로 세서, 싼 모델이면 실제 청구보다 한도에 일찍 닿는다. 사람마다 쓰는 양은 AI 크레딧이 정한다 (월 500, 설계서 §11.8).
+3. 서비스 전체 한도를 바꾸려면 `wrangler.jsonc`의 `vars`에 `"LLM_MONTHLY_CAP_USD": "90"`처럼 넣는다 (없으면 이 값). Anthropic Console의 지출 한도와 같은 값으로 맞춘다. 이번 달 비용이 이 한도의 50·80·100%를 넘으면 매시 Cron이 단계마다 한 달에 한 번 오너에게 푸시한다. Console 쪽 결제 한도에 먼저 닿으면 다시 보내지 않고 "Anthropic 결제 한도" 알림이 온다.
+   - 매달 초 Anthropic Console의 지난달 청구액과 설정 → 관리 → AI 사용량 합계를 비교한다. 차이가 크면 `llm/pricing.ts`의 단가를 고친다. 비용은 넉넉한 단가로 세서, 싼 모델이면 실제 청구보다 한도에 일찍 닿는다. 사람마다 쓰는 양은 AI 크레딧이 정한다 (월 500, 설계서 §11.8).
 4. 크레딧을 더 주려면 설정 → 관리 → AI 크레딧 주기에서 사람과 양을 고른다. 보유 크레딧으로 들어가서 다음 달에도 남는다. 돈이 오가지 않는 앱 안 재화라 되돌릴 때는 운영 D1에서 그 지급 줄(`credit_ledger`, kind `grant`)을 지운다.
 4. 설정 탭 맨 아래 **AI 사용량**에서 1회 평균 비용을 보고 모델과 한도를 정한다.
 

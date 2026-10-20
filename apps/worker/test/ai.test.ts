@@ -3,6 +3,7 @@ import { env } from 'cloudflare:workers';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import example from '../../../packages/shared/fixtures/immutable-object.json';
 import { creditBalance, creditMonthStart, spendCredits } from '../src/domain/credits';
+import { notifyBudget } from '../src/llm/budget';
 import { runJob, runPendingJobs } from '../src/llm/jobs';
 import { api, callTool, mcpUrl, newUser, type TestUser } from './helpers';
 
@@ -294,5 +295,24 @@ describe('AI credits', () => {
     const grants = await env.DB.prepare("SELECT count(*) AS n, sum(amount) AS total FROM credit_ledger WHERE user_id = ?1 AND kind = 'achievement'").bind(user.id).first();
     expect(grants).toEqual({ n: 1, total: 30 });
     expect(((await (await api(user, '/credits')).json()) as CreditsResponse).credits.held).toBe(30);
+  });
+});
+
+describe('budget alerts', () => {
+  it('tells the owner once per step each month as the service-wide cost climbs', async () => {
+    const now = Date.now();
+    try {
+      await usageRow('budget-test', 'grade', 50_000_000, now).run(); // $50 / 한도 $90 → 50%
+      expect(await notifyBudget(env, now)).toBe(50);
+      expect(await notifyBudget(env, now + 60_000)).toBeNull();
+      await usageRow('budget-test', 'grade', 25_000_000, now).run(); // $75 → 80%
+      expect(await notifyBudget(env, now + 120_000)).toBe(80);
+      expect(await notifyBudget(env, now + 180_000)).toBeNull();
+    } finally {
+      await env.DB.batch([
+        env.DB.prepare("DELETE FROM llm_usage WHERE user_id = 'budget-test'"),
+        env.DB.prepare("DELETE FROM alerts WHERE kind LIKE 'budget_%'"),
+      ]);
+    }
   });
 });
