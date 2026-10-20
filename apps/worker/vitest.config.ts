@@ -19,6 +19,8 @@ export default defineConfig(async () => {
       cloudflareTest({
         wrangler: { configPath: './wrangler.jsonc' },
         miniflare: {
+          // 마이그레이션 업그레이드 테스트용 빈 DB (test/migrations.test.ts). setup.ts가 마이그레이션하지 않는다
+          d1Databases: ['UPGRADE_DB'],
           bindings: {
             TEST_MIGRATIONS: migrations,
             APP_ORIGIN: 'https://moai.test',
