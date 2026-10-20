@@ -10,6 +10,9 @@ const MAX_CONCEPTS = 10;
 const TOPIC_CONCEPTS = 5;
 const JUDGMENTS_PER_CONCEPT = 5;
 const WEAK_CARDS_PER_CONCEPT = 3;
+/** 열린 질문은 개념마다 최근 이만큼만, 이 기간 안의 것만 넣는다. 오래 쌓인 질문이 다른 개념을 밀어내지 않게 */
+const FOLLOWUPS_PER_CONCEPT = 3;
+const FOLLOWUP_WINDOW_MS = 60 * 24 * 60 * 60 * 1000;
 const WEAK_WINDOW_MS = 30 * DAY_MS;
 
 /** 조사가 붙은 낱말에서 조사를 떼어 본다. "객체와" → "객체" */
@@ -125,8 +128,8 @@ export async function learnerContext(
         ORDER BY o.name LIMIT 100`,
     ).bind(userId, ids, now - 14 * DAY_MS),
     env.DB.prepare(
-      'SELECT concept_id, question FROM followups WHERE user_id = ?1 AND resolved_at IS NULL AND concept_id IN (SELECT value FROM json_each(?2)) ORDER BY created_at DESC',
-    ).bind(userId, ids),
+      'SELECT concept_id, question FROM followups WHERE user_id = ?1 AND resolved_at IS NULL AND created_at >= ?3 AND concept_id IN (SELECT value FROM json_each(?2)) ORDER BY created_at DESC',
+    ).bind(userId, ids, now - FOLLOWUP_WINDOW_MS),
   ]);
 
   const states = statesFrom(stats!.results as unknown as Parameters<typeof statesFrom>[0]);
@@ -166,7 +169,7 @@ export async function learnerContext(
       .map((row) => `${row.other_name} (${row.type}, ${conceptState(row)})`);
     if (links.length > 0) lines.push(`- 연결: ${[...new Set(links)].join(', ')}`);
 
-    for (const followup of followupsBy.get(concept.id) ?? []) lines.push(`- 열린 질문: "${followup.question}"`);
+    for (const followup of (followupsBy.get(concept.id) ?? []).slice(0, FOLLOWUPS_PER_CONCEPT)) lines.push(`- 열린 질문: "${followup.question}"`);
     blocks.push(lines.join('\n'));
   }
 

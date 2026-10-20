@@ -253,6 +253,17 @@ export async function saveLearning(
       ).bind(userId, JSON.stringify(input.judgments.map((judgment) => ({ id: crypto.randomUUID(), ...judgment }))), sessionId, now),
     );
   }
+  if (input.judgments.length > 0) {
+    // 같은 개념을 다시 공부해 판정이 새로 들어왔으면, 그 개념의 예전 열린 질문은 다룬 것으로 닫는다.
+    // 안 닫으면 계속 쌓여서 코칭 문맥에서 다른 개념을 밀어낸다. 이번 저장의 새 질문(created_at = now)은 남는다
+    statements.push(
+      env.DB.prepare(
+        `UPDATE followups SET resolved_at = ?3
+          WHERE user_id = ?1 AND resolved_at IS NULL AND created_at < ?3
+            AND concept_id IN (SELECT id FROM concepts WHERE user_id = ?1 AND key IN (SELECT value FROM json_each(?2)))`,
+      ).bind(userId, JSON.stringify([...new Set(input.judgments.map((judgment) => judgment.concept))]), now),
+    );
+  }
   if (input.followups.length > 0) {
     statements.push(
       env.DB.prepare(

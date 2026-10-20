@@ -7710,3 +7710,22 @@ a.notice.link:active,
   flex: 0 0 auto;
   min-height: 44px;
 }
+
+/* 다음에 볼 질문: 오른쪽 ✓로 닫는다 */
+.question-list li.followup-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.followup-item .grow {
+  flex: 1;
+  min-width: 0;
+}
+
+.followup-item .icon-button {
+  width: 36px;
+  height: 36px;
+  margin: -6px -6px 0 0;
+  font-size: 1rem;
+}

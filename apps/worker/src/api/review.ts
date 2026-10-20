@@ -57,6 +57,14 @@ review.get('/today', async (c) => {
  * ?category=분류 경로: 그 분류만 복습. ?material=자료 제목: 그 자료 풀기 (아직 안 푼 자료 카드 포함), &part=섹션 이름이면 그 섹션만.
  * ?mode=mistakes: 틀린 것만 (domain/queue.ts의 loadMistakes). ?mode=random: 랜덤 시험 (푼 카드에서, category·material·part로 좁힌다)
  */
+/** 다음에 볼 질문을 닫는다 (오늘 화면의 ✓). 내 질문만 */
+review.patch('/followups/:id', async (c) => {
+  const { meta } = await c.env.DB.prepare('UPDATE followups SET resolved_at = ?3 WHERE id = ?1 AND user_id = ?2 AND resolved_at IS NULL')
+    .bind(c.req.param('id'), c.var.userId, Date.now())
+    .run();
+  return meta.changes > 0 ? c.body(null, 204) : errorJson(404, 'not_found', '질문을 찾지 못했어요.');
+});
+
 review.get('/queue', async (c) => {
   const size = Math.min(Math.max(Number.parseInt(c.req.query('size') ?? '8', 10) || 8, 1), 20);
   const now = Date.now();

@@ -90,6 +90,42 @@ function Onboarding({ saved }: { saved: boolean }) {
   );
 }
 
+/** 다음에 볼 질문. 다 본 질문은 ✓로 닫는다 (같은 개념을 다시 공부해 판정이 들어오면 서버가 알아서 닫기도 한다) */
+function FollowupsCard({ followups }: { followups: TodayResponse['followups'] }) {
+  const [closed, setClosed] = useState<ReadonlySet<string>>(new Set());
+  const open = followups.filter((followup) => !closed.has(followup.id)).slice(0, 5);
+  const close = async (id: string) => {
+    setClosed((current) => new Set([...current, id]));
+    try {
+      await request(`/followups/${id}`, { method: 'PATCH' });
+    } catch {
+      // 못 닫았으면 다시 보여 준다
+      setClosed((current) => new Set([...current].filter((item) => item !== id)));
+    }
+  };
+  if (open.length === 0) return null;
+  return (
+    <section className="card o-followups" aria-labelledby="followups-title">
+      <div className="card-head">
+        <Mascot mood="claude" size={32} />
+        <h2 id="followups-title">다음에 볼 질문</h2>
+      </div>
+      <ul className="question-list">
+        {open.map((followup) => (
+          <li key={followup.id} className="followup-item">
+            <span className="grow">
+              <span className="chip">{followup.concept_name}</span> {followup.question}
+            </span>
+            <button type="button" className="icon-button" aria-label="이 질문 닫기" title="다 봤어요" onClick={() => void close(followup.id)}>
+              ✓
+            </button>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 /** 오늘 화면 머리의 픽셀 하늘과 언덕 (5단계 배경 C). 96×38 그림을 4배로 키워 가로로 이어 붙인다. 색은 styles.css의 --sky, --hill-* */
 function Hills() {
   return (
@@ -507,21 +543,7 @@ export function Today({ name }: { name: string }) {
           <LevelUpNotice />
           <SurveyCard />
           <Onboarding saved={data.sessions.length > 0} />
-          {data.followups.length > 0 ? (
-            <section className="card o-followups" aria-labelledby="followups-title">
-              <div className="card-head">
-                <Mascot mood="claude" size={32} />
-                <h2 id="followups-title">다음에 볼 질문</h2>
-              </div>
-              <ul className="question-list">
-                {data.followups.slice(0, 5).map((followup) => (
-                  <li key={followup.id}>
-                    <span className="chip">{followup.concept_name}</span> {followup.question}
-                  </li>
-                ))}
-              </ul>
-            </section>
-          ) : null}
+          {data.followups.length > 0 ? <FollowupsCard followups={data.followups} /> : null}
           {!data.reminders_set ? (
             <Link className="notice link o-reminder" href="/settings">
               알림 시간을 정하면 복습할 때 알려 드려요 →

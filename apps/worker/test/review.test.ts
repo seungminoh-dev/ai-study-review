@@ -51,6 +51,30 @@ describe('today and queue', () => {
     expect(today.followups.map((followup) => followup.concept_name).sort()).toEqual(['깊은 복사', '방어적 복사']);
   });
 
+  it('closes old questions when the concept is judged again, and lets me close one myself', async () => {
+    await saveExample();
+    const openFor = async () => ((await (await api(user, '/today')).json()) as TodayResponse).followups;
+    expect((await openFor()).map((followup) => followup.concept_name).sort()).toEqual(['깊은 복사', '방어적 복사']);
+
+    // 깊은 복사를 다시 공부해 판정이 새로 들어오면 그 개념의 예전 질문은 닫힌다. 다른 개념의 질문과 이번 새 질문은 남는다
+    await callTool(await mcpUrl(user), 'save_learning', {
+      topic: '깊은 복사 다시',
+      concepts: [{ key: 'deep-copy', name: '깊은 복사' }],
+      judgments: [{ concept: 'deep-copy', label: '맞음', note: '이번에는 중첩 객체까지 복사했다.' }],
+      followups: [{ concept: 'deep-copy', question: '순환 참조가 있으면 깊은 복사는 어떻게 하나요?' }],
+      cards: [{ type: 'ox', concept: 'deep-copy', prompt: '깊은 복사는 중첩 객체도 새로 만든다.', answer: 'O', explain: '안쪽까지 새로 만든다.' }],
+    });
+    const open = await openFor();
+    expect(open.map((followup) => followup.question).sort()).toEqual(['생성자에서 받은 리스트는 깊은 복사로 받아야 하나요?', '순환 참조가 있으면 깊은 복사는 어떻게 하나요?'].sort());
+
+    // 직접 닫기: 남의 질문은 닫지 못한다
+    const target = open[0]!;
+    expect((await api(await newUser(), `/followups/${target.id}`, { method: 'PATCH' })).status).toBe(404);
+    expect((await api(user, `/followups/${target.id}`, { method: 'PATCH' })).status).toBe(204);
+    expect((await api(user, `/followups/${target.id}`, { method: 'PATCH' })).status).toBe(404);
+    expect((await openFor()).map((followup) => followup.id)).not.toContain(target.id);
+  });
+
   it('records answers once and keeps the rest of a reviewed concept for another day', async () => {
     await saveExample();
     const { cards } = (await (await api(user, '/queue')).json()) as QueueResponse;
