@@ -5,7 +5,7 @@ import { runCron } from '../src/cron';
 import { ALERT_QUIET_MS, raiseAlert } from '../src/domain/alerts';
 import { hashToken, randomToken } from '../src/lib/crypto';
 import { nextKstTime } from '../src/lib/kst';
-import { api, callTool, fakeSubscription, mcpUrl, newUser, type TestUser } from './helpers';
+import { ORIGIN, api, callTool, fakeSubscription, mcpUrl, newUser, workerFetch, type TestUser } from './helpers';
 
 let user: TestUser;
 
@@ -107,5 +107,22 @@ describe('owner alerts', () => {
     // 보낼 것이 없으면 보내지 않는다
     await runCron(env, now + 2 * ALERT_QUIET_MS);
     expect(toOwner()).toBe(2);
+  });
+});
+
+describe('health', () => {
+  it('answers 503 when D1 is fine but the minute cron stopped', async () => {
+    const health = () => workerFetch(`${ORIGIN}/api/health`);
+    const setBeat = (at: number) => env.DB.prepare("UPDATE alerts SET last_sent_at = ?1 WHERE kind = 'cron_heartbeat'").bind(at).run();
+    await env.DB.prepare("DELETE FROM alerts WHERE kind = 'cron_heartbeat'").run();
+    // 막 배포해서 표시가 아직 없으면 Cron은 따지지 않는다
+    expect((await health()).status).toBe(200);
+    await runCron(env, Date.now());
+    expect(await (await health()).json()).toMatchObject({ ok: true, db: true, cron: true });
+    await setBeat(Date.now() - 10 * 60_000);
+    const stale = await health();
+    expect(stale.status).toBe(503);
+    expect(await stale.json()).toMatchObject({ ok: false, db: true, cron: false });
+    await env.DB.prepare("DELETE FROM alerts WHERE kind = 'cron_heartbeat'").run();
   });
 });

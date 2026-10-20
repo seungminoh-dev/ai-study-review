@@ -1,0 +1,24 @@
+name: Health
+
+# 밖에서 운영 상태를 본다 (docs/runbook.md "상태 확인"). /api/health는 D1이 응답하고 매분 Cron이 5분 안에 돌았을 때만 200이다.
+# 오너 알림도 그 Cron이 보내서, Cron이 멈추면 스스로는 못 알린다. 실패하면 GitHub가 이 워크플로를 고친 사람에게 메일을 보낸다.
+# 비공개 저장소라 Actions 시간을 쓴다: 3시간마다 1분, 한 달 약 250분.
+
+on:
+  schedule:
+    - cron: '17 */3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Check /api/health
+        run: |
+          code=$(curl -s -o body.json -w '%{http_code}' --max-time 20 https://moai.smoh.dev/api/health || true)
+          cat body.json 2>/dev/null; echo
+          [ "$code" = "200" ] || { echo "::error::운영 상태 확인이 $code예요. D1이나 매분 Cron을 확인하세요 (docs/runbook.md 상태 확인)."; exit 1; }

@@ -16,6 +16,7 @@ import { raiseAlert } from './domain/alerts';
 import type { AppEnv } from './context';
 import { requireSameOrigin } from './lib/guard';
 import { errorJson } from './lib/http';
+import { MINUTE_MS } from './lib/kst';
 import { handleMcp } from './mcp/route';
 
 export const app = new Hono<AppEnv>();
@@ -38,7 +39,25 @@ const PUBLIC_API = new Set(['/api/health', '/api/setup']);
 const isPublic = (path: string) => PUBLIC_API.has(path) || path.startsWith('/api/auth/');
 app.use('/api/*', async (c, next) => (isPublic(c.req.path) ? next() : requireUser(c, next)));
 
-app.get('/api/health', (c) => c.json({ ok: true, time: new Date().toISOString() }));
+/** 매분 Cron 표시가 이만큼 묵으면 멈춘 것으로 본다 */
+const HEARTBEAT_STALE_MS = 5 * MINUTE_MS;
+
+/**
+ * 밖에서 보는 상태 확인 (Deploy의 운영 확인, Actions의 Health 일정). D1이 응답하고 매분 Cron이 5분 안에 돌았으면 200, 아니면 503.
+ * 막 배포했거나 새 DB라 Cron 표시가 아직 없으면 Cron은 따지지 않는다
+ */
+app.get('/api/health', async (c) => {
+  const now = Date.now();
+  const beat = await c.env.DB.prepare("SELECT last_sent_at FROM alerts WHERE kind = 'cron_heartbeat'")
+    .first<number>('last_sent_at')
+    .then(
+      (at) => ({ db: true, at }),
+      () => ({ db: false, at: null }),
+    );
+  const cron = beat.at === null || now - beat.at < HEARTBEAT_STALE_MS;
+  const ok = beat.db && cron;
+  return c.json({ ok, db: beat.db, cron, time: new Date(now).toISOString() }, ok ? 200 : 503);
+});
 app.route('/api/setup', setup);
 app.route('/api/auth', auth);
 app.route('/api', account);

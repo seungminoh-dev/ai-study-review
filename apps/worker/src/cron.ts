@@ -8,6 +8,11 @@ import { DAY_MS } from './lib/kst';
 
 /** 매분 Cron (설계서 §10.4). 일은 이 순서대로 하고, CPU를 많이 쓰는 일은 한 실행에 하나만 한다. */
 export async function runCron(env: Env, now: number): Promise<void> {
+  // 살아 있다는 표시. /api/health가 이 시각이 5분 넘게 묵었으면 503을 줘서 밖에서 알 수 있다 (알림도 이 Cron이 보내서, 죽으면 스스로는 못 알린다)
+  await env.DB.prepare("INSERT INTO alerts (kind, pending, last_sent_at) VALUES ('cron_heartbeat', 0, ?1) ON CONFLICT (kind) DO UPDATE SET last_sent_at = ?1")
+    .bind(now)
+    .run()
+    .catch(() => undefined);
   try {
     await deliverDueReminders(env, now);
   } catch (error) {
