@@ -338,10 +338,10 @@ docs/
 | 간격 반복 | `ts-fsrs` | 5.4.2 |
 | 웹 푸시 (aes128gcm, VAPID) | `@block65/webcrypto-web-push` | 2.0.0 |
 | Claude API (MVP 2) | `@anthropic-ai/sdk` | 0.135.0 (README에 Cloudflare Workers 지원 명시) |
-| 테스트 | `vitest` | 4.1.12 (`@cloudflare/vitest-plugin`의 peer 범위) |
+| 테스트 | `vitest` | 5.0.3 (`@cloudflare/vitest-plugin`의 peer 범위) |
 | Workers 테스트 통합 | `@cloudflare/vitest-plugin` | 1.4.4 (`@cloudflare/vitest-pool-workers`가 이름을 바꾼 것. 옛 이름은 지원 종료) |
 | MCP 계약 테스트 | `@modelcontextprotocol/client` | 2.3.1 |
-| 타입 | `typescript`, `@cloudflare/workers-types` | 5.9.3, 5.20261016.1 |
+| 타입 | `typescript`, `@cloudflare/workers-types` | 7.0.2, 5.20261016.1 |
 | PWA (MVP 1) | `vite`, `@vitejs/plugin-react`, `react`·`react-dom`, `vite-plugin-pwa`, `workbox-*` | 8.3.4, 6.1.2, 19.3.1, 2.0.0, 7.4.1 |
 | 오프라인 저장 | `idb-keyval` | 6.3.0 |
 | 지식 지도 (MVP 2) | `d3-force` | 3.0.0 |
@@ -349,7 +349,7 @@ docs/
 
 - `nodejs_compat` 플래그는 필요해질 때만 켠다. 위 패키지들은 Web 표준 API로 동작한다.
 - `compatibility_date`는 고정하고, 올릴 때는 CI의 테스트 배포로 먼저 확인한다.
-- 버전은 `package.json`에 정확히 고정한다. 범위로 두면 peer 범위 밖의 새 메이저(예: vitest 5)가 들어올 수 있다.
+- 버전은 `package.json`에 정확히 고정한다. 범위로 두면 peer 범위 밖의 새 메이저(예: vitest 6)가 들어올 수 있다.
 
 ### 4.3 `wrangler.jsonc` 핵심 설정
 

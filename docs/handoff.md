@@ -44,7 +44,7 @@
   - 2단계 (`f902930`): 마스코트 색, 마스코트 컴포넌트(`apps/web/src/Mascot.tsx`), 선 아이콘(`icons.tsx`), 휴대폰 아래 탭과 컴퓨터 사이드바, "내 성장"(`/growth`). `/api/stats`에 `best_streak`, `last_week_xp`, `history`(84일). 설계서 §12의 화면 목록은 2026-10-19에 지금 화면으로 고쳤다.
   - 아이콘 (`21de944`): 앱 아이콘·파비콘·알림 배지를 마스코트로 (`npm run gen:icons`). 다크 모드 마스코트 테두리는 먹색.
   - 3-1 모션·마스코트 (`371913d`):
-    - Motion(`motion` 13.5.1, 정확한 버전 고정)을 CSS와 섞어 쓴다. 기능 묶음(`motion-features.ts`, domMax)은 첫 화면 뒤에 따로 받는다.
+    - Motion(`motion` 14.0.0, 정확한 버전 고정)을 CSS와 섞어 쓴다. 기능 묶음(`motion-features.ts`, domMax)은 첫 화면 뒤에 따로 받는다.
     - 마스코트 포즈 10가지와 깜빡임·숨쉬기 같은 움직임(`styles.css`의 `.mascot.alive`).
     - 누르는 버튼, 카드 hover, 탭 알약(`layoutId`), 화면 전환(`router.tsx`의 `show`, View Transitions).
     - 복습 카드 넘김·확신도·답 시트(`AnimatePresence`), 불러오는 중 뼈대(`Loading.tsx`), 끝 화면 꽃가루와 XP 세기(`Confetti.tsx`, `useCountUp`).
