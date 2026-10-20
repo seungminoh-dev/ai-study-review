@@ -184,7 +184,7 @@ claude.ai 계정으로 로그인한 Claude Code면 claude.ai의 모아이 커넥
 
 - `main`에 push하면 🤖 Deploy가 타입 검사 → 빌드 → 테스트 → D1 bookmark 기록 → 마이그레이션 → 배포 → 운영 확인을 한다. CI(타입 검사, 빌드, 테스트)는 따로 돌고, Deploy는 CI를 기다리지 않아서 같은 검사를 스스로 한다.
 - 급할 때는 GitHub Actions → Deploy → Run workflow로 직접 돌린다.
-- Deploy는 `main`에서만 돈다(다른 브랜치를 골라 손으로 돌려도 건너뛴다). Cloudflare 토큰은 bookmark·마이그레이션·배포 세 단계에만 들어간다. 액션은 커밋 SHA로 고정했고, Dependabot이 주 1회 npm(한 PR로 묶음)과 액션 갱신 PR을 연다.
+- Deploy는 `main`에서만 돈다(다른 브랜치를 골라 손으로 돌려도 건너뛴다). Cloudflare 토큰은 설정 확인·bookmark·마이그레이션·배포 네 단계에만 들어간다. 액션은 커밋 SHA로 고정했고, Dependabot이 주 1회 npm과 액션 갱신 PR을 연다. 나온 지 14일이 안 된 버전은 기다린다. npm의 minor·patch는 한 PR로 묶고, 메이저는 하나씩 따로 연다. 메이저 PR은 바뀐 점을 읽고 하나씩 합친다.
 - 더 막으려면 (🙋 선택): GitHub → Settings → Environments에서 `production`을 만들고 Deployment branches를 `main`만 허용한 뒤, Cloudflare secret 두 개를 그 환경으로 옮기고 deploy 잡에 `environment: production`을 넣는다. 그러면 다른 워크플로에서는 토큰을 읽을 수 없다.
 
 ### 배포가 잘못 나갔을 때

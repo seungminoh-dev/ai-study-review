@@ -1,4 +1,5 @@
-# 의존성 갱신 (개선점 15). 주 1회 PR로 온다. npm은 한 PR로 묶고, 워크플로의 액션(SHA 고정)도 같이 올린다.
+# 의존성 갱신 (개선점 15). 주 1회 PR로 온다. 나온 지 14일이 안 된 버전은 기다린다 (악성 버전은 보통 며칠 안에 드러나 내려간다).
+# npm은 minor·patch만 한 PR로 묶고, 메이저는 하나씩 따로 온다. 워크플로의 액션(SHA 고정)도 같이 올린다.
 # PR은 CI가 돌고, 합칠지는 사람이 정한다 (main에 push하면 바로 배포된다).
 version: 2
 updates:
@@ -6,10 +7,15 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 14
     groups:
       npm:
         patterns: ['*']
+        update-types: [minor, patch]
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 14
