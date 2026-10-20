@@ -33,8 +33,15 @@ export async function claimDevice(userId: string): Promise<boolean> {
   return switched;
 }
 
+/** 답을 outbox에 넣고 보낸다. 기기에 쓰지 못하면(저장 공간이 찼거나 사파리가 저장소 연결을 끊었다) 그 답만 바로 보내고, 그것도 못 하면 던진다 */
 export async function enqueueReview(review: ReviewItem): Promise<void> {
-  await update<ReviewItem[]>(OUTBOX, (items) => [...(items ?? []), review], store);
+  try {
+    await update<ReviewItem[]>(OUTBOX, (items) => [...(items ?? []), review], store);
+  } catch (error) {
+    console.warn('기기에 답을 저장하지 못해서 바로 보내요', error);
+    await request<ReviewsResponse>('/reviews', { method: 'POST', json: { reviews: [review] } });
+    return;
+  }
   void flushReviews();
 }
 
@@ -57,19 +64,25 @@ export async function clearDeviceData(): Promise<void> {
 /**
  * 아직 보내지 않은 답이면 outbox에서 지우고 true. 이미 보냈으면 false.
  * 보내는 중인 묶음에 들어 있을 수 있으니, 진행 중인 전송이 끝난 뒤에 본다.
+ * 기다리는 사이 새 전송이 시작될 수 있어서 전송이 하나도 없을 때까지 기다린다.
  */
 export async function removeFromOutbox(id: string): Promise<boolean> {
-  await flushing?.catch(() => undefined);
+  while (flushing) await flushing.catch(() => undefined);
   let removed = false;
-  await update<ReviewItem[]>(
-    OUTBOX,
-    (items) => {
-      const rest = (items ?? []).filter((item) => item.id !== id);
-      removed = rest.length !== (items ?? []).length;
-      return rest;
-    },
-    store,
-  );
+  try {
+    await update<ReviewItem[]>(
+      OUTBOX,
+      (items) => {
+        const rest = (items ?? []).filter((item) => item.id !== id);
+        removed = rest.length !== (items ?? []).length;
+        return rest;
+      },
+      store,
+    );
+  } catch {
+    // 기기 저장소를 읽지 못한다. 바로 보낸 답일 수 있으니 서버에 맡긴다
+    return false;
+  }
   return removed;
 }
 

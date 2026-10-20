@@ -301,27 +301,34 @@ function Session({ initial, offline, before, exam }: { initial: QueueCard[]; off
     if (chosen && !stale()) reveal(chosen, level);
   };
 
-  /** 답 하나를 outbox에 넣고 다음 카드로 간다 */
+  /** 답 하나를 outbox에 넣고 다음 카드로 간다. 기기에도 서버에도 남기지 못하면 이 카드에 머물러 다시 누르게 한다 */
   const record = async (current: QueueCard, grade: ReviewGrade, response: string, correct: boolean, level: Confidence | null = null) => {
     // 앱을 켜 둔 채 자리를 비운 시간까지 세지 않도록 자른다
     const elapsed = Math.min(Math.max(0, Math.round(answeredAt.current - shownAt.current)), MAX_ELAPSED_MS);
-    if (!practice) {
-      const id = crypto.randomUUID();
-      await enqueueReview({
-        id,
-        card_id: current.id,
-        grade,
-        ...(response ? { response } : {}),
-        ...(level ? { confidence: level } : {}),
-        elapsed_ms: elapsed,
-        reviewed_at: answeredAt.current,
-        run_id: runId.current,
-      });
-      await forgetAnswered([current.id]);
-      setLast({ reviewId: id, card: current });
+    try {
+      if (!practice) {
+        const id = crypto.randomUUID();
+        await enqueueReview({
+          id,
+          card_id: current.id,
+          grade,
+          ...(response ? { response } : {}),
+          ...(level ? { confidence: level } : {}),
+          elapsed_ms: elapsed,
+          reviewed_at: answeredAt.current,
+          run_id: runId.current,
+        });
+        // 저장해 둔 큐에서 뺀다. 못 빼도 답은 이미 남았다
+        await forgetAnswered([current.id]).catch(() => undefined);
+        setLast({ reviewId: id, card: current });
+      }
+      setResults((list) => [...list, { card: current, correct, confidentMiss: !correct && level === 'sure' }]);
+      advance();
+    } catch (error) {
+      setNotice(`기기에 저장하지 못했어요. ${errorMessage(error)}`);
+    } finally {
+      moving.current = false;
     }
-    setResults((list) => [...list, { card: current, correct, confidentMiss: !correct && level === 'sure' }]);
-    advance();
   };
 
   const next = async (easy = false) => {
