@@ -2,7 +2,8 @@
 <html lang="ko">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <!-- interactive-widget: Android Chrome에서 키보드가 뜨면 화면(레이아웃)이 키보드 위까지 줄어든다. 아래에 붙은 입력칸·버튼이 키보드에 가리지 않는다. iOS는 이 값을 무시한다 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
     <title>모아이</title>
     <meta name="description" content="AI와 공부한 내용을 2~3분씩 되새기는 복습 앱" />
     <!-- 카톡·슬랙 등 링크 미리보기. 크롤러는 JS를 돌리지 않아서 모든 주소가 이 값을 쓴다. 그림은 scripts/gen-icons.mjs가 만든다 -->

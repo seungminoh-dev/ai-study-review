@@ -545,6 +545,18 @@ textarea {
   padding-bottom: max(12px, env(safe-area-inset-bottom));
 }
 
+/* 휴대폰에서 글을 쓰는 동안(키보드가 떠 있는 동안)은 아래 탭을 숨긴다.
+   viewport의 interactive-widget=resizes-content로 화면이 키보드 위까지 줄어서, 그대로 두면 탭이 키보드 위에 올라탄다 */
+@media (max-width: 1023px) {
+  :root:has(:is(textarea, input:not([type='checkbox'], [type='radio'], [type='time'])):focus) .tabs {
+    display: none;
+  }
+
+  :root:has(:is(textarea, input:not([type='checkbox'], [type='radio'], [type='time'])):focus) .bottom-actions {
+    bottom: 0;
+  }
+}
+
 .notice {
   display: block;
   margin: 8px 0;
