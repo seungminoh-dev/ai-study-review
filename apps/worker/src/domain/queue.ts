@@ -27,7 +27,8 @@ export interface QueueLimits {
 }
 
 /**
- * 학습·재학습 카드 → 복습 카드(하루 상한까지) → 새 카드(하루 상한까지) 순서로 고른다.
+ * 학습·재학습 카드 → 복습 카드(하루 상한까지) → 새 카드(하루 상한까지) 순서로 고른 뒤, 푼 카드 2장마다 새 카드 1장을 섞는다.
+ * 앞에서 몇 장만 푸는 세션(8장, 5장)에도 새 카드가 들어가서, 밀린 복습이 새 카드를 계속 막지 않는다 (2026-10-21).
  * 같은 개념은 하루 1장이다. 개념을 먼저 거르고 나서 상한을 센다. 상한을 먼저 자르면, 같은 개념의 카드가 몰려 있을 때
  * 상한보다 적게 나온다.
  */
@@ -55,7 +56,11 @@ export function selectQueue<T extends QueueCandidate>(candidates: readonly T[], 
     concepts.add(card.concept_id);
     picked.push(card);
   }
-  return picked;
+  const seenBefore = picked.filter((card) => card.state !== 0);
+  const unseen = picked.filter((card) => card.state === 0);
+  const mixed: T[] = [];
+  while (seenBefore.length > 0 || unseen.length > 0) mixed.push(...seenBefore.splice(0, 2), ...unseen.splice(0, 1));
+  return mixed;
 }
 
 interface CandidateRow extends QueueCandidate, FsrsFields {
@@ -135,7 +140,7 @@ export async function loadTodayQueue(env: Env, userId: string, now: number, filt
 
 /**
  * 자료 하나를 학습한다 (학습 탭, "이 자료 풀기"). 그 자료에서 만든 카드 중 아직 한 번도 안 푼 것만 저장한 순서대로 준다.
- * 한 번 푼 카드는 확신도나 정답과 상관없이 복습으로 간다. 틀려서 곧 다시 볼 때가 돼도 학습에는 다시 나오지 않는다.
+ * 한 번 푼 카드는 확신도나 정답과 상관없이 복습으로 간다. 틀려서 다음 날 다시 볼 때가 돼도 학습에는 다시 나오지 않는다.
  * 사용자가 직접 고른 학습이라 하루 새 카드 상한과 "같은 개념 하루 1장"은 적용하지 않는다. 사다리(잠긴 단계)는 그대로다.
  */
 export async function loadMaterialQueue(
@@ -225,17 +230,18 @@ export async function loadRandom(
 }
 
 /** 이 카드들 중 마지막 답이 틀린 카드 수 (오늘 화면의 "틀린 것") */
-export async function countLastWrong(env: Env, userId: string, cardIds: readonly string[]): Promise<number> {
-  if (cardIds.length === 0) return 0;
-  const row = await env.DB.prepare(
-    `SELECT count(*) AS n FROM (
-       SELECT grade, row_number() OVER (PARTITION BY card_id ORDER BY reviewed_at DESC) AS rn
+/** 이 카드들 중 마지막 답이 틀림이었던 카드 */
+export async function lastWrong(env: Env, userId: string, cardIds: readonly string[]): Promise<Set<string>> {
+  if (cardIds.length === 0) return new Set();
+  const { results } = await env.DB.prepare(
+    `SELECT card_id FROM (
+       SELECT card_id, grade, row_number() OVER (PARTITION BY card_id ORDER BY reviewed_at DESC) AS rn
          FROM review_logs WHERE user_id = ?1 AND card_id IN (SELECT value FROM json_each(?2))
      ) WHERE rn = 1 AND grade = 1`,
   )
     .bind(userId, JSON.stringify(cardIds))
-    .first<{ n: number }>();
-  return row?.n ?? 0;
+    .all<{ card_id: string }>();
+  return new Set(results.map((row) => row.card_id));
 }
 
 function toQueueCard(row: CandidateRow, now: number): QueueCard {

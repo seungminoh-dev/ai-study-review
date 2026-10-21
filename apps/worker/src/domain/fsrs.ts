@@ -7,8 +7,9 @@ export const scheduler = fsrs(
     request_retention: 0.9,
     maximum_interval: 180,
     enable_fuzz: true,
-    // 새 카드는 1분·10분 학습 단계, 복습 중 틀린 카드는 10분 재학습 단계를 거친다 (ts-fsrs 기본값)
-    enable_short_term: true,
+    // 분 단위 학습 단계(1분·10분)는 쓰지 않는다. 하루 한두 번 몇 장씩 푸는 앱이라, 10분 뒤가 곧 "다음 복습의 맨 앞"이 되어
+    // 방금 맞힌 카드만 계속 나왔다 (2026-10-21). 맞히면 며칠 뒤, 틀리면 다음 날 나온다. 바로 다시 풀기는 복습 끝의 "틀린 카드 다시 보기"가 한다
+    enable_short_term: false,
   }),
 );
 

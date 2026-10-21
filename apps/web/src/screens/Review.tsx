@@ -485,7 +485,7 @@ function Session({ initial, offline, before, exam }: { initial: QueueCard[]; off
       <div className="review-body">
         <div className="review-main">
           {offline ? <p className="notice">오프라인이에요. 답은 저장해 두었다가 연결되면 보내요.</p> : null}
-          {practice ? <p className="notice">{exam ? '랜덤 시험이에요. 기록하지 않아서 복습 일정은 그대로예요.' : '다시 보기는 연습이라 기록하지 않아요. 틀린 카드는 곧 다시 나와요.'}</p> : null}
+          {practice ? <p className="notice">{exam ? '랜덤 시험이에요. 기록하지 않아서 복습 일정은 그대로예요.' : '다시 보기는 연습이라 기록하지 않아요. 틀린 카드는 내일 다시 나와요.'}</p> : null}
           {/* 다음 카드로 넘어갈 때 앞 카드가 왼쪽으로 빠지고 새 카드가 오른쪽에서 들어온다 */}
           <AnimatePresence mode="wait" initial={false}>
             <Presence

@@ -23,12 +23,12 @@ const card = (id: string, concept: string, state: number, due: number, created =
 });
 
 describe('selectQueue (설계서 §9.2)', () => {
-  it('orders learning, then review by due, then new cards by creation', () => {
+  it('orders learning, then review by due, then new cards by creation, with a new card after every two', () => {
     const picked = selectQueue(
       [card('new-b', 'n2', 0, 0, 2), card('rev-late', 'r2', 2, 50), card('learn', 'l', 1, 90), card('new-a', 'n1', 0, 0, 1), card('rev-early', 'r1', 2, 10)],
       limits(),
     );
-    expect(picked.map((item) => item.id)).toEqual(['learn', 'rev-early', 'rev-late', 'new-a', 'new-b']);
+    expect(picked.map((item) => item.id)).toEqual(['learn', 'rev-early', 'new-a', 'rev-late', 'new-b']);
   });
 
   it('keeps one card per concept and skips concepts already reviewed today, except the same learning card', () => {

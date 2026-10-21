@@ -3,7 +3,7 @@ import type { Env } from '../env';
 import { nextKstTime } from '../lib/kst';
 import { raiseAlert } from './alerts';
 import { pushToUser } from './push';
-import { loadTodayQueue } from './queue';
+import { lastWrong, loadTodayQueue } from './queue';
 
 // 리마인드 (설계서 §10)
 
@@ -38,7 +38,9 @@ export async function replaceReminders(env: Env, userId: string, times: readonly
 export async function dailyMessage(env: Env, userId: string, now: number): Promise<{ title: string; body: string; url: string } | null> {
   const queue = await loadTodayQueue(env, userId, now);
   if (queue.length === 0) return null;
-  const shaky = queue.find((card) => card.state === 3) ?? queue.find((card) => card.state === 1);
+  // 흔들리는 개념: 오늘 볼 카드 중 마지막에 틀린 것 (학습 단계를 끈 뒤로는 state로 알 수 없다)
+  const wrong = await lastWrong(env, userId, queue.map((card) => card.id));
+  const shaky = queue.find((card) => wrong.has(card.id));
   const body = `약 ${estimateMinutes(queue.length)}분이면 끝나요${shaky ? ` · 흔들리는 개념: ${shaky.concept_name}` : ''}`;
   return { title: `오늘 복습 ${queue.length}장`, body, url: '/review?from=push' };
 }

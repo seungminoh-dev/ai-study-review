@@ -1,7 +1,7 @@
 import { ReviewItem, ReviewsBody, estimateMinutes, normalizeCategory, type OpenFollowup, type QueueResponse, type SessionSummary, type TodayResponse } from '@moai/shared';
 import { Hono } from 'hono';
 import type { AppEnv } from '../context';
-import { countLastWrong, countReviewedToday, loadMaterialQueue, loadMistakes, loadRandom, loadTodayQueue } from '../domain/queue';
+import { countReviewedToday, lastWrong, loadMaterialQueue, loadMistakes, loadRandom, loadTodayQueue } from '../domain/queue';
 import { recordReviews } from '../domain/reviews';
 import { loadMe } from '../domain/users';
 import { errorJson, readJson } from '../lib/http';
@@ -39,7 +39,7 @@ review.get('/today', async (c) => {
     remaining: queue.length,
     minutes: estimateMinutes(queue.length),
     parts: {
-      wrong: await countLastWrong(c.env, userId, queue.map((card) => card.id)),
+      wrong: (await lastWrong(c.env, userId, queue.map((card) => card.id))).size,
       fresh: queue.filter((card) => card.state === 0).length,
     },
     mistakes: mistakes.remaining,

@@ -49,10 +49,10 @@ describe('materials', () => {
     const after = (await (await api(user, '/materials')).json()) as { materials: MaterialSummary[] };
     expect(after.materials[0]).toMatchObject({ solved: 1, adopted: 1 });
 
-    // 한 번 푼 카드는 학습에 다시 나오지 않고 복습으로 간다. 틀려서 곧 다시 볼 때가 돼도
+    // 한 번 푼 카드는 학습에 다시 나오지 않고 복습으로 간다. 틀려서 다음 날 다시 볼 때가 돼도
     const second = queue.cards[1]!.id;
     await api(user, '/reviews', { method: 'POST', json: { reviews: [{ id: crypto.randomUUID(), card_id: second, grade: 1, reviewed_at: Date.now() }] } });
-    const later = Date.now() + 30 * 60_000;
+    const later = Date.now() + 25 * 60 * 60_000;
     expect(await loadMaterialQueue(env, user.id, '쿠버네티스 입문.pdf', later, 10)).toEqual({ cards: [], remaining: 0 });
     expect((await loadTodayQueue(env, user.id, later)).map((card) => card.id)).toContain(second);
   });

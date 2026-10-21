@@ -90,7 +90,7 @@ export function DemoDeck() {
                 <Mascot mood={picked.correct ? 'cheer' : 'oops'} size={44} />
                 <div>
                   <p className={picked.correct ? 'verdict right' : 'verdict wrong'}>{picked.correct ? '맞았어요!' : '아쉬워요'}</p>
-                  <p className="small muted">{picked.correct ? '이런 카드가 잊을 때쯤 다시 와요.' : '틀린 카드는 곧 다시 나와요.'}</p>
+                  <p className="small muted">{picked.correct ? '이런 카드가 잊을 때쯤 다시 와요.' : '틀린 카드는 내일 다시 나와요.'}</p>
                 </div>
               </div>
               <p className="explain">{card.explain}</p>

@@ -91,14 +91,15 @@ describe('today and queue', () => {
     expect(today).toMatchObject({ remaining: 0, reviewed_today: 3 });
   });
 
-  it('brings a failed card back after its relearning step, but not other cards of the concept', async () => {
+  it('brings a failed card back the next day, not minutes later, and not other cards of the concept', async () => {
     await saveExample();
     const now = Date.now();
     const ox = await cardOf('final-variable', 'ox');
     await recordReviews(env, user.id, [answer(ox.id, 1, now)], now);
-    expect((await loadTodayQueue(env, user.id, now + 30_000)).map((card) => card.id)).not.toContain(ox.id);
-    const later = await loadTodayQueue(env, user.id, now + 2 * 60_000);
-    expect(later.filter((card) => card.concept_key === 'final-variable').map((card) => card.id)).toEqual([ox.id]);
+    // 분 단위 학습 단계가 없어서 같은 날에는 다시 나오지 않는다
+    expect((await loadTodayQueue(env, user.id, now + 60 * 60_000)).map((card) => card.id)).not.toContain(ox.id);
+    const tomorrow = await loadTodayQueue(env, user.id, now + 25 * 60 * 60_000);
+    expect(tomorrow.filter((card) => card.concept_key === 'final-variable').map((card) => card.id)).toEqual([ox.id]);
   });
 
   it('limits new cards per day', async () => {
@@ -177,7 +178,8 @@ describe('today and queue', () => {
     const card = await cardOf('deep-copy', 'mcq');
     // 두 답이 모두 반영됐다. 나중 답(틀림)이 앞의 답을 덮어쓰지 않고 이어서 채점됐다
     expect(card.reps).toBe(2);
-    expect(card.lapses).toBe(0);
+    // 앞의 맞음으로 복습 단계가 된 카드를 틀렸다
+    expect(card.lapses).toBe(1);
     const logs = await env.DB.prepare('SELECT grade FROM review_logs WHERE card_id = ?1 ORDER BY reviewed_at').bind(mcq.id).all<{ grade: number }>();
     expect(logs.results.map((log) => log.grade)).toEqual([3, 1]);
   });
