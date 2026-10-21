@@ -91,7 +91,8 @@ interface TodayBefore {
   reviewed: number;
 }
 
-type Load = { state: 'loading' } | { state: 'error'; message: string } | { state: 'ready'; cards: QueueCard[]; offline: boolean; before?: TodayBefore | null };
+/** left: 이번 묶음 다음에 같은 범위에 남은 장수 (끝 화면의 "이어서 더"). 오프라인이면 0 */
+type Load = { state: 'loading' } | { state: 'error'; message: string } | { state: 'ready'; cards: QueueCard[]; offline: boolean; before?: TodayBefore | null; left?: number };
 
 export function Review({
   size,
@@ -111,6 +112,8 @@ export function Review({
   exam?: boolean;
 }) {
   const [load, setLoad] = useState<Load>({ state: 'loading' });
+  /** 끝 화면에서 "이어서 더"를 누른 횟수. 바뀌면 같은 범위의 다음 카드를 받아 새로 시작한다 */
+  const [round, setRound] = useState(0);
 
   // 자료를 풀기 시작하면 그 자료를 기억한다. 학습 탭과 오늘 화면이 이 자료로 이어서 연다 (시험은 빼고)
   useEffect(() => {
@@ -143,7 +146,9 @@ export function Review({
         if (!category && !material && !mistakes && !exam) await cacheQueue(cards);
         // 자료 섹션은 따로 남겨 둔다. 지하철에서 연결이 끊겨도 이어서 학습한다
         if (material && !exam) await cacheMaterialQueue(material, part ?? null, queue.cards.filter((card) => !pending.has(card.id)));
-        if (!cancelled) setLoad({ state: 'ready', cards, offline: false, before: before && { xp: before.today.xp, reviewed: before.today.reviewed } });
+        if (!cancelled) {
+          setLoad({ state: 'ready', cards, offline: false, before: before && { xp: before.today.xp, reviewed: before.today.reviewed }, left: Math.max(0, queue.remaining - cards.length) });
+        }
       } catch (error) {
         if (error instanceof OfflineError && material && !exam) {
           const cards = (await cachedMaterialQueue(material, part ?? null)).slice(0, size);
@@ -159,7 +164,7 @@ export function Review({
     return () => {
       cancelled = true;
     };
-  }, [size, category, material, part, mistakes, exam]);
+  }, [size, category, material, part, mistakes, exam, round]);
 
   if (load.state === 'loading') return <Loading label="카드를 가져오는 중" />;
   if (load.state === 'error') {
@@ -182,7 +187,12 @@ export function Review({
       </div>
     );
   }
-  return <Session initial={load.cards} offline={load.offline} before={load.before ?? null} exam={exam} />;
+  const left = load.left ?? 0;
+  const more = () => {
+    setLoad({ state: 'loading' });
+    setRound((value) => value + 1);
+  };
+  return <Session key={round} initial={load.cards} offline={load.offline} before={load.before ?? null} exam={exam} more={left > 0 ? { count: Math.min(left, size), start: more } : null} />;
 }
 
 interface Recorded {
@@ -197,7 +207,20 @@ const REPORT_REASONS: { reason: ReportReason; label: string }[] = [
   { reason: 'other', label: '그 밖의 문제' },
 ];
 
-function Session({ initial, offline, before, exam }: { initial: QueueCard[]; offline: boolean; before: TodayBefore | null; exam: boolean }) {
+function Session({
+  initial,
+  offline,
+  before,
+  exam,
+  more,
+}: {
+  initial: QueueCard[];
+  offline: boolean;
+  before: TodayBefore | null;
+  exam: boolean;
+  /** 같은 범위에 카드가 더 남았으면 끝 화면에서 바로 이어서 푼다 */
+  more: { count: number; start: () => void } | null;
+}) {
   const [cards, setCards] = useState(initial);
   const [index, setIndex] = useState(0);
   const [picked, setPicked] = useState<Choice | null>(null);
@@ -422,7 +445,7 @@ function Session({ initial, offline, before, exam }: { initial: QueueCard[]; off
     return () => window.removeEventListener('keydown', onKey);
   });
 
-  if (!card) return <Summary results={results} practice={practice} exam={exam} before={before} onRetry={retry} onUndo={last ? () => void undo() : null} notice={notice} />;
+  if (!card) return <Summary results={results} practice={practice} exam={exam} before={before} onRetry={retry} onUndo={last ? () => void undo() : null} notice={notice} more={more} />;
 
   const report = async (reason: ReportReason) => {
     if (stale()) return;
@@ -631,6 +654,7 @@ function Summary({
   onRetry,
   onUndo,
   notice,
+  more,
 }: {
   results: Result[];
   practice: boolean;
@@ -641,6 +665,7 @@ function Summary({
   onRetry: (cards: QueueCard[]) => void;
   onUndo: (() => void) | null;
   notice: string | null;
+  more: { count: number; start: () => void } | null;
 }) {
   const wrong = results.filter((result) => !result.correct).map((result) => result.card);
   const right = results.length - wrong.length;
@@ -819,7 +844,12 @@ function Summary({
             틀린 {wrong.length}장 다시 보기
           </button>
         ) : null}
-        <HomeButton primary />
+        {more ? (
+          <button type="button" className="button primary" onClick={more.start}>
+            {exam ? '다른 문제로 한 번 더' : `이어서 ${more.count}장 더`}
+          </button>
+        ) : null}
+        <HomeButton primary={!more} />
       </div>
     </div>
   );
