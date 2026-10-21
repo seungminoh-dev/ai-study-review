@@ -1,7 +1,12 @@
 // 카드 사다리 (설계서 §9.4)
 
-/** 이 안정도(일)를 넘으면 그 단계는 익혔다고 본다 */
+/** 이 안정도(일)를 넘으면 그 단계는 익혔다고 본다 (지식 지도의 익힘) */
 export const LADDER_STABILITY_DAYS = 7;
+/**
+ * 다음 단계를 여는 안정도(일). 새 카드를 한 번 '맞음'(2.3일)이나 '쉬움'(8.3일)으로 맞히면 넘고, '어려움'(1.3일)이나 틀림은 넘지 못한다.
+ * 7일일 때는 아래 단계를 며칠 간격으로 두 번 맞혀야 해서, 설명하기를 만나기까지 열흘 넘게 걸렸다 (2026-10-21)
+ */
+export const RUNG_OPEN_STABILITY_DAYS = 2;
 /** 3단계(설명하기)까지 연다. MVP 1은 설명하기 화면이 없어서 2단계까지만 열었다 */
 export const MAX_OPEN_RUNG = 3;
 
@@ -37,7 +42,7 @@ export function cardsToUnlock(cards: readonly LadderCard[], maxRung = MAX_OPEN_R
     const atOpen = active.filter((card) => card.rung === open);
     const solved = atOpen.filter((card) => !unsolvedMaterial(card));
     if (atOpen.length > 0 && solved.length === 0) continue;
-    if (!solved.every((card) => card.stability >= LADDER_STABILITY_DAYS)) continue;
+    if (!solved.every((card) => card.stability >= RUNG_OPEN_STABILITY_DAYS)) continue;
     const locked = list.filter((card) => card.status === 'locked' && card.rung > open && card.rung <= maxRung);
     if (locked.length === 0) continue;
     const next = Math.min(...locked.map((card) => card.rung));

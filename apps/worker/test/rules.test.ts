@@ -14,9 +14,10 @@ const limits = (overrides: Partial<QueueLimits> = {}): QueueLimits => ({
   ...overrides,
 });
 
-const card = (id: string, concept: string, state: number, due: number, created = 0): QueueCandidate => ({
+const card = (id: string, concept: string, state: number, due: number, created = 0, rung = 1): QueueCandidate => ({
   id,
   concept_id: concept,
+  rung,
   state,
   due,
   created_at: created,
@@ -45,6 +46,12 @@ describe('selectQueue (설계서 §9.2)', () => {
     expect(selectQueue(candidates, limits()).map((item) => item.id)).toEqual(['a0', 'b0', 'c0', 'd0', 'e0']);
   });
 
+  it('picks the highest open rung of a concept first, and falls back when its limit is used up', () => {
+    const candidates = [card('low', 'a', 2, 1, 0, 1), card('explain', 'a', 0, 0, 0, 3)];
+    expect(selectQueue(candidates, limits()).map((item) => item.id)).toEqual(['explain']);
+    expect(selectQueue(candidates, limits({ newLimit: 0 })).map((item) => item.id)).toEqual(['low']);
+  });
+
   it('applies the daily limits after what was already done today', () => {
     const candidates = [card('r1', 'a', 2, 1), card('r2', 'b', 2, 2), card('n1', 'c', 0, 0), card('n2', 'd', 0, 0)];
     expect(selectQueue(candidates, limits({ reviewLimit: 2, reviewsDone: 1, newLimit: 1 })).map((item) => item.id)).toEqual(['r1', 'n1']);
@@ -59,8 +66,9 @@ describe('cardsToUnlock (설계서 §9.4)', () => {
     expect(cardsToUnlock([ladder('a', 'x', 1, 'active', 8), ladder('b', 'x', 1, 'active', 7), ladder('c', 'x', 2, 'locked', 0), ladder('d', 'x', 2, 'locked', 0)])).toEqual(['c', 'd']);
   });
 
-  it('waits while any open card is still fresh', () => {
-    expect(cardsToUnlock([ladder('a', 'x', 1, 'active', 8), ladder('b', 'x', 1, 'active', 3), ladder('c', 'x', 2, 'locked', 0)])).toEqual([]);
+  it('waits while any open card has not been answered right once (hard is not enough)', () => {
+    expect(cardsToUnlock([ladder('a', 'x', 1, 'active', 2.3), ladder('b', 'x', 1, 'active', 1.3), ladder('c', 'x', 2, 'locked', 0)])).toEqual([]);
+    expect(cardsToUnlock([ladder('a', 'x', 1, 'active', 2.3), ladder('b', 'x', 1, 'active', 2.3), ladder('c', 'x', 2, 'locked', 0)])).toEqual(['c']);
   });
 
   it('can jump from rung 1 to 3, and respects a lower cap', () => {
@@ -72,7 +80,7 @@ describe('cardsToUnlock (설계서 §9.4)', () => {
   it('does not let unsolved material cards hold the ladder, but does not open a rung nobody has solved', () => {
     expect(cardsToUnlock([ladder('a', 'x', 1, 'active', 8), ladder('m', 'x', 1, 'active', 0, 'material', 0), ladder('c', 'x', 2, 'locked', 0)])).toEqual(['c']);
     expect(cardsToUnlock([ladder('m', 'x', 1, 'active', 0, 'material', 0), ladder('c', 'x', 2, 'locked', 0)])).toEqual([]);
-    expect(cardsToUnlock([ladder('a', 'x', 1, 'active', 8), ladder('m', 'x', 1, 'active', 2, 'material', 1), ladder('c', 'x', 2, 'locked', 0)])).toEqual([]);
+    expect(cardsToUnlock([ladder('a', 'x', 1, 'active', 8), ladder('m', 'x', 1, 'active', 1, 'material', 1), ladder('c', 'x', 2, 'locked', 0)])).toEqual([]);
   });
 
   it('opens the lowest locked rung when every card of a concept is turned off', () => {

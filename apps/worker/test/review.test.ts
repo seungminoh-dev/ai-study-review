@@ -81,7 +81,10 @@ describe('today and queue', () => {
     const runId = crypto.randomUUID();
     const reviews = cards.map((card) => ({ ...answer(card.id, 3), run_id: runId }));
     const first = await api(user, '/reviews', { method: 'POST', json: { reviews } });
-    expect(await first.json()).toEqual({ recorded: 3, skipped: 0, rejected: 0, unlocked: 0, level_ups: [] });
+    // 한 번 '맞음'으로 맞히면 다음 단계가 열린다: immutable-object의 설명하기
+    const body = (await first.json()) as { level_ups: unknown[] };
+    expect(body).toMatchObject({ recorded: 3, skipped: 0, rejected: 0, unlocked: 1 });
+    expect(body.level_ups).toHaveLength(1);
     // 무실수 보너스를 세는 복습 묶음이 기록에 남는다
     expect(await env.DB.prepare('SELECT count(*) AS n FROM review_logs WHERE user_id = ?1 AND run_id = ?2').bind(user.id, runId).first('n')).toBe(3);
     const again = await api(user, '/reviews', { method: 'POST', json: { reviews } });
@@ -225,11 +228,11 @@ describe('card ladder', () => {
     expect(await cardOf('deep-copy', 'cloze')).toMatchObject({ status: 'active', due: now });
   });
 
-  it('keeps the next rung locked while the open rung is still fresh', async () => {
+  it('keeps the next rung locked while the open rung was only answered hard', async () => {
     await saveExample();
     await addLockedCloze();
     const mcq = await cardOf('deep-copy', 'mcq');
-    expect(await recordReviews(env, user.id, [answer(mcq.id, 3)], Date.now())).toMatchObject({ unlocked: 0 });
+    expect(await recordReviews(env, user.id, [answer(mcq.id, 2)], Date.now())).toMatchObject({ unlocked: 0 });
     expect((await cardOf('deep-copy', 'cloze')).status).toBe('locked');
   });
 

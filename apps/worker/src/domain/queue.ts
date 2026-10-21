@@ -8,6 +8,7 @@ import { pickFsrsFields, previewIntervals, type FsrsFields } from './fsrs';
 export interface QueueCandidate {
   id: string;
   concept_id: string;
+  rung: number;
   state: number;
   due: number;
   created_at: number;
@@ -30,7 +31,8 @@ export interface QueueLimits {
  * 학습·재학습 카드 → 복습 카드(하루 상한까지) → 새 카드(하루 상한까지) 순서로 고른 뒤, 푼 카드 2장마다 새 카드 1장을 섞는다.
  * 앞에서 몇 장만 푸는 세션(8장, 5장)에도 새 카드가 들어가서, 밀린 복습이 새 카드를 계속 막지 않는다 (2026-10-21).
  * 같은 개념은 하루 1장이다. 개념을 먼저 거르고 나서 상한을 센다. 상한을 먼저 자르면, 같은 개념의 카드가 몰려 있을 때
- * 상한보다 적게 나온다.
+ * 상한보다 적게 나온다. 같은 개념이면 가장 높은 단계 카드를 먼저 고른다. 새로 열린 윗단계(설명하기 등)가 아래 단계 복습에
+ * 밀려 며칠씩 늦게 나오지 않게 한다. 윗단계를 맞히면 아래 단계도 떠올린 셈이다 (2026-10-21). 윗단계가 상한에 막히면 아래 단계를 낸다.
  */
 export function selectQueue<T extends QueueCandidate>(candidates: readonly T[], limits: QueueLimits): T[] {
   const byDue = (a: T, b: T) => a.due - b.due;
@@ -38,24 +40,30 @@ export function selectQueue<T extends QueueCandidate>(candidates: readonly T[], 
   const review = candidates.filter((card) => card.state === 2).sort(byDue);
   const fresh = candidates.filter((card) => card.state === 0).sort((a, b) => a.created_at - b.created_at);
 
+  const ordered = [...learning, ...review, ...fresh];
+  const top = new Map<string, number>();
+  for (const card of ordered) top.set(card.concept_id, Math.max(top.get(card.concept_id) ?? 0, card.rung));
+
   let reviewsLeft = Math.max(0, limits.reviewLimit - limits.reviewsDone);
   let newLeft = Math.max(0, limits.newLimit - limits.newSeen);
   const picked: T[] = [];
   const concepts = new Set<string>();
-  for (const card of [...learning, ...review, ...fresh]) {
-    if (concepts.has(card.concept_id)) continue;
-    if (limits.reviewedConcepts.has(card.concept_id) && !limits.reviewedCards.has(card.id)) continue;
+  const take = (card: T) => {
+    if (concepts.has(card.concept_id)) return;
+    if (limits.reviewedConcepts.has(card.concept_id) && !limits.reviewedCards.has(card.id)) return;
     if (card.state === 2) {
-      if (reviewsLeft === 0) continue;
+      if (reviewsLeft === 0) return;
       reviewsLeft -= 1;
     }
     if (card.state === 0) {
-      if (newLeft === 0) continue;
+      if (newLeft === 0) return;
       newLeft -= 1;
     }
     concepts.add(card.concept_id);
     picked.push(card);
-  }
+  };
+  for (const card of ordered) if (card.rung === top.get(card.concept_id)) take(card);
+  for (const card of ordered) take(card);
   const seenBefore = picked.filter((card) => card.state !== 0);
   const unseen = picked.filter((card) => card.state === 0);
   const mixed: T[] = [];
