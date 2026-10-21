@@ -2,8 +2,8 @@ import type { ReviewGrade } from './api';
 
 // 기기에서 채점한 결과를 FSRS 등급으로 바꾼다 (설계서 §9.3).
 
-/** 맞혔어도 이보다 오래 걸리면 어려움(Hard)으로 매긴다 */
-export const HARD_AFTER_MS = 15_000;
+/** 맞혔어도 이보다 오래 걸리면 어려움(Hard)으로 매긴다. 15초였을 때는 코드를 읽는 문제가 자주 넘어서 답의 17%가 시간 때문에 어려움이었다 (2026-10-21) */
+export const HARD_AFTER_MS = 30_000;
 
 /** 답을 고른 뒤 스스로 매긴 확신도. 답을 보기 전에 묻는다 */
 export type Confidence = 'sure' | 'unsure' | 'guess';
@@ -19,7 +19,7 @@ export interface AnswerResult {
 }
 
 /**
- * 틀림 → Again(1), 맞음이지만 15초 넘게 걸림 → Hard(2), 맞음 → Good(3), 맞음 + "너무 쉬웠어요" → Easy(4).
+ * 틀림 → Again(1), 맞음이지만 30초 넘게 걸림 → Hard(2), 맞음 → Good(3), 맞음 + "너무 쉬웠어요" → Easy(4).
  * 빨리 맞혔다고 Easy를 주지 않는다. 객관식은 찍어서 빨리 맞힐 수 있다.
  * 확신도를 물었으면: 찍었거나 반반으로 맞힌 것은 Hard(2)로 본다. 간격이 덜 늘어 일찍 다시 나온다.
  * Again(1)으로 두지 않는다. 등급 1은 "틀림"으로 세는 곳(스트릭 XP, 최근 실패, 모의면접 시작 개념)이 있어서,

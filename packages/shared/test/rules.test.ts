@@ -14,8 +14,8 @@ describe('gradeAnswer (설계서 §9.3)', () => {
   it('maps on-device results to FSRS grades', () => {
     expect(gradeAnswer({ correct: false, elapsedMs: 2_000 })).toBe(1);
     expect(gradeAnswer({ correct: false, elapsedMs: 2_000, easy: true })).toBe(1);
-    expect(gradeAnswer({ correct: true, elapsedMs: 16_000 })).toBe(2);
-    expect(gradeAnswer({ correct: true, elapsedMs: 15_000 })).toBe(3);
+    expect(gradeAnswer({ correct: true, elapsedMs: 31_000 })).toBe(2);
+    expect(gradeAnswer({ correct: true, elapsedMs: 30_000 })).toBe(3);
     // 빨리 맞혔다고 쉬움을 주지 않는다. 쉬움은 사용자가 누를 때만이다
     expect(gradeAnswer({ correct: true, elapsedMs: 900 })).toBe(3);
     expect(gradeAnswer({ correct: true, elapsedMs: 30_000, easy: true })).toBe(4);

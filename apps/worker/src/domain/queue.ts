@@ -91,13 +91,14 @@ const CANDIDATE_LIMIT = 200;
 /**
  * 후보 카드. ?3은 분류 필터(없으면 NULL): 그 분류와 그 아래 분류의 개념만 고른다.
  * 자료에서 만든 카드는 한 번 풀기 전(state 0)에는 넣지 않는다. 학습 탭(자료)에서만 처음 푼다.
+ * 설명하기는 예외다. 아래 단계를 익혀야 열리는 카드라 열렸을 때는 그 섹션을 이미 다 푼 뒤여서, 학습 탭에만 두면 거의 보이지 않는다 (2026-10-21)
  */
 const CANDIDATES = `SELECT c.id, c.concept_id, c.state, c.due, c.created_at, c.type, c.rung, c.prompt, c.code, c.answer, c.options, c.explain,
                           c.checklist, c.stability, c.difficulty, c.elapsed_days, c.scheduled_days, c.learning_steps, c.reps, c.lapses,
                           c.last_review, k.key AS concept_key, k.name AS concept_name, k.final_answer
                      FROM cards c JOIN concepts k ON k.id = c.concept_id
                     WHERE c.user_id = ?1 AND c.status = 'active' AND c.due <= ?2
-                      AND NOT (c.origin = 'material' AND c.state = 0)
+                      AND NOT (c.origin = 'material' AND c.state = 0 AND c.type != 'explain')
                       AND ${categoryClause('k.domain', '?3')}`;
 
 export interface QueueFilter {
