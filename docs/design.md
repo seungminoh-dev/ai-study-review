@@ -1274,9 +1274,10 @@ runJob(id):
 ### 11.7 앱 안 모의면접 (MVP 3)
 
 - `/interview`(복습처럼 메뉴 없는 화면). 오늘 화면 카드, 개념 상세의 "이 개념으로 모의면접"에서 연다.
-- `POST /api/interview` `{ concept_key?, category?, keys?, turns }` → `{ keys, names, total, question | null, summary | null, credits }`. 첫 요청은 `interviewChain`으로 순서를 정하고, 그다음부터 기기가 `keys`와 지금까지의 질문·답을 함께 보낸다. 서버는 대화를 저장하지 않는다. `keys`는 내 개념인지 다시 확인한다.
-- 맥락은 그 개념들의 `learnerContext`(지난 판정, 약한 카드, 연결). 개념마다 두 번쯤, 한 번에 8개까지 묻고, `turns`가 다 차면 질문 대신 `{ good, fix }`로 정리한다. 정답은 말하지 않는다.
-- `POST /api/interview/save` `{ keys, turns }`는 대화를 §11.4 가져오기 작업으로 넣는다. 가져오기 프롬프트가 사용자 답으로 판정을 넣고(said는 원문), 틀리거나 빠진 곳을 카드로 만든다.
+- 시작 화면 (2026-10-21): 추천 주제(`GET /api/interview/topics`: 고른 개념, 최근에 많이 틀린 개념, 최근에 공부한 개념, 오래 안 본 개념에서 시작하는 연결, AI 호출 없음), 직접 고르기(주제 60자), 난이도(기초·실무·심화), 깊이(가볍게 3문·보통 6문·깊게 10문, 이어 갈 개념 2·3·4개)를 고른다. 시작 버튼에 끝까지 했을 때의 크레딧(질문 + 정리)을 보여 준다. 직접 적은 주제가 내 개념과 맞으면 그 개념에서 연결을 따라가고, 없으면 기록 없이 그 주제로 묻는다(`keys`가 비어 있고 기기가 `topic`을 다시 보낸다).
+- `POST /api/interview` `{ concept_key?, category?, topic?, depth, level, keys?, turns }` → `{ keys, names, total, question | null, summary | null, credits }`. 첫 요청은 `interviewChain`으로 순서를 정하고, 그다음부터 기기가 `keys`와 지금까지의 질문·답을 함께 보낸다. 서버는 대화를 저장하지 않는다. `keys`는 내 개념인지 다시 확인한다.
+- 맥락은 그 개념들의 `learnerContext`(지난 판정, 약한 카드, 연결). 깊이의 질문 수만큼 개념마다 고르게 나눠 묻고, `turns`가 다 차면 질문 대신 `{ good, fix }`로 정리한다. 정답은 말하지 않는다.
+- `POST /api/interview/save` `{ keys, topic?, turns }`는 대화를 §11.4 가져오기 작업으로 넣는다. 가져오기 프롬프트가 사용자 답으로 판정을 넣고(said는 원문), 틀리거나 빠진 곳을 카드로 만든다.
 - 한도: 질문 하나에 AI 크레딧 1 + §11.5 예산 (`llm/metered.ts`, kind `interview`). 기록하기는 가져오기와 같은 작업이라 카드 만들기 값(5)이다.
 
 ### 11.8 AI 크레딧과 숨은 업적 (2026-10-19)

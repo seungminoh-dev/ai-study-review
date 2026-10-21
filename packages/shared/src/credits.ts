@@ -21,6 +21,24 @@ export const CREDIT_COST = {
 
 export type CreditKind = keyof typeof CREDIT_COST;
 
+/**
+ * 모의면접 깊이 (2026-10-21): 질문 수와 이어 갈 개념 수. 크레딧은 질문마다 1, 마지막 정리 1이다.
+ * 중간에 그만두면 물은 만큼만 쓴다
+ */
+export const INTERVIEW_DEPTHS = {
+  light: { label: '가볍게', questions: 3, concepts: 2 },
+  normal: { label: '보통', questions: 6, concepts: 3 },
+  deep: { label: '깊게', questions: 10, concepts: 4 },
+} as const;
+export type InterviewDepth = keyof typeof INTERVIEW_DEPTHS;
+
+/** 그 깊이를 끝까지 하면 드는 크레딧 (질문 + 마지막 정리) */
+export const interviewCost = (depth: InterviewDepth): number => (INTERVIEW_DEPTHS[depth].questions + 1) * CREDIT_COST.interview;
+
+/** 모의면접 난이도 */
+export const INTERVIEW_LEVELS = { basic: '기초', practical: '실무', advanced: '심화' } as const;
+export type InterviewLevel = keyof typeof INTERVIEW_LEVELS;
+
 export interface CreditBalance {
   /** 이번 달 남은 월간 크레딧 */
   monthly: number;

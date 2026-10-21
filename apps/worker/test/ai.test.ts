@@ -1,4 +1,4 @@
-import type { CreditsResponse, InterviewResponse, JobView, StatsResponse } from '@moai/shared';
+import type { CreditsResponse, InterviewResponse, InterviewTopicSuggestion, JobView, StatsResponse } from '@moai/shared';
 import { env } from 'cloudflare:workers';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import example from '../../../packages/shared/fixtures/immutable-object.json';
@@ -203,6 +203,36 @@ describe('in-app mock interview', () => {
     expect(await monthlyLeft(user)).toBe(493);
     const { job_id } = (await saved.json()) as { job_id: string };
     expect(await env.DB.prepare("SELECT input FROM llm_jobs WHERE id = ?1 AND kind = 'import'").bind(job_id).first<string>('input')).toContain('사용자: 상태가 안 바뀌어서요.');
+    await env.DB.prepare('DELETE FROM llm_jobs WHERE id = ?1').bind(job_id).run();
+  });
+
+  it('suggests topics from my concepts without calling AI', async () => {
+    await callTool(await mcpUrl(user), 'save_learning', example);
+    const fetch = vi.spyOn(globalThis, 'fetch');
+    const { topics } = (await (await api(user, '/interview/topics?concept=immutable-object')).json()) as { topics: InterviewTopicSuggestion[] };
+    expect(topics[0]).toMatchObject({ concept_key: 'immutable-object', reason: '고른 개념에서' });
+    expect(new Set(topics.map((topic) => topic.concept_key)).size).toBe(topics.length);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('asks as many questions as the depth says, on a free topic without my records, and saves it as a new topic', async () => {
+    const fetch = mockClaude({ question: 'ETag는 언제 쓰나요?', concept_key: 'topic', good: ['예를 들었어요'], fix: [] });
+    const plan = { topic: 'HTTP 캐시', depth: 'light', level: 'advanced' };
+    const first = (await (await api(user, '/interview', { method: 'POST', json: plan })).json()) as InterviewResponse;
+    expect(first).toMatchObject({ keys: [], names: ['HTTP 캐시'], total: 3, question: { question: 'ETag는 언제 쓰나요?' } });
+    const prompt = String(fetch.mock.calls[0]![1]!.body);
+    expect(prompt).toContain('<topic>HTTP 캐시</topic>');
+    expect(prompt).toContain('난이도는 심화');
+    const turns = Array.from({ length: 3 }, () => ({ question: 'ETag는 언제 쓰나요?', answer: '바뀌었는지 확인할 때요.' }));
+    const last = (await (await api(user, '/interview', { method: 'POST', json: { ...plan, turns } })).json()) as InterviewResponse;
+    // 질문마다 1크레딧: 여기서는 첫 질문과 마지막 정리만 불러서 2크레딧
+    expect(last).toMatchObject({ question: null, summary: { good: ['예를 들었어요'] } });
+    expect(await monthlyLeft(user)).toBe(498);
+    expect((await api(user, '/interview/save', { method: 'POST', json: { turns } })).status).toBe(400);
+    const saved = await api(user, '/interview/save', { method: 'POST', json: { topic: 'HTTP 캐시', turns } });
+    expect(saved.status).toBe(202);
+    const { job_id } = (await saved.json()) as { job_id: string };
+    expect(await env.DB.prepare('SELECT input FROM llm_jobs WHERE id = ?1').bind(job_id).first<string>('input')).toContain('면접 주제: HTTP 캐시');
     await env.DB.prepare('DELETE FROM llm_jobs WHERE id = ?1').bind(job_id).run();
   });
 });

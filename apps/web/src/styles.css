@@ -5900,6 +5900,59 @@ a.notice.link:active,
   gap: 12px;
 }
 
+/* 모의면접 시작 화면 (2026-10-21): 추천 주제, 직접 고르기, 난이도, 깊이 */
+.interview-start {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.interview-start h2 {
+  margin: 0 0 8px;
+  font-size: 1rem;
+}
+
+.interview-topics {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.topic-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+  color: var(--text);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+.topic-card.on {
+  border-color: var(--pen);
+  box-shadow: inset 0 0 0 1px var(--pen);
+  background: var(--accent-soft);
+}
+
+.interview-start .bottom-actions .button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+/* 아래 탭이 없는 집중 화면(복습, 모의면접)에서는 버튼 줄을 화면 맨 아래에 붙인다 */
+.app.review-mode .bottom-actions {
+  bottom: 0;
+  padding-bottom: max(12px, env(safe-area-inset-bottom));
+}
+
 .interview-head h1 {
   margin: 0;
   font-size: 1.25rem;

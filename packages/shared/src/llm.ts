@@ -76,23 +76,44 @@ export interface AskResponse {
 /** 앱 안 모의면접 (MCP get_interview_chain과 같은 순서): 한 질문씩 주고받는다. 대화는 기기가 들고 있다가 함께 보낸다 */
 const InterviewTurn = z.object({ question: z.string().trim().min(1).max(500), answer: z.string().trim().max(2000) });
 
+/** 직접 고른 주제. 내 개념과 맞으면 그 개념에서, 없으면 기록 없이 그 주제로 묻는다 */
+const InterviewTopic = z.string().trim().min(1).max(60);
+
 export const InterviewBody = z.object({
   /** 첫 질문을 받을 때: 이 개념에서 시작한다 (없으면 최근에 많이 틀린 개념) */
   concept_key: ConceptKey.optional(),
   category: z.string().max(80).optional(),
-  /** 첫 응답이 정한 개념 순서. 다음 질문부터 그대로 보낸다 */
+  topic: InterviewTopic.optional(),
+  /** 질문 수와 이어 갈 개념 수 (INTERVIEW_DEPTHS) */
+  depth: z.enum(['light', 'normal', 'deep']).default('normal'),
+  /** 난이도 (INTERVIEW_LEVELS) */
+  level: z.enum(['basic', 'practical', 'advanced']).default('practical'),
+  /** 첫 응답이 정한 개념 순서. 다음 질문부터 그대로 보낸다 (기록 없는 주제면 비어 있고 topic을 다시 보낸다) */
   keys: z.array(ConceptKey).min(1).max(5).optional(),
-  turns: z.array(InterviewTurn).max(8).default([]),
+  turns: z.array(InterviewTurn).max(10).default([]),
 });
 export type InterviewBody = z.infer<typeof InterviewBody>;
 
-export const InterviewSaveBody = z.object({ keys: z.array(ConceptKey).min(1).max(5), turns: z.array(InterviewTurn).min(1).max(8) });
+export const InterviewSaveBody = z
+  .object({ keys: z.array(ConceptKey).max(5).default([]), topic: InterviewTopic.optional(), turns: z.array(InterviewTurn).min(1).max(10) })
+  .refine((body) => body.keys.length > 0 || body.topic !== undefined, '면접한 개념이나 주제가 있어야 해요');
 
 export const InterviewQuestion = z.object({ question: z.string().min(1).max(500), concept_key: z.string().max(60) });
 export const InterviewSummary = z.object({ good: z.array(z.string().max(200)).max(5), fix: z.array(z.string().max(200)).max(5) });
 export type InterviewSummary = z.infer<typeof InterviewSummary>;
 
+/** 모의면접 시작 화면의 추천 주제 */
+export interface InterviewTopicSuggestion {
+  /** 시작할 개념 */
+  concept_key: string;
+  /** 이어 갈 개념 이름 (미리 보기) */
+  names: string[];
+  /** 왜 추천했는지 */
+  reason: string;
+}
+
 export interface InterviewResponse {
+  /** 물을 개념 순서. 기록 없는 주제로 묻는 중이면 비어 있다 */
   keys: string[];
   names: string[];
   /** 이 면접에서 물을 질문 수 */

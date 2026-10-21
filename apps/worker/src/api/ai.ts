@@ -24,6 +24,7 @@ import { errorJson, readJson } from '../lib/http';
 import { DAY_MS, studyDayIndex, studyDayKey, studyWeekday } from '../lib/kst';
 import { llmConfigured } from '../llm/anthropic';
 import { askConcept, askToCards } from '../llm/ask';
+import { interviewTopics } from '../domain/interview';
 import { interviewTurn, saveInterview } from '../llm/interview';
 import { caps, monthStart, overBudget } from '../llm/budget';
 import { createJob, runJob } from '../llm/jobs';
@@ -93,6 +94,13 @@ ai.post('/cards/:id/grade-ai', async (c) => {
   // 응답을 보낸 뒤에도 돌린다 (30초까지). 끊기면 매분 Cron이 이어 받는다
   c.executionCtx.waitUntil(runJob(c.env, job.id, 'request'));
   return c.json({ job_id: job.id }, 202);
+});
+
+/** 모의면접 시작 화면의 추천 주제. AI를 부르지 않는다 */
+ai.get('/interview/topics', async (c) => {
+  const concept = c.req.query('concept');
+  const topics = await interviewTopics(c.env, c.var.userId, { concept_key: concept?.slice(0, 60), category: c.req.query('category')?.slice(0, 80) }, Date.now());
+  return c.json({ topics });
 });
 
 /** 앱 안 모의면접: 다음 질문 하나, 마지막이면 정리. 대화는 기기가 들고 있다가 같이 보낸다 */
