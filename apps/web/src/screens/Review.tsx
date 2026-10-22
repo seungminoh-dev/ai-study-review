@@ -15,7 +15,7 @@ import { Confetti } from '../Confetti';
 import { IconArrow, IconChat, IconFlame, IconStar } from '../icons';
 import { Loading } from '../Loading';
 import { Mascot } from '../Mascot';
-import { LEAVE, Presence, SOFT, useCountUp } from '../motion';
+import { LEAVE, Presence, SOFT, reduced, useCountUp } from '../motion';
 import {
   cacheMaterialQueue,
   cacheQueue,
@@ -245,6 +245,9 @@ function Session({
   /** 컴퓨터 개념 패널에서 보고 있는 탭 */
   const [panelTab, setPanelTab] = useState<'concept' | 'ask'>('concept');
   const askButton = useRef<HTMLButtonElement>(null);
+  /** 확신도 질문과 정답 패널. 문제가 길면 화면 아래로 밀려 있어서, 나타날 때 화면 안으로 올린다 */
+  const confidencePanel = useRef<HTMLDivElement>(null);
+  const answerPanel = useRef<HTMLDivElement>(null);
   const wide = useWide();
   /** 두 번 탭해도 한 번만 기록한다 */
   const moving = useRef(false);
@@ -282,6 +285,19 @@ function Session({
   useEffect(() => {
     shownAt.current = Date.now();
   }, [index, cards]);
+
+  // 확신도 질문이나 정답 패널이 나오면 화면 안으로 올린다. 둘 다 화면 맨 아래 칸이라, 화면보다 짧으면 끝까지 내려 신고 버튼과
+  // 아래 여백(안전 영역)까지 보이게 하고, 길면 위 끝(맞음·틀림)을 맞춘다
+  useEffect(() => {
+    const panel = picked ? answerPanel.current : chosen ? confidencePanel.current : null;
+    if (!panel) return;
+    const frame = requestAnimationFrame(() => {
+      const behavior = reduced() ? 'auto' : 'smooth';
+      if (panel.offsetHeight <= window.innerHeight * 0.8) window.scrollTo({ top: document.documentElement.scrollHeight, behavior });
+      else panel.scrollIntoView({ block: 'start', behavior });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [chosen, picked]);
 
   const advance = () => {
     setPicked(null);
@@ -548,6 +564,7 @@ function Session({
                     {chosen ? (
                       <Presence
                         key="confidence"
+                        ref={confidencePanel}
                         className="confidence"
                         role="group"
                         aria-label="확신도"
@@ -571,7 +588,7 @@ function Session({
                   </AnimatePresence>
                   {!picked && notice ? <p className="notice bad">{notice}</p> : null}
                   {picked ? (
-                    <m.div className="answer-panel" aria-live="polite" initial={{ opacity: 0, y: 56 }} animate={{ opacity: 1, y: 0, transition: SOFT }}>
+                    <m.div ref={answerPanel} className="answer-panel" aria-live="polite" initial={{ opacity: 0, y: 56 }} animate={{ opacity: 1, y: 0, transition: SOFT }}>
                       <div className="answer-head">
                         <Mascot mood={picked.correct ? 'cheer' : 'oops'} size={48} />
                         <div>

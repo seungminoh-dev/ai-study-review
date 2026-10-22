@@ -34,7 +34,7 @@ export const SOFT: Transition = { type: 'spring', stiffness: 380, damping: 30 };
 /** 사라질 때는 짧게 */
 export const LEAVE: Transition = { duration: 0.14, ease: [0.4, 0, 1, 1] };
 
-const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+export const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 /** 숫자를 이전 값(처음엔 0)에서 목표까지 세어 올린다. 동작 줄이기면 바로 목표를 보여 준다 */
 export function useCountUp(target: number, duration = 700): number {
