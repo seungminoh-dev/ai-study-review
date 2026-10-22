@@ -2636,6 +2636,59 @@ a.notice.link:active,
   fill: var(--hill-near);
 }
 
+/* 때에 따라 바뀐다 (2026-10-22, Today.tsx의 dayPart): 해·달의 색과 자리, 아침·낮에는 별을 끈다.
+   하늘과 언덕 색은 밝은 화면에서만 바꾸고 어두운 화면은 밤하늘(저녁만 보랏빛)을 둔다. light-dark()를 모르는 브라우저는 예전 하늘 그대로다 */
+.hills-art .sky-body {
+  fill: var(--sun);
+}
+
+.today-head.hills.sky-morning {
+  --sun: #ffb84d;
+}
+
+.today-head.hills.sky-day {
+  --sun: #ffd23f;
+}
+
+.today-head.hills.sky-evening {
+  --sun: #ff7a45;
+}
+
+.today-head.hills.sky-night {
+  --sun: #fff1b8;
+}
+
+.today-head.hills.sky-morning .hills-art :is(.star, .spark),
+.today-head.hills.sky-day .hills-art :is(.star, .spark) {
+  fill: transparent;
+}
+
+@supports (color: light-dark(#000, #fff)) {
+  .today-head.hills.sky-morning {
+    --sky: light-dark(#fff0d6, #1c2a4a);
+    --hill-far: light-dark(#cdeccb, #22402f);
+    --hill-near: light-dark(#a9dcae, #2b5039);
+  }
+
+  .today-head.hills.sky-day {
+    --sky: light-dark(#dcefff, #1c2a4a);
+    --hill-far: light-dark(#bfe5c3, #22402f);
+    --hill-near: light-dark(#98d3a2, #2b5039);
+  }
+
+  .today-head.hills.sky-evening {
+    --sky: light-dark(#ffd7c4, #261f47);
+    --hill-far: light-dark(#b9d4b4, #22402f);
+    --hill-near: light-dark(#94c09a, #2b5039);
+  }
+
+  .today-head.hills.sky-night {
+    --sky: light-dark(#e3dcf4, #1c2a4a);
+    --hill-far: light-dark(#b4cfc0, #22402f);
+    --hill-near: light-dark(#93bba5, #2b5039);
+  }
+}
+
 /* 휴대폰: 화면 끝까지 붙인다 (.app의 여백만큼 밖으로). 오프라인 안내가 위에 있으면 그 아래에 둔다 */
 @media (max-width: 34rem) {
   .today-head.hills {

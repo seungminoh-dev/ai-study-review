@@ -165,16 +165,38 @@ function FollowupsCard({ followups }: { followups: TodayResponse['followups'] })
 }
 
 /** 오늘 화면 머리의 픽셀 하늘과 언덕 (5단계 배경 C). 96×38 그림을 4배로 키워 가로로 이어 붙인다. 색은 styles.css의 --sky, --hill-* */
-function Hills() {
+/** 지금 때 (기기 시계): 아침 5~11시, 낮 11~17시, 저녁 17~21시, 밤 그 밖. 오늘 화면 머리 그림의 하늘과 해·달이 바뀐다 */
+export type DayPart = 'morning' | 'day' | 'evening' | 'night';
+export function dayPart(hour = new Date().getHours()): DayPart {
+  if (hour >= 5 && hour < 11) return 'morning';
+  if (hour >= 11 && hour < 17) return 'day';
+  if (hour >= 17 && hour < 21) return 'evening';
+  return 'night';
+}
+
+const SUN = ['..XXXX..', '.XXXXXX.', 'XXXXXXXX', 'XXXXXXXX', 'XXXXXXXX', 'XXXXXXXX', '.XXXXXX.', '..XXXX..'];
+const MOON = ['..XXXX..', '.XXX....', 'XXX.....', 'XXX.....', 'XXX.....', 'XXX.....', '.XXX....', '..XXXX..'];
+/** 해·달 자리: x는 그림 폭의 %, y는 px. 아침은 오른쪽 언덕 위로 뜨는 중, 낮은 위, 저녁은 왼쪽으로 지는 중, 밤은 달. 휴대폰 오른쪽 위 엽전 칩과 아래 글자를 피한다 */
+const SKY_BODY: Record<DayPart, { x: string; y: number; art: string[] }> = {
+  morning: { x: '62%', y: 58, art: SUN },
+  day: { x: '44%', y: 18, art: SUN },
+  evening: { x: '30%', y: 52, art: SUN },
+  night: { x: '44%', y: 16, art: MOON },
+};
+
+function Hills({ part }: { part: DayPart }) {
+  const body = SKY_BODY[part];
   return (
     <svg className="hills-art" aria-hidden="true" shapeRendering="crispEdges">
       <defs>
-        <pattern id="hills-tile" width="96" height="38" patternUnits="userSpaceOnUse" patternTransform="scale(4)">
+        <pattern id="hills-sky" width="96" height="38" patternUnits="userSpaceOnUse" patternTransform="scale(4)">
           <rect className="sky" width="96" height="38" />
           <rect className="star" x="12" y="6" width="2" height="2" />
           <rect className="star" x="44" y="4" width="2" height="2" />
           <rect className="star" x="78" y="8" width="2" height="2" />
           <rect className="spark" x="64" y="3" width="1" height="1" />
+        </pattern>
+        <pattern id="hills-land" width="96" height="38" patternUnits="userSpaceOnUse" patternTransform="scale(4)">
           <rect className="far" x="0" y="24" width="96" height="14" />
           <rect className="far" x="0" y="20" width="22" height="4" />
           <rect className="far" x="4" y="17" width="14" height="3" />
@@ -187,7 +209,12 @@ function Hills() {
           <rect className="near" x="58" y="27" width="30" height="3" />
         </pattern>
       </defs>
-      <rect width="100%" height="100%" fill="url(#hills-tile)" />
+      <rect width="100%" height="100%" fill="url(#hills-sky)" />
+      {/* 해·달은 하늘과 언덕 사이에 그려서, 낮게 뜬 해가 언덕 뒤로 걸린다 */}
+      <svg className="sky-body" x={body.x} y={body.y} overflow="visible">
+        {body.art.flatMap((row, y) => [...row].map((cell, x) => (cell === 'X' ? <rect key={`${x}-${y}`} x={x * 4} y={y * 4} width="4" height="4" /> : null)))}
+      </svg>
+      <rect width="100%" height="100%" fill="url(#hills-land)" />
     </svg>
   );
 }
@@ -548,11 +575,12 @@ export function Today({ name, termsVersion }: { name: string; termsVersion: stri
     );
   }
   if (!data) return <Loading />;
+  const part = dayPart();
 
   return (
     <div className="today">
-      <header className="today-head hills">
-        <Hills />
+      <header className={`today-head hills sky-${part}`}>
+        <Hills part={part} />
         {/* 할 카드가 있으면 휴대폰을 흔들고, 오늘 다 했으면 쉰다 (사용자 시트의 복습 알림·휴식) */}
         <Mascot mood={data.remaining > 0 ? 'alarm' : data.reviewed_today > 0 ? 'sleep' : 'happy'} size={56} />
         <div style={{ flex: 1, minWidth: 0 }}>
