@@ -87,7 +87,7 @@ export function Landing({ github }: { github: boolean }) {
               </Link>
             ) : null}
           </div>
-          <p className="muted small">지금은 초대받은 분만 가입할 수 있어요. 광고도, 다른 회사로 보내는 추적도 없어요.</p>
+          <p className="muted small">GitHub 계정만 있으면 가입할 수 있어요. 광고도, 다른 회사로 보내는 추적도 없어요.</p>
         </div>
         <PhoneScene />
       </section>

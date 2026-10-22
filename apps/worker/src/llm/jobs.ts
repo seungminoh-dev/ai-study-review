@@ -1,4 +1,4 @@
-import { GradeResult, MONTHLY_CREDITS, SaveLearningInput, checkSaveLearning, type CreditKind, type ImportResult } from '@moai/shared';
+import { GradeResult, SaveLearningInput, checkSaveLearning, type CreditKind, type ImportResult } from '@moai/shared';
 import { z } from 'zod';
 import { pushToUser } from '../domain/push';
 import { availableSql, creditMonthStart, refundCredits, refundFailedJobsStatement, spendForJobStatement } from '../domain/credits';
@@ -63,8 +63,8 @@ export async function createJob(
       `INSERT INTO llm_jobs (id, user_id, kind, status, card_id, input, input_hash, created_at, updated_at)
        SELECT ?1, ?2, ?3, 'queued', ?4, ?5, ?6, ?7, ?7
         WHERE (SELECT count(*) FROM llm_jobs WHERE user_id = ?2 AND kind = ?3 AND status IN ('queued', 'running')) < ?8
-          AND ${availableSql('?2', '?9', '?10')} >= ?11`,
-    ).bind(id, userId, kind, extra.cardId ?? null, input, extra.inputHash ?? null, now, MAX_PENDING, creditMonthStart(now), MONTHLY_CREDITS, charge.amount),
+          AND ${availableSql('?2', '?9')} >= ?10`,
+    ).bind(id, userId, kind, extra.cardId ?? null, input, extra.inputHash ?? null, now, MAX_PENDING, creditMonthStart(now), charge.amount),
     spendForJobStatement(env, userId, charge.kind, charge.amount, id, now),
   ]);
   if (inserted!.meta.changes > 0) return { id };

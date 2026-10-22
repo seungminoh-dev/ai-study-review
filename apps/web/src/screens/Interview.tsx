@@ -1,8 +1,8 @@
 import type { ImportResult, InterviewDepth, InterviewLevel, InterviewResponse, InterviewSummary, InterviewTopicSuggestion } from '@moai/shared';
-import { CREDIT_COST, INTERVIEW_DEPTHS, INTERVIEW_LEVELS, interviewCost } from '@moai/shared/client';
+import { CREDIT_COST, INTERVIEW_DEPTHS, INTERVIEW_LEVELS, creditsLeft, interviewCost } from '@moai/shared/client';
 import * as m from 'motion/react-m';
 import { Fragment, useEffect, useRef, useState, type FormEvent } from 'react';
-import { JOB_ERROR, forgetAiStatus, waitForJob } from '../ai';
+import { JOB_ERROR, NO_CREDITS_HINT, aiStatus, forgetAiStatus, waitForJob } from '../ai';
 import { AiNotice, useAiNotice } from '../cards/AskConcept';
 import { RequestError, errorMessage, request } from '../api';
 import { Coin } from '../credits';
@@ -51,11 +51,18 @@ function InterviewStart({ concept, category, onStart }: { concept: string | null
   const [topic, setTopic] = useState('');
   const [level, setLevel] = useState<InterviewLevel>('practical');
   const [depth, setDepth] = useState<InterviewDepth>('normal');
+  /** 쓸 수 있는 크레딧. 모르면(아직 안 받음) null */
+  const [left, setLeft] = useState<number | null>(null);
+  useEffect(() => {
+    void aiStatus().then((status) => setLeft(creditsLeft(status.credits)));
+  }, []);
   const topics = data?.topics ?? [];
   // 아직 아무것도 안 골랐으면 첫 추천 주제 (없으면 직접 적기)
   const choice = picked === undefined ? (topics[0]?.concept_key ?? null) : picked;
   const custom = choice === null;
-  const ready = custom ? topic.trim().length > 0 : true;
+  // 고른 깊이를 끝까지 할 크레딧이 있어야 시작한다. 모자라면 더 얕은 깊이를 고르거나 크레딧을 모은다
+  const short = left !== null && left < interviewCost(depth);
+  const ready = (custom ? topic.trim().length > 0 : true) && !short;
   const start = () => {
     if (!ready) return;
     onStart(custom ? { topic: topic.trim(), depth, level } : { concept_key: choice, depth, level });
@@ -134,6 +141,11 @@ function InterviewStart({ concept, category, onStart }: { concept: string | null
         <p className="muted small">
           질문 {INTERVIEW_DEPTHS[depth].questions}개와 마지막 정리, 최대 {interviewCost(depth)} 크레딧이에요. 중간에 그만두면 물은 만큼만 써요.
         </p>
+        {short ? (
+          <p className="notice warn">
+            AI 크레딧이 모자라요 ({interviewCost(depth)} 필요, 남은 {left}). {NO_CREDITS_HINT}
+          </p>
+        ) : null}
       </section>
 
       <div className="bottom-actions">

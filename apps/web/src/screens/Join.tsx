@@ -5,11 +5,12 @@ import { IconCheck, IconGithub } from '../icons';
 import { Splash } from '../Loading';
 import { Mascot } from '../Mascot';
 
-// 초대 코드로 가입 (설계서 §8.4, 3단계 시안). GitHub 확인을 마치고 서버가 이 화면으로 보낸다. 가입하면 시작 가이드로 간다.
+// 가입 (설계서 §8.4, 3단계 시안). GitHub 확인을 마치고 서버가 이 화면으로 보낸다. 가입하면 시작 가이드로 간다.
+// 초대 코드는 있으면 넣는다 (2026-10-22부터 없어도 가입한다).
 
 type Load = { state: 'loading' } | { state: 'ready'; pending: PendingJoin } | { state: 'expired'; message: string };
 
-/** GitHub 확인 → 초대 코드 → 시작 */
+/** GitHub 확인 → 이름 → 시작 */
 function Steps() {
   return (
     <ol className="join-steps" aria-label="가입 단계">
@@ -21,7 +22,7 @@ function Steps() {
       </li>
       <li className="current" aria-current="step">
         <span className="join-mark">2</span>
-        초대 코드
+        이름
       </li>
       <li>
         <span className="join-mark">3</span>
@@ -93,11 +94,15 @@ export function Join({ onDone }: { onDone: (me: Me) => void }) {
       <div className="auth-hero">
         <Mascot mood="happy" size={104} />
         <p className="auth-chip">@{load.pending.github_login}님, 반가워요!</p>
-        <h1>초대 코드를 넣어 주세요</h1>
-        <p className="muted small">받은 초대 코드와 앱에서 불릴 이름이면 끝나요.</p>
+        <h1>앱에서 불릴 이름을 정해 주세요</h1>
+        <p className="muted small">이름만 정하면 끝나요. 받은 초대 코드가 있으면 함께 넣어 주세요.</p>
       </div>
       <label className="field">
-        <span>초대 코드</span>
+        <span>이름</span>
+        <input value={name} onChange={(event) => setName(event.target.value)} placeholder="앱에서 불릴 이름" maxLength={30} required />
+      </label>
+      <label className="field">
+        <span>초대 코드 (있으면)</span>
         <input
           className="mono"
           value={code}
@@ -106,15 +111,10 @@ export function Join({ onDone }: { onDone: (me: Me) => void }) {
           autoComplete="off"
           autoCapitalize="characters"
           spellCheck={false}
-          required
         />
       </label>
-      <label className="field">
-        <span>이름</span>
-        <input value={name} onChange={(event) => setName(event.target.value)} placeholder="앱에서 불릴 이름" maxLength={30} required />
-      </label>
       {error ? <p className="notice bad">{error}</p> : null}
-      <p className="muted small">초대 코드는 모아이를 쓰는 친구나 운영자에게 받아요.</p>
+      <p className="muted small">초대 코드는 모아이를 쓰는 친구나 운영자에게 받아요. 없으면 비워 두세요.</p>
       <label className="toggle join-agree">
         <input type="checkbox" checked={agree} onChange={(event) => setAgree(event.target.checked)} required />
         {/* 새 탭으로 연다. 이 화면을 떠나면 넣던 초대 코드가 사라진다 */}

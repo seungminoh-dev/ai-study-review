@@ -1,6 +1,7 @@
-import { TERMS_VERSION, type InviteSummary, type LoginCode, type Me, type PendingJoin } from '@moai/shared';
+import { TERMS_VERSION, type AiStatus, type InviteSummary, type LoginCode, type Me, type PendingJoin } from '@moai/shared';
 import { env } from 'cloudflare:workers';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { spendCredits } from '../src/domain/credits';
 import { formatCode, normalizeCode } from '../src/lib/codes';
 import { ORIGIN, api, newUser, workerFetch, type TestUser } from './helpers';
 
@@ -10,9 +11,10 @@ interface FakeGithubUser {
   id: number;
   login: string;
   name: string | null;
+  created_at: string;
 }
 
-const githubUser = (login = 'octo'): FakeGithubUser => ({ id: Math.floor(Math.random() * 1e9), login, name: '옥토캣' });
+const githubUser = (login = 'octo', createdAt = '2020-01-01T00:00:00Z'): FakeGithubUser => ({ id: Math.floor(Math.random() * 1e9), login, name: '옥토캣', created_at: createdAt });
 
 function mockGithub(user: FakeGithubUser, token: unknown = { access_token: 'gho_test', token_type: 'bearer', scope: '' }) {
   return vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
@@ -227,6 +229,44 @@ describe('joining with an invite', () => {
     expect((await api(null, '/auth/join')).status).toBe(410);
     const { code } = await newInvite(owner);
     expect((await api(null, '/auth/join', { method: 'POST', json: { agree: true, code, display_name: '민수' } })).status).toBe(410);
+  });
+});
+
+// 초대 없이 가입 (2026-10-22): 월간 크레딧 0, 막 만든 GitHub 계정과 하루에 몰리는 가입은 받지 않는다
+describe('joining without an invite', () => {
+  const arrive = async (github: FakeGithubUser) => cookieOf(await viaGithub(github), '__Host-moai-join')!;
+  const joinError = async (response: Response) => [response.status, ((await response.json()) as { error: { code: string } }).error.code];
+
+  it('creates an account with no monthly credits, and a wrong code is not taken as joining without one', async () => {
+    const join = await arrive(githubUser('open'));
+    expect(await joinError(await api(asUser(join), '/auth/join', { method: 'POST', json: { agree: true, code: 'AAAAA-AAAAA', display_name: '열린' } }))).toEqual([403, 'wrong_code']);
+    const joined = await api(asUser(join), '/auth/join', { method: 'POST', json: { agree: true, display_name: '열린' } });
+    expect(joined.status).toBe(201);
+    const me = (await joined.json()) as Me;
+    const session = asUser(cookieOf(joined, '__Host-sid')!);
+    expect(((await (await api(session, '/ai/status')).json()) as AiStatus).credits).toMatchObject({ monthly: 0, monthly_total: 0, held: 0 });
+    expect(await spendCredits(env, me.id, 'ask', 1, crypto.randomUUID(), Date.now())).toBe(false);
+    // 숨은 업적 같은 보유 크레딧은 쓸 수 있다
+    await env.DB.prepare("INSERT INTO credit_ledger (id, user_id, amount, kind, ref, note, created_at) VALUES (?1, ?2, 30, 'achievement', NULL, NULL, ?3)")
+      .bind(crypto.randomUUID(), me.id, Date.now())
+      .run();
+    expect(await spendCredits(env, me.id, 'ask', 1, crypto.randomUUID(), Date.now())).toBe(true);
+    expect(((await (await api(session, '/ai/status')).json()) as AiStatus).credits).toMatchObject({ monthly: 0, held: 29 });
+  });
+
+  it('refuses a GitHub account made less than 30 days ago', async () => {
+    const join = await arrive(githubUser('fresh', new Date(Date.now() - 3 * 86_400_000).toISOString()));
+    expect(await joinError(await api(asUser(join), '/auth/join', { method: 'POST', json: { agree: true, display_name: '새' } }))).toEqual([403, 'account_too_new']);
+  });
+
+  it('takes at most 30 accounts a day', async () => {
+    const ids = Array.from({ length: 30 }, () => crypto.randomUUID());
+    await env.DB.batch(
+      ids.map((id) => env.DB.prepare("INSERT INTO users (id, display_name, role, created_at, monthly_credits) VALUES (?1, '먼저', 'member', ?2, 0)").bind(id, Date.now())),
+    );
+    const join = await arrive(githubUser('crowd'));
+    expect(await joinError(await api(asUser(join), '/auth/join', { method: 'POST', json: { agree: true, display_name: '늦은' } }))).toEqual([429, 'join_full']);
+    await env.DB.prepare('DELETE FROM users WHERE id IN (SELECT value FROM json_each(?1))').bind(JSON.stringify(ids)).run();
   });
 });
 

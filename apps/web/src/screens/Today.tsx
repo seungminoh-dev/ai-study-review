@@ -1,7 +1,7 @@
 import type { LevelUp, MaterialSummary, McpTokenStatus, StatsResponse, SurveyStatus, TodayResponse } from '@moai/shared';
 import { QUEST_XP, TERMS_VERSION, isPdf } from '@moai/shared/client';
 import { useEffect, useState } from 'react';
-import { aiStatus, canUseAi } from '../ai';
+import { aiOn, aiStatus } from '../ai';
 import { errorMessage, request } from '../api';
 import { NewAchievements, NewBadges } from '../badges';
 import { CreditChip } from '../credits';
@@ -526,11 +526,11 @@ function LevelUpNotice() {
   );
 }
 
-/** 서버 AI가 있고 면접 질문 하나에 쓸 크레딧이 남았다 */
+/** 서버 AI를 쓸 수 있다. 크레딧이 모자라도 모의면접 입구는 보이고, 시작 화면이 모자란다고 알린다 */
 export function useCanInterview(): boolean {
   const [can, setCan] = useState(false);
   useEffect(() => {
-    void aiStatus().then((status) => setCan(canUseAi(status, 'interview')));
+    void aiStatus().then((status) => setCan(aiOn(status)));
   }, []);
   return can;
 }

@@ -1,9 +1,9 @@
-import { MONTHLY_CREDITS, type CreditBalance, type CreditKind } from '@moai/shared';
+import type { CreditBalance, CreditKind } from '@moai/shared';
 import type { Env } from '../env';
 import { KST_OFFSET_MS } from '../lib/kst';
 
 // AI 크레딧 (4단계). 앱 안 재화다: 돈으로 사거나 바꿀 수 없다 (packages/shared/src/credits.ts).
-// 원장(credit_ledger)에 받은 것(+)과 쓴 것(-)만 적고, 월간 크레딧은 상수로 센다.
+// 원장(credit_ledger)에 받은 것(+)과 쓴 것(-)만 적고, 월간 크레딧은 사람마다(users.monthly_credits) 센다. 초대 없이 가입하면 0이다.
 //   쓸 수 있는 크레딧 = 월간 + 받은 것 - 이번 달 쓴 것 - 지난달까지 월간을 넘겨 쓴 것
 // 이번 달 쓴 것이 월간보다 적든 많든 이 식 하나로 맞는다(월간부터 쓰고 넘친 만큼 보유에서 빠진다).
 
@@ -21,8 +21,12 @@ export function nextRefill(now: number): number {
 
 const MONTH_KEY = `strftime('%Y-%m', (created_at + ${KST_OFFSET_MS}) / 1000, 'unixepoch')`;
 
-/** 세 값을 구하는 SQL. user·since·base는 그 문장의 매개변수 자리(?1 같은)다 */
-function parts(user: string, since: string, base: string) {
+/** 그 사람의 월간 크레딧 SQL (2026-10-22, 초대 없이 가입하면 0). user는 매개변수 자리다 */
+const monthlyOf = (user: string) => `coalesce((SELECT monthly_credits FROM users WHERE id = ${user}), 0)`;
+
+/** 세 값을 구하는 SQL. user·since는 그 문장의 매개변수 자리(?1 같은)다 */
+function parts(user: string, since: string) {
+  const base = monthlyOf(user);
   return {
     granted: `(SELECT coalesce(sum(amount), 0) FROM credit_ledger WHERE user_id = ${user} AND amount > 0)`,
     usedThisMonth: `(SELECT coalesce(-sum(amount), 0) FROM credit_ledger WHERE user_id = ${user} AND amount < 0 AND created_at >= ${since})`,
@@ -32,20 +36,21 @@ function parts(user: string, since: string, base: string) {
 }
 
 /** 지금 쓸 수 있는 크레딧(월간 + 보유)을 SQL 식으로. 세기와 쓰기를 한 문장으로 할 때 쓴다 */
-export function availableSql(user: string, since: string, base: string): string {
-  const sql = parts(user, since, base);
-  return `(${base} + ${sql.granted} - ${sql.usedThisMonth} - ${sql.overflowBefore})`;
+export function availableSql(user: string, since: string): string {
+  const sql = parts(user, since);
+  return `(${monthlyOf(user)} + ${sql.granted} - ${sql.usedThisMonth} - ${sql.overflowBefore})`;
 }
 
 export async function creditBalance(env: Env, userId: string, now: number): Promise<CreditBalance> {
-  const sql = parts('?1', '?2', '?3');
-  const row = await env.DB.prepare(`SELECT ${sql.granted} AS granted, ${sql.usedThisMonth} AS used, ${sql.overflowBefore} AS overflow`)
-    .bind(userId, creditMonthStart(now), MONTHLY_CREDITS)
-    .first<{ granted: number; used: number; overflow: number }>();
+  const sql = parts('?1', '?2');
+  const row = await env.DB.prepare(`SELECT ${monthlyOf('?1')} AS base, ${sql.granted} AS granted, ${sql.usedThisMonth} AS used, ${sql.overflowBefore} AS overflow`)
+    .bind(userId, creditMonthStart(now))
+    .first<{ base: number; granted: number; used: number; overflow: number }>();
+  const base = row?.base ?? 0;
   const used = row?.used ?? 0;
-  const monthly = Math.max(0, MONTHLY_CREDITS - used);
-  const available = MONTHLY_CREDITS + (row?.granted ?? 0) - used - (row?.overflow ?? 0);
-  return { monthly, monthly_total: MONTHLY_CREDITS, held: Math.max(0, available - monthly), refill_at: nextRefill(now) };
+  const monthly = Math.max(0, base - used);
+  const available = base + (row?.granted ?? 0) - used - (row?.overflow ?? 0);
+  return { monthly, monthly_total: base, held: Math.max(0, available - monthly), refill_at: nextRefill(now) };
 }
 
 /** 이번 달 쓴 크레딧 (운영자 화면) */
@@ -63,9 +68,9 @@ export async function creditsUsedThisMonth(env: Env, userId: string, now: number
 export async function spendCredits(env: Env, userId: string, kind: CreditKind, amount: number, ref: string, now: number): Promise<boolean> {
   const { meta } = await env.DB.prepare(
     `INSERT INTO credit_ledger (id, user_id, amount, kind, ref, note, created_at)
-     SELECT ?4, ?1, 0 - ?5, ?6, ?7, NULL, ?8 WHERE ${availableSql('?1', '?2', '?3')} >= ?5`,
+     SELECT ?3, ?1, 0 - ?4, ?5, ?6, NULL, ?7 WHERE ${availableSql('?1', '?2')} >= ?4`,
   )
-    .bind(userId, creditMonthStart(now), MONTHLY_CREDITS, crypto.randomUUID(), amount, kind, ref, now)
+    .bind(userId, creditMonthStart(now), crypto.randomUUID(), amount, kind, ref, now)
     .run();
   return meta.changes > 0;
 }
@@ -108,4 +113,4 @@ export function grantStatement(env: Env, userId: string, amount: number, kind: '
 }
 
 /** 크레딧이 모자랄 때의 안내 */
-export const noCreditsMessage = (cost: number) => `AI 크레딧이 모자라요 (${cost} 필요). 월간 크레딧은 매달 1일에 다시 채워져요.`;
+export const noCreditsMessage = (cost: number) => `AI 크레딧이 모자라요 (${cost} 필요). 충전 기능은 준비 중이에요. 숨은 업적을 달성해 크레딧을 모아 보세요.`;

@@ -18,7 +18,8 @@ export type SetupBody = z.infer<typeof SetupBody>;
 
 /** 초대 코드로 가입. GitHub 확인을 마친 브라우저에서만 쓸 수 있다 (설계서 §8.4) */
 export const JoinBody = z.object({
-  code: z.string().trim().min(1).max(40),
+  /** 초대 코드. 비우면 초대 없이 가입한다 (월간 크레딧 없음, 2026-10-22) */
+  code: z.string().trim().max(40).default(''),
   display_name: z.string().trim().min(1).max(30),
   /** 만 14세 이상이고 이용약관·개인정보 처리방침에 동의했다 */
   agree: z.literal(true, { error: '만 14세 이상이고 약관에 동의해야 가입할 수 있어요.' }),

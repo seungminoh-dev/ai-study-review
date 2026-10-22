@@ -9,7 +9,7 @@ import { loadMe } from '../domain/users';
 import { INVITE_CODE_LENGTH, LOGIN_CODE_LENGTH, normalizeCode } from '../lib/codes';
 import { hashToken, randomToken, safeEqual } from '../lib/crypto';
 import { errorJson, readJson } from '../lib/http';
-import { MINUTE_MS } from '../lib/kst';
+import { DAY_MS, MINUTE_MS } from '../lib/kst';
 
 // 로그인 전에 쓰는 API (설계서 §8.4, §8.5): GitHub 로그인, 초대 코드로 가입, 다른 기기 로그인 코드, 로그아웃.
 // GitHub에서 돌아오는 콜백은 화면 이동(GET)이라 JSON 대신 앱 주소로 리다이렉트한다.
@@ -25,6 +25,10 @@ const STATE_TTL_MS = 10 * MINUTE_MS;
 const JOIN_TTL_MS = 30 * MINUTE_MS;
 /** 한 번의 GitHub 확인으로 초대 코드를 틀릴 수 있는 횟수 */
 const MAX_JOIN_ATTEMPTS = 5;
+/** 초대 없이 가입하려면 GitHub 계정이 이만큼 묵어야 한다. 업적 크레딧을 노리고 막 만든 계정을 거른다 */
+const OPEN_MIN_ACCOUNT_AGE_MS = 30 * DAY_MS;
+/** 초대 없이 가입할 수 있는 수 (최근 24시간, 서비스 전체). 한꺼번에 몰리는 가입이 AI 예산을 다 쓰지 못하게 한다 */
+const OPEN_JOINS_PER_DAY = 30;
 
 type Intent = 'login' | 'link';
 
@@ -118,9 +122,9 @@ async function loginWithGithub(c: Context<AppEnv>, github: GithubUser, now: numb
   // 처음 보는 GitHub 계정이면 초대 코드를 받는다. GitHub 정보는 서버에 두고 브라우저에는 토큰만 준다
   const token = randomToken();
   await c.env.DB.prepare(
-    "INSERT INTO pending_signups (token_hash, provider, subject, login, name, expires_at) VALUES (?1, 'github', ?2, ?3, ?4, ?5)",
+    "INSERT INTO pending_signups (token_hash, provider, subject, login, name, expires_at, account_created_at) VALUES (?1, 'github', ?2, ?3, ?4, ?5, ?6)",
   )
-    .bind(await hashToken(c.env.TOKEN_PEPPER, token), github.id, github.login, github.name, now + JOIN_TTL_MS)
+    .bind(await hashToken(c.env.TOKEN_PEPPER, token), github.id, github.login, github.name, now + JOIN_TTL_MS, github.createdAt)
     .run();
   shortCookie(c, JOIN_COOKIE, token, JOIN_TTL_MS);
   // Claude 커넥터 허용 화면에서 왔으면 가입 화면이 이어받아, 가입한 뒤 허용 화면으로 돌아간다
@@ -134,12 +138,13 @@ interface PendingRow {
   subject: string;
   login: string;
   name: string | null;
+  account_created_at: number | null;
 }
 
 async function pendingSignup(c: Context<AppEnv>, now: number): Promise<PendingRow | null> {
   const token = getCookie(c, JOIN_COOKIE);
   if (!token || !c.env.TOKEN_PEPPER) return null;
-  return c.env.DB.prepare('SELECT token_hash, subject, login, name FROM pending_signups WHERE token_hash = ?1 AND expires_at > ?2')
+  return c.env.DB.prepare('SELECT token_hash, subject, login, name, account_created_at FROM pending_signups WHERE token_hash = ?1 AND expires_at > ?2')
     .bind(await hashToken(c.env.TOKEN_PEPPER, token), now)
     .first<PendingRow>();
 }
@@ -177,6 +182,8 @@ auth.post('/join', async (c) => {
     return c.json(await loadMe(c.env, existing));
   }
 
+  // 초대 코드를 비우면 초대 없이 가입한다. 적었는데 틀리면 초대 없는 가입으로 넘기지 않고 알린다
+  if (!body.code) return openJoin(c, pending, body.display_name, now);
   const code = normalizeCode(body.code, INVITE_CODE_LENGTH);
   const row = code
     ? await c.env.DB.prepare('SELECT id, bind_user_id FROM invites WHERE code_hash = ?1 AND used_at IS NULL AND expires_at > ?2')
@@ -207,6 +214,30 @@ auth.post('/join', async (c) => {
   await finishJoin(c, pending.token_hash, userId, now);
   return c.json(await loadMe(c.env, userId), 201);
 });
+
+/**
+ * 초대 코드 없이 가입 (2026-10-22): 월간 크레딧 없이(0, 자동 충전 없음) 만든다. 크레딧은 숨은 업적과 운영자 지급으로만 받는다.
+ * 막 만든 GitHub 계정은 받지 않고, 최근 24시간에 OPEN_JOINS_PER_DAY명까지만 받는다 (세기와 넣기를 한 문장으로)
+ */
+async function openJoin(c: Context<AppEnv>, pending: PendingRow, displayName: string, now: number): Promise<Response> {
+  if (pending.account_created_at === null || now - pending.account_created_at < OPEN_MIN_ACCOUNT_AGE_MS) {
+    return errorJson(403, 'account_too_new', '만든 지 30일이 안 된 GitHub 계정은 초대 코드가 있어야 가입할 수 있어요.');
+  }
+  const userId = crypto.randomUUID();
+  const [created] = await c.env.DB.batch([
+    c.env.DB.prepare(
+      `INSERT INTO users (id, display_name, role, created_at, terms_version, terms_accepted_at, monthly_credits)
+       SELECT ?1, ?2, 'member', ?3, ?4, ?3, 0 WHERE (SELECT count(*) FROM users WHERE monthly_credits = 0 AND created_at > ?5) < ?6`,
+    ).bind(userId, displayName, now, TERMS_VERSION, now - DAY_MS, OPEN_JOINS_PER_DAY),
+    c.env.DB.prepare(
+      "INSERT INTO user_identities (provider, subject, user_id, login, created_at) SELECT 'github', ?2, ?1, ?3, ?4 WHERE EXISTS (SELECT 1 FROM users WHERE id = ?1)",
+    ).bind(userId, pending.subject, pending.login, now),
+  ]);
+  if (created!.meta.changes === 0) return errorJson(429, 'join_full', '오늘은 초대 없이 가입할 수 있는 자리가 다 찼어요. 내일 다시 해 주세요.');
+  console.log(JSON.stringify({ event: 'user_joined', user_id: userId, invite: false }));
+  await finishJoin(c, pending.token_hash, userId, now);
+  return c.json(await loadMe(c.env, userId), 201);
+}
 
 /**
  * 기기 복구 초대 (설계서 §8.5): 새 계정 대신 기존 계정에 이 GitHub를 잇고 로그인한다.

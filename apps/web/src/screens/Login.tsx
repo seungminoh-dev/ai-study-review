@@ -7,7 +7,7 @@ import { isIos, isStandalone } from '../push';
 import { BackLink, useLocation } from '../router';
 
 // 로그인 (설계서 §8.4, §8.5, 3단계 시안): GitHub로 계속하기, 또는 로그인된 기기에서 받은 코드.
-// 처음 보는 GitHub 계정이면 서버가 초대 코드 화면(/join)으로 보낸다. GitHub 로그인이 실패하면 서버가 ?auth=로 돌려보낸다.
+// 처음 보는 GitHub 계정이면 서버가 가입 화면(/join)으로 보낸다. GitHub 로그인이 실패하면 서버가 ?auth=로 돌려보낸다.
 
 const AUTH_TEXT: Record<string, string> = {
   denied: 'GitHub 로그인을 취소했어요.',
@@ -69,7 +69,7 @@ export function Login({ github, onDone }: { github: boolean; onDone: (me: Me) =>
               <IconGithub />
               GitHub로 계속하기
             </a>
-            <p className="muted small">GitHub에서는 아이디와 이름만 받아요. 처음이면 확인 뒤 초대 코드를 넣어요.</p>
+            <p className="muted small">GitHub에서는 아이디와 이름만 받아요. 처음이면 확인 뒤 앱에서 불릴 이름만 정하면 돼요.</p>
           </div>
           <p className="auth-or">또는</p>
         </>

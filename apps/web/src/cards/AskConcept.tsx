@@ -1,9 +1,9 @@
 import type { AskResponse, ImportResult, QueueCard } from '@moai/shared';
-import { CREDIT_COST, MONTHLY_CREDITS, creditsLeft } from '@moai/shared/client';
+import { CREDIT_COST, creditsLeft } from '@moai/shared/client';
 import { AnimatePresence } from 'motion/react';
 import * as m from 'motion/react-m';
 import { Fragment, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
-import { JOB_ERROR, aiStatus, forgetAiStatus, waitForJob } from '../ai';
+import { JOB_ERROR, NO_CREDITS_HINT, aiStatus, forgetAiStatus, waitForJob } from '../ai';
 import { RequestError, errorMessage, request } from '../api';
 import { IconArrow } from '../icons';
 import { Mascot } from '../Mascot';
@@ -66,8 +66,7 @@ export function AiNotice({ onDismiss }: { onDismiss: () => void }) {
   return (
     <div className="notice warn ai-notice" role="note">
       <p>
-        <strong>처음 한 번만 알려 드려요.</strong> AI에게 묻는 질문 하나(모의면접 질문, AI 채점도)에 크레딧 {CREDIT_COST.ask}을 써요. 월간 크레딧{' '}
-        {MONTHLY_CREDITS}은 매달 1일에 다시 채워지고, AI 답은 틀릴 수 있어요.
+        <strong>처음 한 번만 알려 드려요.</strong> AI에게 묻는 질문 하나(모의면접 질문, AI 채점도)에 크레딧 {CREDIT_COST.ask}을 써요. 남은 크레딧은 엽전 칩에서 볼 수 있고, AI 답은 틀릴 수 있어요.
       </p>
       <button type="button" className="text-button" onClick={onDismiss}>
         알겠어요
@@ -241,6 +240,7 @@ export function AskChat({ card, mode, picked, ask }: { card: QueueCard; mode: As
             <IconArrow />
           </button>
         </div>
+        {ask.left < CREDIT_COST.ask ? <p className="muted small ask-out">{NO_CREDITS_HINT}</p> : null}
       </form>
     </div>
   );

@@ -1,5 +1,5 @@
 import type { AiStatus, CreditKind, JobView } from '@moai/shared';
-import { CREDIT_COST, MONTHLY_CREDITS, creditsLeft } from '@moai/shared/client';
+import { CREDIT_COST, creditsLeft } from '@moai/shared/client';
 import { request } from './api';
 
 // 서버 LLM 작업 (설계서 §11.3): 요청하면 작업 id를 받고, 끝날 때까지 1.5초마다 확인한다.
@@ -10,7 +10,7 @@ let status: Promise<AiStatus> | null = null;
 export function aiStatus(): Promise<AiStatus> {
   status ??= request<AiStatus>('/ai/status').catch(() => {
     status = null;
-    return { available: false, over_budget: false, credits: { monthly: 0, monthly_total: MONTHLY_CREDITS, held: 0, refill_at: 0 } };
+    return { available: false, over_budget: false, credits: { monthly: 0, monthly_total: 0, held: 0, refill_at: 0 } };
   });
   return status;
 }
@@ -23,6 +23,12 @@ export function forgetAiStatus(): void {
   status = null;
   window.dispatchEvent(new Event(CREDITS_CHANGED));
 }
+
+/** 크레딧이 모자랄 때 덧붙이는 안내 (서버의 noCreditsMessage와 같은 말). 사는 기능은 아직 없다 */
+export const NO_CREDITS_HINT = '충전 기능은 준비 중이에요. 숨은 업적을 달성해 크레딧을 모아 보세요.';
+
+/** 서버 AI를 지금 쓸 수 있다 (설정이 있고 이번 달 한도 전). 크레딧은 따로 본다 */
+export const aiOn = (value: AiStatus): boolean => value.available && !value.over_budget;
 
 /** AI가 켜져 있고 그 일에 쓸 크레딧이 남았다 */
 export const canUseAi = (value: AiStatus, kind: CreditKind): boolean => value.available && !value.over_budget && creditsLeft(value.credits) >= CREDIT_COST[kind];

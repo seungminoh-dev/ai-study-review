@@ -1,5 +1,6 @@
 import type { CreditsResponse } from '@moai/shared';
 import { CREDIT_COST, creditsLeft } from '@moai/shared/client';
+import { NO_CREDITS_HINT } from '../ai';
 import { Coin, Gem } from '../credits';
 import { Loading } from '../Loading';
 import { BackLink, Link } from '../router';
@@ -50,6 +51,8 @@ export function Credits() {
               <p className="hero-sub">지금 쓸 수 있는 크레딧</p>
             </div>
           </section>
+          {/* 월간 크레딧이 없는 회원(초대 없이 가입)은 월간 칸을 그리지 않는다 */}
+          {credits.monthly_total > 0 ? (
           <section className="card" aria-labelledby="credits-monthly-title">
             <div className="card-head">
               <h2 id="credits-monthly-title">월간 크레딧</h2>
@@ -66,6 +69,7 @@ export function Credits() {
               엽전 하나에 {perCoin}. {formatDate(credits.refill_at)}에 다시 가득 차요. 남은 건 다음 달로 넘어가지 않아요.
             </p>
           </section>
+          ) : null}
           <section className="card credits-held" aria-labelledby="credits-held-title">
             <span className="gem-pile" aria-hidden="true">
               {gems === 0 ? <Gem px={4} empty /> : Array.from({ length: gems }, (_, index) => <Gem key={index} px={4} />)}
@@ -75,7 +79,9 @@ export function Credits() {
                 <h2 id="credits-held-title">보유 크레딧</h2>
                 <span className="aside credits-num">{credits.held}</span>
               </div>
-              <p className="muted small">숨은 업적과 선물로 받아요. 사라지지 않고, 월간을 다 쓰면 여기서 써요.</p>
+              <p className="muted small">
+                숨은 업적과 선물로 받아요. {credits.monthly_total > 0 ? '사라지지 않고, 월간을 다 쓰면 여기서 써요.' : '쓰기 전까지 사라지지 않아요.'} {NO_CREDITS_HINT}
+              </p>
             </div>
           </section>
         </div>

@@ -13,6 +13,8 @@ export interface GithubUser {
   id: string;
   login: string;
   name: string | null;
+  /** GitHub 계정이 만들어진 때 (ms). 초대 없이 가입할 때 막 만든 계정을 거른다 */
+  createdAt: number | null;
 }
 
 export function githubConfigured(env: Env): boolean {
@@ -68,7 +70,13 @@ export async function fetchGithubUser(env: Env, code: string, verifier: string):
     },
   });
   if (!userResponse.ok) return null;
-  const user = (await userResponse.json().catch(() => null)) as { id?: unknown; login?: unknown; name?: unknown } | null;
+  const user = (await userResponse.json().catch(() => null)) as { id?: unknown; login?: unknown; name?: unknown; created_at?: unknown } | null;
   if (typeof user?.id !== 'number' || typeof user.login !== 'string') return null;
-  return { id: String(user.id), login: user.login, name: typeof user.name === 'string' && user.name.trim() ? user.name.trim() : null };
+  const createdAt = typeof user.created_at === 'string' ? Date.parse(user.created_at) : Number.NaN;
+  return {
+    id: String(user.id),
+    login: user.login,
+    name: typeof user.name === 'string' && user.name.trim() ? user.name.trim() : null,
+    createdAt: Number.isFinite(createdAt) ? createdAt : null,
+  };
 }

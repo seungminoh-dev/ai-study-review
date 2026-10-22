@@ -1,7 +1,7 @@
 import type { AiStatus, ImportResult, JobView } from '@moai/shared';
 import { CREDIT_COST, MAX_IMPORT_CHARS, creditsLeft } from '@moai/shared/client';
 import { useEffect, useState, type FormEvent } from 'react';
-import { JOB_ERROR, aiStatus, canUseAi, forgetAiStatus } from '../ai';
+import { JOB_ERROR, NO_CREDITS_HINT, aiStatus, canUseAi, forgetAiStatus } from '../ai';
 import { errorMessage, request } from '../api';
 import { BackLink, Link } from '../router';
 import { formatDateTime, useApi } from '../useApi';
@@ -59,7 +59,7 @@ export function Import() {
       {status && (!status.available || status.over_budget) ? <p className="notice warn">지금은 서버 AI를 쓸 수 없어요 (설정이 없거나 이번 달 한도에 닿았어요).</p> : null}
       {status && status.available && !status.over_budget && !canUseAi(status, 'import') ? (
         <p className="notice warn">
-          AI 크레딧이 모자라요 ({CREDIT_COST.import} 필요, 남은 {creditsLeft(status.credits)}). 월간 크레딧은 매달 1일에 다시 채워져요.
+          AI 크레딧이 모자라요 ({CREDIT_COST.import} 필요, 남은 {creditsLeft(status.credits)}). {NO_CREDITS_HINT}
         </p>
       ) : null}
       <form onSubmit={(event) => void submit(event)}>
