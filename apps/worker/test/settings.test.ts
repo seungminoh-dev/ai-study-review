@@ -73,9 +73,21 @@ describe('push subscriptions', () => {
     expect((await api(user, '/push/subscriptions', { method: 'POST', json: { ...subscription, keys: { ...subscription.keys, p256dh: 'AAAA' } } })).status).toBe(400);
   });
 
-  it('only accepts https push endpoints', async () => {
-    const subscription = await fakeSubscription('http://push.example/x');
-    expect((await api(user, '/push/subscriptions', { method: 'POST', json: subscription })).status).toBe(400);
+  it('only accepts https push endpoints of real browser push services', async () => {
+    expect((await api(user, '/push/subscriptions', { method: 'POST', json: await fakeSubscription('http://push.example/x') })).status).toBe(400);
+    // 아무 https 주소를 받으면 서버가 알림을 핑계로 남의 사이트에 요청을 보낸다
+    expect((await api(user, '/push/subscriptions', { method: 'POST', json: await fakeSubscription('https://evil.example/hook') })).status).toBe(400);
+    expect((await api(user, '/push/subscriptions', { method: 'POST', json: await fakeSubscription('https://web.push.apple.com/abc') })).status).toBe(204);
+  });
+
+  it('keeps at most 10 devices per person, dropping the oldest', async () => {
+    for (let i = 0; i < 12; i += 1) {
+      await api(user, '/push/subscriptions', { method: 'POST', json: await fakeSubscription(`https://fcm.googleapis.com/fcm/send/device-${i}`) });
+      await new Promise((resolve) => setTimeout(resolve, 2));
+    }
+    const { results } = await env.DB.prepare('SELECT endpoint FROM push_subscriptions WHERE user_id = ?1').bind(user.id).all<{ endpoint: string }>();
+    expect(results).toHaveLength(10);
+    expect(results.map((row) => row.endpoint)).not.toContain('https://fcm.googleapis.com/fcm/send/device-0');
   });
 
   it('gives the VAPID public key to the app', async () => {

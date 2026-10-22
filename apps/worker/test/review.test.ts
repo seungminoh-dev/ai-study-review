@@ -201,6 +201,23 @@ describe('today and queue', () => {
   });
 });
 
+describe('review limits', () => {
+  it('stops taking answers after 2000 in a day for one person', async () => {
+    await saveExample();
+    const card = await cardOf('deep-copy', 'mcq');
+    const now = Date.now();
+    await env.DB.prepare(
+      `WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 2000)
+       INSERT INTO review_logs (id, user_id, card_id, grade, reviewed_at, prev_card) SELECT 'flood-' || i || '-' || ?3, ?1, ?2, 3, ?3, '{}' FROM n`,
+    )
+      .bind(user.id, card.id, now)
+      .run();
+    const response = await api(user, '/reviews', { method: 'POST', json: { reviews: [answer(card.id, 3)] } });
+    expect(response.status).toBe(429);
+    expect(((await response.json()) as { error: { code: string } }).error.code).toBe('too_many_reviews');
+  });
+});
+
 describe('card ladder', () => {
   async function addLockedCloze() {
     await callTool(await mcpUrl(user), 'save_learning', {

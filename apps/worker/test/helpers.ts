@@ -90,7 +90,7 @@ const b64url = (bytes: ArrayBuffer | Uint8Array) => {
 };
 
 /** 브라우저가 만드는 것과 같은 모양의 푸시 구독 (P-256 공개 키, 16바이트 auth). */
-export async function fakeSubscription(endpoint = `https://push.example/${crypto.randomUUID()}`) {
+export async function fakeSubscription(endpoint = `https://fcm.googleapis.com/fcm/send/${crypto.randomUUID()}`) {
   const pair = (await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits'])) as CryptoKeyPair;
   const raw = (await crypto.subtle.exportKey('raw', pair.publicKey)) as ArrayBuffer;
   return { endpoint, keys: { p256dh: b64url(raw), auth: b64url(crypto.getRandomValues(new Uint8Array(16))) } };

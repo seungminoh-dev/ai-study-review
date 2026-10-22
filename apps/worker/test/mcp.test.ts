@@ -195,6 +195,27 @@ describe('MCP endpoint, raw 2025-era requests', () => {
 });
 
 describe('MCP endpoint, access rules', () => {
+  it('stops saving after 100 saves in a day for one person', async () => {
+    const user = await newUser();
+    const url = await mcpUrl(user);
+    const now = Date.now();
+    await env.DB.batch(
+      Array.from({ length: 100 }, () =>
+        env.DB.prepare("INSERT INTO learning_sessions (id, user_id, source, topic, payload_hash, summary, created_at) VALUES (?1, ?2, 'claude.ai', '많이', ?3, '요약', ?4)").bind(
+          crypto.randomUUID(),
+          user.id,
+          crypto.randomUUID(),
+          now,
+        ),
+      ),
+    );
+    const result = await callTool(url, 'save_learning', example);
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('24시간에 100번까지');
+    // 다른 사람은 그대로 저장한다
+    expect((await callTool(await mcpUrl(await newUser()), 'save_learning', example)).isError).toBeFalsy();
+  });
+
   it('rejects an unknown token with 404', async () => {
     const response = await rpc(`${ORIGIN}/mcp/u/not-a-real-token`, 'tools/list');
     expect(response.status).toBe(404);

@@ -5,6 +5,7 @@ import { countReviewedToday, lastWrong, loadMaterialQueue, loadMistakes, loadRan
 import { recordReviews } from '../domain/reviews';
 import { loadMe } from '../domain/users';
 import { errorJson, readJson } from '../lib/http';
+import { DAY_MS } from '../lib/kst';
 import { listSessions } from './sessions';
 
 // 오늘 화면과 복습 (설계서 §7.2, §9)
@@ -87,9 +88,16 @@ review.get('/queue', async (c) => {
   return c.json(body);
 });
 
+/** 한 사람이 24시간에 보낼 수 있는 답 수. 가입이 열려 있어서(2026-10-22) 자동 요청이 기록을 끝없이 쌓지 못하게 한다. 하루 100장 마라톤의 스무 배다 */
+const MAX_REVIEWS_PER_DAY = 2000;
+
 review.post('/reviews', async (c) => {
   const body = await readJson(c, ReviewsBody);
   if (body instanceof Response) return body;
+  const today = await c.env.DB.prepare('SELECT count(*) AS n FROM review_logs WHERE user_id = ?1 AND reviewed_at > ?2')
+    .bind(c.var.userId, Date.now() - DAY_MS)
+    .first<number>('n');
+  if ((today ?? 0) >= MAX_REVIEWS_PER_DAY) return errorJson(429, 'too_many_reviews', '오늘은 답을 너무 많이 보냈어요. 내일 다시 보낼게요.');
   const valid: ReviewItem[] = [];
   for (const item of body.reviews) {
     const parsed = ReviewItem.safeParse(item);

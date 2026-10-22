@@ -21,16 +21,33 @@ settings.put('/reminders', async (c) => {
 
 settings.get('/push/config', (c) => c.json({ vapid_public_key: c.env.VAPID_PUBLIC_KEY }));
 
+/**
+ * 브라우저 푸시 서비스 주소만 받는다 (2026-10-22). 가입이 열려 있어서, 아무 https 주소나 받으면 알림을 핑계로 서버가 남의 사이트에 요청을 보내게 된다.
+ * Chrome·Edge·Samsung(FCM), Firefox(Mozilla), Safari(Apple), Windows의 Edge(WNS)
+ */
+const PUSH_HOSTS = new Set(['fcm.googleapis.com', 'android.googleapis.com', 'web.push.apple.com']);
+const PUSH_HOST_SUFFIXES = ['.push.services.mozilla.com', '.push.apple.com', '.notify.windows.com'];
+const isPushService = (endpoint: string) => {
+  const host = new URL(endpoint).hostname;
+  return PUSH_HOSTS.has(host) || PUSH_HOST_SUFFIXES.some((suffix) => host.endsWith(suffix));
+};
+/** 한 사람이 둘 수 있는 알림 구독(기기) 수. 넘으면 오래된 것부터 지운다 */
+const MAX_SUBSCRIPTIONS = 10;
+
 settings.post('/push/subscriptions', async (c) => {
   const body = await readJson(c, PushSubscriptionBody);
   if (body instanceof Response) return body;
+  if (!isPushService(body.endpoint)) return errorJson(400, 'push_service', '이 브라우저의 알림 서비스는 쓸 수 없어요.');
   // 같은 기기(endpoint)가 다시 구독하면 키와 주인을 바꾼다
-  await c.env.DB.prepare(
-    `INSERT INTO push_subscriptions (id, user_id, endpoint, p256dh, auth, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
-     ON CONFLICT (endpoint) DO UPDATE SET user_id = excluded.user_id, p256dh = excluded.p256dh, auth = excluded.auth, fail_count = 0`,
-  )
-    .bind(crypto.randomUUID(), c.var.userId, body.endpoint, body.keys.p256dh, body.keys.auth, Date.now())
-    .run();
+  await c.env.DB.batch([
+    c.env.DB.prepare(
+      `INSERT INTO push_subscriptions (id, user_id, endpoint, p256dh, auth, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+       ON CONFLICT (endpoint) DO UPDATE SET user_id = excluded.user_id, p256dh = excluded.p256dh, auth = excluded.auth, fail_count = 0`,
+    ).bind(crypto.randomUUID(), c.var.userId, body.endpoint, body.keys.p256dh, body.keys.auth, Date.now()),
+    c.env.DB.prepare(
+      'DELETE FROM push_subscriptions WHERE user_id = ?1 AND id NOT IN (SELECT id FROM push_subscriptions WHERE user_id = ?1 ORDER BY created_at DESC LIMIT ?2)',
+    ).bind(c.var.userId, MAX_SUBSCRIPTIONS),
+  ]);
   return c.body(null, 204);
 });
 
