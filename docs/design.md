@@ -397,6 +397,7 @@ docs/
 | `TOKEN_PEPPER` | secret | 1 | 토큰 해시용 HMAC 키 |
 | `BOOTSTRAP_CODE` | secret | 1 | 오너 계정을 한 번 만들 때만 쓴다 |
 | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | secret | 1.5 | GitHub OAuth 앱 (§8.4). 둘 다 없으면 로그인 화면에서 GitHub 버튼을 감춘다. ID는 비밀이 아니지만 코드 수정 없이 넣으려고 secret으로 둔다 |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | secret | 2026-10-22 | Google OAuth 클라이언트 (§8.4, openid만). 둘 다 없으면 Google 버튼을 감춘다 |
 | `ANTHROPIC_API_KEY` | secret | 2 | 내 Console API 키 |
 | `GRADER_MODEL` | secret | 2 | 채점·가져오기에 쓸 모델 ID (§11.1). 코드에 기본값이 없다. `ANTHROPIC_API_KEY`와 둘 다 있어야 서버 AI가 켜진다 |
 | `LLM_MONTHLY_CAP_USD` | var (선택) | 2 | 서비스 전체 한 달 한도. 코드 기본 90. 사람마다는 AI 크레딧(§11.8) |
@@ -956,6 +957,14 @@ export const SaveLearningInput = z.object({
    - `intent=login`, 아는 GitHub: 세션을 만들고 `/`로 보낸다.
    - `intent=login`, 처음 보는 GitHub: `pending_signups`에 GitHub 정보를 30분 동안 두고, 브라우저에는 `__Host-moai-join` 토큰 쿠키만 준다. `/join`으로 보낸다.
 4. 오류는 화면 주소로 알린다: `/?auth=denied|expired|failed|unavailable`, `/settings?github=linked|taken|...`.
+
+**Google 로그인** (2026-10-22, `src/auth/google.ts`): GitHub와 같은 경로(`/api/auth/:provider/start|callback`)와 같은 가입·잇기·복구를 쓴다.
+
+1. scope는 `openid`만이다. 이메일, 이름, 사진은 받지 않고 계정 식별 번호(sub)로 찾는다. `user_identities.login`은 ''다. 가입 화면 이름은 비어서 나온다.
+2. state 쿠키에 로그인 방법을 함께 넣어(`google.login.<state>.<verifier>`) 다른 방법의 콜백에서는 받지 않는다. PKCE S256을 쓰고, nonce는 state와 같은 값이다.
+3. 토큰 엔드포인트가 TLS로 바로 주는 ID 토큰은 서명 대신 `iss`(accounts.google.com), `aud`(내 client id), `exp`, `nonce`를 확인한다 (OIDC Core 3.1.3.7).
+4. 초대 없이 가입할 때 Google은 계정 만든 때를 주지 않아 나이 확인 없이 GitHub와 합친 하루 30명 한도만 쓴다.
+5. 한 사람에 GitHub 하나, Google 하나까지 이을 수 있다(`user_identities (user_id, provider)` 유일). 0018에서 두 테이블의 provider CHECK를 바꾸려고 테이블을 다시 만들었다.
 
 **초대 코드**
 

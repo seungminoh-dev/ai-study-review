@@ -1,5 +1,5 @@
 import { DemoDeck } from '../cards/DemoDeck';
-import { IconGithub, IconGrowth, IconHistory, IconMap, IconOffline } from '../icons';
+import { IconGithub, IconGoogle, IconGrowth, IconHistory, IconMap, IconOffline } from '../icons';
 import { Mascot, type Mood } from '../Mascot';
 import { Link } from '../router';
 
@@ -7,6 +7,7 @@ import { Link } from '../router';
 // 휴대폰은 한 줄로 쌓고, 컴퓨터는 첫 화면을 두 칸(글 · 휴대폰 속 복습 장면)으로 나눈다 (styles.css의 .landing).
 
 const GITHUB_START = '/api/auth/github/start';
+const GOOGLE_START = '/api/auth/google/start';
 
 const STEPS: { mood: Mood; title: string; text: string }[] = [
   { mood: 'claude', title: 'Claude와 공부해요', text: '평소처럼 묻고 답하다가 끝에 "모아이에 저장해줘"라고 해요. PDF도 카드로 만들 수 있어요.' },
@@ -27,10 +28,15 @@ function scrollToSection(id: string) {
   document.getElementById(id)?.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto', block: 'start' });
 }
 
-export function Landing({ github }: { github: boolean }) {
-  // GitHub 로그인이 서버에 없으면 로그인 코드로만 들어온다
+export function Landing({ github, google }: { github: boolean; google: boolean }) {
+  // 처음 가입은 Google을 먼저 권한다. GitHub·Google 로그인이 서버에 없으면 로그인 코드로만 들어온다
   const start = (className: string) =>
-    github ? (
+    google ? (
+      <a className={className} href={GOOGLE_START}>
+        <IconGoogle />
+        Google로 시작하기
+      </a>
+    ) : github ? (
       <a className={className} href={GITHUB_START}>
         <IconGithub />
         GitHub로 시작하기
@@ -57,9 +63,9 @@ export function Landing({ github }: { github: boolean }) {
           <Link className="landing-link" href="/login">
             로그인
           </Link>
-          {github ? (
-            <a className="button primary landing-top-cta wide-only" href={GITHUB_START}>
-              GitHub로 시작하기
+          {google || github ? (
+            <a className="button primary landing-top-cta wide-only" href={google ? GOOGLE_START : GITHUB_START}>
+              {google ? 'Google로' : 'GitHub로'} 시작하기
             </a>
           ) : null}
         </nav>
@@ -80,14 +86,20 @@ export function Landing({ github }: { github: boolean }) {
           </h1>
           <p className="landing-lede">클로드에서 공부하고 "모아이에 저장해줘"라고 말하세요. 개념과 내 오답을 카드로 만들어, 잊을 때쯤 2~3분씩 다시 보여 줘요.</p>
           <div className="landing-ctas">
-            {start('button primary')}
-            {github ? (
+            {start(google ? 'button' : 'button primary')}
+            {google && github ? (
+              <a className="button primary" href={GITHUB_START}>
+                <IconGithub />
+                GitHub로 시작하기
+              </a>
+            ) : null}
+            {google || github ? (
               <Link className="button" href="/login">
                 로그인 코드가 있어요
               </Link>
             ) : null}
           </div>
-          <p className="muted small">GitHub 계정만 있으면 가입할 수 있어요. 광고도, 다른 회사로 보내는 추적도 없어요.</p>
+          <p className="muted small">{google ? 'Google이나 ' : ''}GitHub 계정만 있으면 가입할 수 있어요. 광고도, 다른 회사로 보내는 추적도 없어요.</p>
         </div>
         <PhoneScene />
       </section>

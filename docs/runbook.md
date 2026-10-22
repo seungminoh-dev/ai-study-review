@@ -124,6 +124,30 @@ npx wrangler secret put GITHUB_CLIENT_SECRET  # client secret
 - 알림 권한은 앱을 지우면 같이 사라진다. 설정 → **이 기기에서 알림 켜기**를 다시 누른다.
 - 제스처 내비게이션(설정 → 디스플레이 → 내비게이션 바 → 스와이프 제스처)은 바가 투명해서 이 문제가 없다.
 
+## 1.6. Google 로그인 켜기 (한 번만)
+
+`0018_google_login.sql`은 배포할 때 🤖 자동으로 들어간다. Google에서는 `openid`만 받아 계정 식별 번호(sub)만 읽는다. 민감 범위가 아니라 Google 검수는 필요 없다. 브랜드 확인을 받기 전에는 동의 화면에 앱 이름 대신 도메인이 보인다.
+
+### 1.6-1. OAuth 클라이언트 만들기 (🙋 직접, console.cloud.google.com)
+
+1. 새 프로젝트 `moai`를 만든다.
+2. **Google Auth Platform**(API 및 서비스 → OAuth 동의 화면) → 시작하기: 앱 이름 `모아이`, 지원 이메일, 대상 **외부**, 연락처 이메일.
+3. **브랜딩**: 앱 홈페이지 `https://moai.smoh.dev`, 개인정보처리방침 `https://moai.smoh.dev/privacy`, 서비스 약관 `https://moai.smoh.dev/terms`, 승인된 도메인 `smoh.dev`.
+4. **데이터 액세스**: 범위를 더하지 않는다 (`openid`는 기본이다).
+5. **대상** → **앱 게시**로 프로덕션에 올린다. 테스트 상태로 두면 테스트 사용자만 로그인한다.
+6. **클라이언트** → 클라이언트 만들기 → 웹 애플리케이션, 승인된 리디렉션 URI `https://moai.smoh.dev/api/auth/google/callback`. 자바스크립트 원본은 비운다.
+7. 클라이언트 ID와 클라이언트 보안 비밀을 복사한다. 보안 비밀은 만들 때만 보일 수 있다.
+
+### 1.6-2. secret 넣기 (🙋 직접, 로컬 터미널)
+
+```bash
+cd apps/worker
+npx wrangler secret put GOOGLE_CLIENT_ID
+npx wrangler secret put GOOGLE_CLIENT_SECRET
+```
+
+넣는 즉시 반영된다. 둘 다 넣기 전에는 Google 버튼이 나오지 않는다. 넣은 뒤 설정 → 계정 · 다른 기기 → **Google 연결**로 내 계정에 이어 두면 Google로도 로그인한다.
+
 ---
 
 ## 2. MVP 2 켜기 (한 번만)
@@ -249,12 +273,12 @@ openssl enc -aes-256-cbc -pbkdf2 -salt -in ~/moai-backups/moai-$(date +%F).sql -
 
 ### 친구가 기기를 다 잃었을 때
 
-설정 → 초대 → 종류에서 **기기 복구: 이름**을 고르고 코드를 만들어 보낸다(24시간 유효). 친구가 GitHub로 계속한 뒤 그 코드를 넣으면 원래 계정으로 들어가고, 잃어버린 기기의 로그인·커넥터 URL·알림은 끊긴다.
+설정 → 초대 → 종류에서 **기기 복구: 이름**을 고르고 코드를 만들어 보낸다(24시간 유효). 친구가 GitHub나 Google로 계속한 뒤 그 코드를 넣으면 원래 계정으로 들어가고(같은 종류의 예전 연결만 바뀐다), 잃어버린 기기의 로그인·커넥터 URL·알림은 끊긴다.
 기기 하나만 잃었고 다른 기기가 남아 있으면, 남은 기기에서 설정 → 계정 → **다른 기기 모두 로그아웃**을 누르게 하면 된다.
 
 ### 초대 없이 가입한 회원에게 월간 크레딧을 줄 때
 
-초대 없이 가입하면 월간 크레딧이 0이다. 한 번 크레딧을 주려면 설정 → 관리 → AI 크레딧 주기(보유 크레딧). 매달 받게 하려면 운영 D1에서 그 사람의 `users.monthly_credits`를 500으로 바꾼다(🙋 직접, 쓰기라 id를 두 번 확인한다). 초대 없는 가입 수(24시간 30명)와 GitHub 계정 나이(30일)는 `apps/worker/src/api/auth.ts`의 상수다.
+초대 없이 가입하면 월간 크레딧이 0이다. 한 번 크레딧을 주려면 설정 → 관리 → AI 크레딧 주기(보유 크레딧). 매달 받게 하려면 운영 D1에서 그 사람의 `users.monthly_credits`를 500으로 바꾼다(🙋 직접, 쓰기라 id를 두 번 확인한다). 초대 없는 가입 수(GitHub·Google 합쳐 24시간 30명)와 GitHub 계정 나이(30일, Google은 보지 않는다)는 `apps/worker/src/api/auth.ts`의 상수다.
 
 ### 회원 계정이 털렸을 때 (또는 이용을 멈춰야 할 때)
 
@@ -269,8 +293,9 @@ openssl enc -aes-256-cbc -pbkdf2 -salt -in ~/moai-backups/moai-$(date +%F).sql -
 
 | 값 | 바꾸는 법 | 바꾸면 생기는 일 |
 |---|---|---|
-| `TOKEN_PEPPER` | `npm run gen:token`으로 만들어 `secret put` | 모든 로그인, 로그인 코드, 초대 코드, 비밀 커넥터 URL이 한꺼번에 무효가 된다. 다들 GitHub로 다시 로그인하고 비밀 URL은 다시 만든다. OAuth 연결은 그대로다 |
+| `TOKEN_PEPPER` | `npm run gen:token`으로 만들어 `secret put` | 모든 로그인, 로그인 코드, 초대 코드, 비밀 커넥터 URL이 한꺼번에 무효가 된다. 다들 GitHub·Google로 다시 로그인하고 비밀 URL은 다시 만든다. OAuth 연결은 그대로다 |
 | `GITHUB_CLIENT_SECRET` | GitHub → Developer settings → OAuth Apps → 모아이 → 새 client secret → `secret put` → 옛 비밀 지우기 | 없음 |
+| `GOOGLE_CLIENT_SECRET` | Google Auth Platform → 클라이언트 → 모아이 → 보안 비밀 추가 → `secret put` → 옛 비밀 사용 중지·삭제 | 없음 |
 | `VAPID_PRIVATE_KEY` | `npm run gen:vapid` → 개인 키는 `secret put`, 공개 키는 `wrangler.jsonc`의 `VAPID_PUBLIC_KEY`에 넣어 push | 기존 알림 구독은 몇 번 실패한 뒤 지워진다. 오늘 화면의 "알림이 꺼졌어요"를 보고 각자 다시 켠다 |
 | `ANTHROPIC_API_KEY` | Console에서 새 키 → `secret put` → 옛 키 지우기 | 없음 |
 | `BOOTSTRAP_CODE` | `npm run gen:token` → `secret put` | 없음 (오너가 있으면 설정 API는 이미 410이다) |

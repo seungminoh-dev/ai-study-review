@@ -34,6 +34,8 @@ describe('migration upgrade', () => {
       .prepare("INSERT INTO invites (id, code_hash, label, created_by, created_at, expires_at) VALUES (?1, ?2, '친구', ?3, ?4, ?5)")
       .bind(crypto.randomUUID(), crypto.randomUUID(), userId, now, now + 86_400_000)
       .run();
+    await db.prepare("INSERT INTO user_identities (provider, subject, user_id, login, created_at) VALUES ('github', '1', ?1, 'octo', ?2)").bind(userId, now).run();
+    await db.prepare("INSERT INTO pending_signups (token_hash, provider, subject, login, expires_at) VALUES ('hash', 'github', '2', 'newbie', ?1)").bind(now + 60_000).run();
     const saved = await saveLearning(upgradeEnv, userId, SaveLearningInput.parse(example), now);
     expect(saved.ok).toBe(true);
     const { results: cards } = await db.prepare("SELECT id FROM cards WHERE user_id = ?1 AND status = 'active'").bind(userId).all<{ id: string }>();

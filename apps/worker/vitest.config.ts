@@ -28,6 +28,8 @@ export default defineConfig(async () => {
             BOOTSTRAP_CODE: 'test-bootstrap-code',
             GITHUB_CLIENT_ID: 'test-github-client',
             GITHUB_CLIENT_SECRET: 'test-github-secret',
+            GOOGLE_CLIENT_ID: 'test-google-client',
+            GOOGLE_CLIENT_SECRET: 'test-google-secret',
             ANTHROPIC_API_KEY: 'test-anthropic-key',
             GRADER_MODEL: 'test-grader',
             VAPID_PUBLIC_KEY: vapid.publicKey,

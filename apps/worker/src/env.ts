@@ -20,6 +20,9 @@ export interface Env {
   /** secret. GitHub OAuth 앱 (설계서 §8.4). 둘 다 없으면 GitHub 로그인을 감춘다 */
   GITHUB_CLIENT_ID?: string;
   GITHUB_CLIENT_SECRET?: string;
+  /** secret. Google OAuth 클라이언트 (openid만). 둘 다 없으면 Google 로그인을 감춘다 */
+  GOOGLE_CLIENT_ID?: string;
+  GOOGLE_CLIENT_SECRET?: string;
   /** secret. 서버 LLM용 내 Console API 키 (설계서 §11.1). 없으면 AI 채점과 가져오기를 감춘다 */
   ANTHROPIC_API_KEY?: string;
   /** secret. 채점·가져오기에 쓸 모델 ID */

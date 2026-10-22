@@ -1,8 +1,9 @@
-import type { AuthOptions, BetaMetrics, CreditAdminRow, InviteSummary, LoginCode, LoginSummary, McpTokenStatus, Me, MemberSummary, Reminder, UsageReport } from '@moai/shared';
+import type { AuthOptions, BetaMetrics, LoginProvider, CreditAdminRow, InviteSummary, LoginCode, LoginSummary, McpTokenStatus, Me, MemberSummary, Reminder, UsageReport } from '@moai/shared';
 import { MAX_REMINDERS } from '@moai/shared/client';
 import { useEffect, useState, type FormEvent } from 'react';
 import { RequestError, errorMessage, request } from '../api';
 import { COACH_INSTRUCTIONS } from '../coach';
+import { IconGoogle } from '../icons';
 import { forgetAiStatus } from '../ai';
 import { copyText } from '../copy';
 import { clearDeviceData, flushReviews, pendingCount } from '../offline/store';
@@ -329,25 +330,37 @@ function CoachSection() {
   );
 }
 
-const GITHUB_TEXT: Record<string, { text: string; tone: 'good' | 'bad' }> = {
-  linked: { text: 'GitHub를 연결했어요. 이제 다른 기기에서 GitHub로 로그인할 수 있어요.', tone: 'good' },
-  taken: { text: '이 GitHub 계정은 이미 다른 모아이 계정에 연결되어 있어요.', tone: 'bad' },
-  denied: { text: 'GitHub 연결을 취소했어요.', tone: 'bad' },
-  expired: { text: '연결 시간이 지났어요. 다시 해 주세요.', tone: 'bad' },
-  failed: { text: 'GitHub에서 계정 정보를 받지 못했어요. 잠시 뒤에 다시 해 주세요.', tone: 'bad' },
+const LINK_TEXT: Record<LoginProvider, Record<string, { text: string; tone: 'good' | 'bad' }>> = {
+  github: {
+    linked: { text: 'GitHub를 연결했어요. 이제 다른 기기에서 GitHub로 로그인할 수 있어요.', tone: 'good' },
+    taken: { text: '이 GitHub 계정은 이미 다른 모아이 계정에 연결되어 있어요.', tone: 'bad' },
+    denied: { text: 'GitHub 연결을 취소했어요.', tone: 'bad' },
+    expired: { text: '연결 시간이 지났어요. 다시 해 주세요.', tone: 'bad' },
+    failed: { text: 'GitHub에서 계정 정보를 받지 못했어요. 잠시 뒤에 다시 해 주세요.', tone: 'bad' },
+  },
+  google: {
+    linked: { text: 'Google 계정을 연결했어요. 이제 다른 기기에서 Google로 로그인할 수 있어요.', tone: 'good' },
+    taken: { text: '이 Google 계정은 이미 다른 모아이 계정에 연결되어 있어요.', tone: 'bad' },
+    denied: { text: 'Google 연결을 취소했어요.', tone: 'bad' },
+    expired: { text: '연결 시간이 지났어요. 다시 해 주세요.', tone: 'bad' },
+    failed: { text: 'Google에서 계정 확인을 받지 못했어요. 잠시 뒤에 다시 해 주세요.', tone: 'bad' },
+  },
 };
 
 function AccountSection({ me, onLogout }: { me: Me; onLogout: () => void }) {
   const { data: options } = useApi<AuthOptions>('/auth/options');
   const { query } = useLocation();
-  const [result] = useState(() => GITHUB_TEXT[query.get('github') ?? '']);
+  const linked = [me.github_login ? `GitHub @${me.github_login}` : null, me.google_linked ? 'Google' : null].filter(Boolean);
+  const signIn = [me.github_login ? 'GitHub' : null, me.google_linked ? 'Google' : null].filter(Boolean).join('나 ');
+  const canLink = (['google', 'github'] as const).filter((provider) => options?.[provider] && !(provider === 'github' ? me.github_login : me.google_linked));
+  const [result] = useState(() => LINK_TEXT.github[query.get('github') ?? ''] ?? LINK_TEXT.google[query.get('google') ?? '']);
   const [code, setCode] = useState<LoginCode | null>(null);
   const [message, setMessage] = useState<{ text: string; tone: 'good' | 'bad' } | null>(null);
 
   useEffect(() => {
     // 새로 고침해도 같은 안내가 다시 나오지 않게 주소에서 뺀다
     // 기록 깊이(history.state)는 그대로 둔다. 지우면 뒤로가기 규칙이 깨진다
-    if (query.has('github')) history.replaceState(history.state, '', '/settings');
+    if (query.has('github') || query.has('google')) history.replaceState(history.state, '', '/settings');
   }, [query]);
 
   const issue = async () => {
@@ -381,19 +394,27 @@ function AccountSection({ me, onLogout }: { me: Me; onLogout: () => void }) {
       <h2>계정 · 다른 기기</h2>
       {result ? <Status text={result.text} tone={result.tone} /> : null}
       <p className="small">
-        {me.display_name} · {me.github_login ? `GitHub @${me.github_login}` : 'GitHub 연결 안 됨'}
+        {me.display_name} · {linked.length ? `${linked.join(', ')} 연결됨` : 'GitHub·Google 연결 안 됨'}
       </p>
-      {me.github_login ? (
-        <p className="muted small">컴퓨터나 새 휴대폰에서 {location.host}를 열고 "GitHub로 계속하기"를 누르면 이 계정으로 로그인돼요.</p>
-      ) : options?.github ? (
-        <>
-          <p className="muted small">GitHub를 연결해 두면 컴퓨터나 새 휴대폰에서 GitHub로 바로 로그인해요.</p>
-          <div className="actions">
+      {linked.length ? (
+        <p className="muted small">컴퓨터나 새 휴대폰에서 {location.host}를 열고 "{signIn}로 계속하기"를 누르면 이 계정으로 로그인돼요.</p>
+      ) : canLink.length ? (
+        <p className="muted small">GitHub나 Google을 연결해 두면 컴퓨터나 새 휴대폰에서 바로 로그인해요.</p>
+      ) : null}
+      {canLink.length ? (
+        <div className="actions">
+          {canLink.includes('google') ? (
+            <a className="button" href="/api/auth/google/start?intent=link">
+              <IconGoogle />
+              Google 연결
+            </a>
+          ) : null}
+          {canLink.includes('github') ? (
             <a className="button primary" href="/api/auth/github/start?intent=link">
               GitHub 연결
             </a>
-          </div>
-        </>
+          ) : null}
+        </div>
       ) : null}
       {code ? (
         <div className="secret">
@@ -495,7 +516,7 @@ function InviteSection() {
 
   // 코드는 링크에 넣지 않는다. 받은 사람이 앱 안에서 직접 입력한다 (설계서 §8.4)
   const shareText = created
-    ? `모아이 초대 코드: ${created.code}\n${location.origin} 을 Chrome이나 Safari로 열어서(카톡 안에서는 설치와 알림이 안 돼요) "GitHub로 계속하기"를 누른 뒤 이 코드를 넣어 주세요. ${created.recovery ? '24시간' : '7일'} 동안 한 번 쓸 수 있어요.`
+    ? `모아이 초대 코드: ${created.code}\n${location.origin} 을 Chrome이나 Safari로 열어서(카톡 안에서는 설치와 알림이 안 돼요) GitHub나 Google로 로그인한 뒤 이 코드를 넣어 주세요. ${created.recovery ? '24시간' : '7일'} 동안 한 번 쓸 수 있어요.`
     : '';
 
   return (

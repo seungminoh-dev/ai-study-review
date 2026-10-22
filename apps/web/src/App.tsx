@@ -60,7 +60,7 @@ const LATER = [Review, Sessions, SessionDetail, MapScreen, Concept, Growth, Impo
 const Legal = lazyScreen(() => import('./screens/Legal').then((module) => module.Legal));
 const legalDoc = (path: string) => (path === '/privacy' ? 'privacy' : path === '/terms' ? 'terms' : null);
 
-type Auth = { state: 'loading' } | { state: 'in'; me: Me } | { state: 'setup' } | { state: 'out'; github: boolean } | { state: 'error'; message: string };
+type Auth = { state: 'loading' } | { state: 'in'; me: Me } | { state: 'setup' } | { state: 'out'; github: boolean; google: boolean } | { state: 'error'; message: string };
 
 const ME_KEY = 'moai:me';
 
@@ -164,8 +164,8 @@ async function loggedOut(): Promise<Auth> {
   rememberMe(null);
   forgetSeenBadges();
   forgetMaterial();
-  const options = await request<AuthOptions>('/auth/options').catch((): AuthOptions => ({ setup_available: false, github: false }));
-  return options.setup_available ? { state: 'setup' } : { state: 'out', github: options.github };
+  const options = await request<AuthOptions>('/auth/options').catch((): AuthOptions => ({ setup_available: false, github: false, google: false }));
+  return options.setup_available ? { state: 'setup' } : { state: 'out', github: options.github, google: options.google };
 }
 
 /** 인터넷에 연결되어 있는지. 기기가 알려 주는 값이라 연결은 됐는데 서버가 안 되는 경우는 모른다 */
@@ -279,17 +279,17 @@ export function App() {
         </Bare>
       );
     }
-    // 서버는 GitHub 로그인이 실패하면 첫 화면(?auth=)으로 돌려보낸다. 그때는 이유와 함께 로그인 화면을 보여 준다
+    // 서버는 GitHub·Google 로그인이 실패하면 첫 화면(?auth=)으로 돌려보낸다. 그때는 이유와 함께 로그인 화면을 보여 준다
     if (path === '/' && !query.has('auth')) {
       return (
         <main className="app landing-main">
-          <Landing github={auth.github} />
+          <Landing github={auth.github} google={auth.google} />
         </main>
       );
     }
     return (
       <Bare>
-        <Login github={auth.github} onDone={(me) => signedIn(me)} />
+        <Login github={auth.github} google={auth.google} onDone={(me) => signedIn(me)} />
       </Bare>
     );
   }

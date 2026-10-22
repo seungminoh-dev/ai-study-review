@@ -9,3 +9,6 @@ VAPID_PUBLIC_KEY=
 # GitHub 로그인을 로컬에서 시험할 때만. 콜백 주소가 http://localhost:8787/api/auth/github/callback인 OAuth 앱을 따로 만든다
 GITHUB_CLIENT_ID=
 GITHUB_CLIENT_SECRET=
+# Google 로그인을 로컬에서 시험할 때만. OAuth 클라이언트의 승인된 리디렉션 URI에 http://localhost:8787/api/auth/google/callback을 넣는다
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=

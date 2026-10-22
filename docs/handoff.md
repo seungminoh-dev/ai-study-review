@@ -152,7 +152,7 @@
 - 커밋·push는 사용자가 요청할 때 한다. **PR 없이 `main`에 바로** 올린다 (PR은 요청할 때만). push 뒤에는 CI·Deploy 결과와 운영 확인 결과를 알려 준다.
 - 디자인을 바꿀 때는 **시안부터** 보여 주고 승인받는다 (§4의 캔버스).
 - 비밀값:
-  - `TOKEN_PEPPER`, `BOOTSTRAP_CODE`, `VAPID_PRIVATE_KEY`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `ANTHROPIC_API_KEY`, `GRADER_MODEL`은 `wrangler secret put`으로만 넣는다. 레포·로그·채팅에 남기지 않는다.
+  - `TOKEN_PEPPER`, `BOOTSTRAP_CODE`, `VAPID_PRIVATE_KEY`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `ANTHROPIC_API_KEY`, `GRADER_MODEL`은 `wrangler secret put`으로만 넣는다. 레포·로그·채팅에 남기지 않는다.
   - `.dev.vars`는 gitignore돼 있다. 커밋하지 않는다.
   - 서버 Anthropic 키는 브라우저와 로그로 절대 보내지 않는다.
   - 토큰·코드는 `HMAC(TOKEN_PEPPER)` 해시로만 저장하고 로그에 남기지 않는다.
@@ -169,7 +169,8 @@
 - **모션**: 사라짐·레이아웃·스프링만 Motion, 나머지는 CSS. 동작 줄이기를 켜면 자리를 옮기는 움직임만 멈추고 투명도와 깜빡임은 남긴다. 새 움직임 CSS는 `@media (prefers-reduced-motion: no-preference)` 안에 둔다.
 - **글꼴**: 앱은 Pretendard. 캔버스 시안은 Google Fonts만 쓸 수 있어서 Noto Sans KR + 숫자 배지에 Silkscreen이다.
 - **복습 간격 (2026-10-21)**: FSRS 분 단위 학습 단계를 껐다(`enable_short_term: false`). 맞혀도 10분 뒤로 잡혀 다음 복습의 맨 앞을 채워서 같은 문제만 나왔다. 오늘 큐는 푼 카드 2장마다 새 카드 1장을 섞는다. 복습 알림의 '흔들리는 개념'은 마지막 답이 틀린 카드에서 고른다. 열린 자료 설명하기 카드도 오늘 복습에 넣고, 맞혀도 '어려움'이 되는 기준은 30초로 늘렸다(15초일 때 답의 17%가 시간 때문에 어려움). 다음 단계는 아래 단계를 한 번씩 '맞음'으로 맞히면 열고(안정도 2일), 같은 개념이면 윗단계 카드를 먼저 낸다. 설명하기까지 다 맞히면 3일째, 세 번에 한 번 어려움이면 6일째에 나온다(예전 9일, 21일). 운영 데이터(2026-10-21): 설명하기 44장이 모두 잠겨 있었다.
-- **초대 없이 가입 (2026-10-22)**: 초대 코드는 선택이다. 비우면 월간 크레딧 0(`users.monthly_credits`, 0017, 자동 충전 없음)이고 숨은 업적·운영자 지급으로만 크레딧을 받는다. 화면에 '무료' 표시는 없다. 막 만든 GitHub 계정(30일 미만)은 초대가 필요하고, 초대 없는 가입은 24시간에 30명까지다. 같이 넣은 한도: 저장 24시간 100번, 답 24시간 2000개, 알림 구독은 브라우저 푸시 서비스 주소만·한 사람 10개. 크레딧 부족 안내는 "충전 기능은 준비 중이에요. 숨은 업적을 달성해 크레딧을 모아 보세요." 약관 시행일 2026-10-22. 다음 로그인 후보는 Google(openid만, 검수 없음)과 카카오(회원번호·닉네임은 검수 없이 가능, PKCE 없음)다.
+- **초대 없이 가입 (2026-10-22)**: 초대 코드는 선택이다. 비우면 월간 크레딧 0(`users.monthly_credits`, 0017, 자동 충전 없음)이고 숨은 업적·운영자 지급으로만 크레딧을 받는다. 화면에 '무료' 표시는 없다. 막 만든 GitHub 계정(30일 미만)은 초대가 필요하고, 초대 없는 가입은 24시간에 30명까지다. 같이 넣은 한도: 저장 24시간 100번, 답 24시간 2000개, 알림 구독은 브라우저 푸시 서비스 주소만·한 사람 10개. 크레딧 부족 안내는 "충전 기능은 준비 중이에요. 숨은 업적을 달성해 크레딧을 모아 보세요." 약관 시행일 2026-10-22. 다음 로그인 후보는 카카오(회원번호·닉네임은 검수 없이 가능, PKCE 없음)다.
+- **Google 로그인 (2026-10-22)**: openid만 받아 sub로 찾는다(`auth/google.ts`, 0018). GitHub와 같은 `/api/auth/:provider/*` 경로·가입·잇기·복구를 쓴다. 초대 없는 가입은 계정 나이 확인 없이 GitHub와 합친 하루 30명 한도다. 로그인·첫 화면은 Google을 먼저 보인다. `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`이 없으면 버튼이 숨는다([운영 가이드 1.6](runbook.md#16-google-로그인-켜기-한-번만)).
 - **오늘 화면 머리 그림 (2026-10-22)**: 기기 시계로 아침(5~11시)·낮(11~17시)·저녁(17~21시)·밤(그 밖)에 따라 하늘색과 해·달이 바뀐다(`Today.tsx`의 `dayPart`, 클래스 `sky-*`). 밝은 화면에서만 하늘·언덕 색을 바꾸고(`light-dark()`, 모르는 브라우저는 예전 하늘), 어두운 화면은 밤하늘에 해·달만 바뀐다. `.day`는 연속 달력 칸 클래스라 쓰지 않는다.
 - **모의면접 시작 화면 (2026-10-21)**: 추천 주제 카드, 직접 고르기(기록 없는 주제도 가능), 난이도 3단계, 깊이 3단계(3·6·10문, 최대 4·7·11크레딧)를 고르고 시작한다. 시안 없이 바로 만들었다(사용자: 디자인은 나중에 고친다).
 - **키보드 (2026-10-21)**: viewport에 `interactive-widget=resizes-content`를 둬서 Android Chrome에서 키보드가 뜨면 화면이 키보드 위까지 줄어든다. 아래에 붙은 입력칸(개념 물어보기 시트, 모의 면접 답)과 버튼 줄이 키보드에 가리지 않는다. 휴대폰에서 글자 입력칸에 포커스가 있으면 아래 탭을 숨긴다(`:has(...:focus)`). iOS는 이 값을 무시해서 예전 그대로다. 필요해지면 visualViewport로 키보드 높이를 재서 옮긴다.
@@ -221,7 +222,7 @@
 
 ## 7. 코드 읽기 전에 알아 둘 규칙
 
-- **인증**: 오너 1명(`/setup`) + GitHub OAuth와 초대 코드 가입. 다른 기기는 GitHub나 10분짜리 로그인 코드로 들어온다. `/api/*`의 GET이 아닌 요청은 `Origin === APP_ORIGIN`이어야 한다. `/invites`, `/members`, `/admin/*`는 `requireOwner`다.
+- **인증**: 오너 1명(`/setup`) + GitHub·Google 로그인과 가입(초대 코드는 선택). 다른 기기는 GitHub·Google이나 10분짜리 로그인 코드로 들어온다. `/api/*`의 GET이 아닌 요청은 `Origin === APP_ORIGIN`이어야 한다. `/invites`, `/members`, `/admin/*`는 `requireOwner`다.
 - **MCP**: `/mcp`는 OAuth Bearer 토큰(`oauth.ts`, 설계서 §8.7), 예전 방식 `/mcp/u/<토큰>`은 비밀 URL(HMAC 해시로 찾는다). 둘 다 `mcp/route.ts`의 `serveMcp`로 간다. SDK 2.3.1 legacy stateless. 도구 8개:
   - `find_concepts`, `save_learning`, `get_learner_context`
   - `get_review_queue`, `submit_review`, `get_interview_chain`
@@ -262,11 +263,12 @@
    - `get_categories`를 포함한 도구 7개를 Always allow로 바꾼다. `update_categories`는 Needs approval로 둔다.
    - 새 도구가 안 보이면 커넥터를 껐다 켜거나 새 채팅을 연다.
 2. **GitHub OAuth 앱 + `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`** ([운영 가이드 1.5](runbook.md#15-여러-기기와-github-로그인-켜기-한-번만)). 운영 `/api/auth/options`가 `github: true`라 들어 있는 것으로 보인다.
-3. Android 내비게이션 바 색: GitHub를 먼저 이어 두고 PWA를 다시 설치한다. 알림도 다시 켠다.
-4. 플러그인 0.2.1로 업데이트한다 (`/moai:pdf`, 안내 문구가 "학습 탭"으로 바뀌었다).
-5. (선택) `ANTHROPIC_API_KEY`, `GRADER_MODEL`. 콘솔에서 월 지출 한도도 건다. 운영에 들어 있는지는 확인하지 않았다 (로그인 뒤 `GET /api/ai/status`). AI 개념 채팅을 만들려면 필요하다.
-6. **OAuth 커넥터** ([운영 가이드 3.5](runbook.md#35-oauth-커넥터-켜기-한-번만)): KV를 만들어 id를 `wrangler.jsonc`에 넣고, claude.ai 커넥터를 `/mcp`로 바꾼 뒤 비밀 주소를 지운다.
-7. (선택) GitHub `production` environment로 Cloudflare secret을 옮긴다 ([운영 가이드 3 배포](runbook.md#배포)).
+3. **Google OAuth 클라이언트 + `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`** ([운영 가이드 1.6](runbook.md#16-google-로그인-켜기-한-번만)). 넣기 전에는 Google 버튼이 나오지 않는다.
+4. Android 내비게이션 바 색: GitHub를 먼저 이어 두고 PWA를 다시 설치한다. 알림도 다시 켠다.
+5. 플러그인 0.2.1로 업데이트한다 (`/moai:pdf`, 안내 문구가 "학습 탭"으로 바뀌었다).
+6. (선택) `ANTHROPIC_API_KEY`, `GRADER_MODEL`. 콘솔에서 월 지출 한도도 건다. 운영에 들어 있는지는 확인하지 않았다 (로그인 뒤 `GET /api/ai/status`). AI 개념 채팅을 만들려면 필요하다.
+7. **OAuth 커넥터** ([운영 가이드 3.5](runbook.md#35-oauth-커넥터-켜기-한-번만)): KV를 만들어 id를 `wrangler.jsonc`에 넣고, claude.ai 커넥터를 `/mcp`로 바꾼 뒤 비밀 주소를 지운다.
+8. (선택) GitHub `production` environment로 Cloudflare secret을 옮긴다 ([운영 가이드 3 배포](runbook.md#배포)).
 
 ---
 

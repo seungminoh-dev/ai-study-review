@@ -1,24 +1,24 @@
-import type { Me, PendingJoin } from '@moai/shared';
+import type { LoginProvider, Me, PendingJoin } from '@moai/shared';
 import { useEffect, useState, type FormEvent } from 'react';
 import { RequestError, errorMessage, request } from '../api';
-import { IconCheck, IconGithub } from '../icons';
+import { IconCheck } from '../icons';
 import { Splash } from '../Loading';
 import { Mascot } from '../Mascot';
 
-// 가입 (설계서 §8.4, 3단계 시안). GitHub 확인을 마치고 서버가 이 화면으로 보낸다. 가입하면 시작 가이드로 간다.
+// 가입 (설계서 §8.4, 3단계 시안). GitHub나 Google 확인을 마치고 서버가 이 화면으로 보낸다. 가입하면 시작 가이드로 간다.
 // 초대 코드는 있으면 넣는다 (2026-10-22부터 없어도 가입한다).
 
 type Load = { state: 'loading' } | { state: 'ready'; pending: PendingJoin } | { state: 'expired'; message: string };
 
-/** GitHub 확인 → 이름 → 시작 */
-function Steps() {
+/** GitHub(Google) 확인 → 이름 → 시작 */
+function Steps({ provider }: { provider: LoginProvider }) {
   return (
     <ol className="join-steps" aria-label="가입 단계">
       <li className="done">
         <span className="join-mark">
           <IconCheck size={14} />
         </span>
-        GitHub 확인
+        {provider === 'google' ? 'Google' : 'GitHub'} 확인
       </li>
       <li className="current" aria-current="step">
         <span className="join-mark">2</span>
@@ -62,7 +62,7 @@ export function Join({ onDone }: { onDone: (me: Me) => void }) {
       if (next) location.assign(next);
       else onDone(me);
     } catch (reason) {
-      // 만료됐거나 너무 많이 틀렸으면 GitHub 확인부터 다시 한다
+      // 만료됐거나 너무 많이 틀렸으면 로그인부터 다시 한다
       if (reason instanceof RequestError && (reason.status === 410 || reason.status === 429)) setLoad({ state: 'expired', message: reason.message });
       else setError(errorMessage(reason));
     } finally {
@@ -80,9 +80,8 @@ export function Join({ onDone }: { onDone: (me: Me) => void }) {
           <p className="notice bad">{load.message}</p>
         </div>
         <div className="bottom-actions">
-          <a className="button primary" href="/api/auth/github/start">
-            <IconGithub />
-            GitHub로 다시 하기
+          <a className="button primary" href="/login">
+            로그인부터 다시 하기
           </a>
         </div>
       </div>
@@ -90,10 +89,10 @@ export function Join({ onDone }: { onDone: (me: Me) => void }) {
   }
   return (
     <form className="auth" onSubmit={(event) => void submit(event)}>
-      <Steps />
+      <Steps provider={load.pending.provider} />
       <div className="auth-hero">
         <Mascot mood="happy" size={104} />
-        <p className="auth-chip">@{load.pending.github_login}님, 반가워요!</p>
+        <p className="auth-chip">{load.pending.github_login ? `@${load.pending.github_login}님, 반가워요!` : '반가워요!'}</p>
         <h1>앱에서 불릴 이름을 정해 주세요</h1>
         <p className="muted small">이름만 정하면 끝나요. 받은 초대 코드가 있으면 함께 넣어 주세요.</p>
       </div>

@@ -149,6 +149,8 @@ export interface Me {
   daily_goal: number;
   /** 연결한 GitHub 계정. 없으면 null */
   github_login: string | null;
+  /** Google 계정을 이어 두었다 */
+  google_linked: boolean;
   /** 마지막으로 확인한 약관·처리방침 시행일 (TERMS_VERSION). 아직 확인하지 않았으면 null */
   terms_version: string | null;
 }
@@ -233,11 +235,17 @@ export interface AuthOptions {
   setup_available: boolean;
   /** 서버에 GitHub OAuth 앱이 설정되어 있다 */
   github: boolean;
+  /** 서버에 Google OAuth 클라이언트가 설정되어 있다 */
+  google: boolean;
 }
 
-/** GitHub 확인은 끝났고 초대 코드를 기다리는 가입 */
+export type LoginProvider = 'github' | 'google';
+
+/** GitHub나 Google 확인은 끝났고 이름(과 초대 코드)을 기다리는 가입 */
 export interface PendingJoin {
-  github_login: string;
+  provider: LoginProvider;
+  /** GitHub로 왔을 때만 */
+  github_login: string | null;
   suggested_name: string;
 }
 

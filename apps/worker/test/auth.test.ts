@@ -5,7 +5,7 @@ import { spendCredits } from '../src/domain/credits';
 import { formatCode, normalizeCode } from '../src/lib/codes';
 import { ORIGIN, api, newUser, workerFetch, type TestUser } from './helpers';
 
-// GitHub 로그인, 초대 코드 가입, 다른 기기 로그인 코드 (설계서 §8.4, §8.5). GitHub는 fetch를 바꿔 흉내 낸다.
+// GitHub·Google 로그인, 초대 코드 가입, 다른 기기 로그인 코드 (설계서 §8.4, §8.5). GitHub와 Google은 fetch를 바꿔 흉내 낸다.
 
 interface FakeGithubUser {
   id: number;
@@ -47,6 +47,31 @@ async function viaGithub(user: FakeGithubUser, options: { intent?: 'login' | 'li
   });
 }
 
+/** Google로 보냈다가 돌아오기까지. ID 토큰의 값은 claims로 바꿔 볼 수 있다 */
+async function viaGoogle(sub: string, options: { intent?: 'login' | 'link'; cookie?: string; claims?: Record<string, unknown> } = {}): Promise<Response> {
+  const start = await workerFetch(`${ORIGIN}/api/auth/google/start?${new URLSearchParams({ intent: options.intent ?? 'login' })}`, {
+    headers: options.cookie ? { cookie: options.cookie } : {},
+  });
+  const location = new URL(start.headers.get('location')!);
+  const claims = {
+    iss: 'https://accounts.google.com',
+    aud: 'test-google-client',
+    exp: Math.floor(Date.now() / 1000) + 3600,
+    nonce: location.searchParams.get('nonce'),
+    sub,
+    ...options.claims,
+  };
+  const payload = btoa(JSON.stringify(claims)).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '');
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+    const url = input instanceof Request ? input.url : String(input);
+    if (url === 'https://oauth2.googleapis.com/token') return Response.json({ id_token: `e30.${payload}.sig`, access_token: 'ya29.test' });
+    throw new Error(`unexpected fetch ${url}`);
+  });
+  return workerFetch(`${ORIGIN}/api/auth/google/callback?code=g-code&state=${location.searchParams.get('state')}`, {
+    headers: { cookie: jar(options.cookie, cookieOf(start, '__Host-moai-oauth')) },
+  });
+}
+
 const asUser = (cookie: string): TestUser => ({ id: '', cookie });
 
 async function newInvite(owner: TestUser, label = '민수'): Promise<{ invite: InviteSummary; code: string }> {
@@ -75,7 +100,7 @@ describe('codes', () => {
 
 describe('GitHub login', () => {
   it('tells the login screen that GitHub is set up', async () => {
-    expect(await (await api(null, '/auth/options')).json()).toMatchObject({ github: true });
+    expect(await (await api(null, '/auth/options')).json()).toMatchObject({ github: true, google: true });
   });
 
   it('sends the browser to GitHub with a state cookie and a PKCE challenge', async () => {
@@ -88,7 +113,7 @@ describe('GitHub login', () => {
     expect(location.searchParams.get('code_challenge_method')).toBe('S256');
     expect(location.searchParams.get('scope')).toBeNull();
     const cookie = response.headers.getSetCookie()[0]!;
-    expect(cookie).toMatch(/^__Host-moai-oauth=login\.[\w-]{43}\.[\w-]{43};/);
+    expect(cookie).toMatch(/^__Host-moai-oauth=github\.login\.[\w-]{43}\.[\w-]{43};/);
     expect(cookie).toContain('Max-Age=600');
     expect(cookie).toContain('HttpOnly');
     // state 쿠키에 있는 값이 그대로 GitHub로 가지는 않는다 (verifier는 challenge로만)
@@ -97,7 +122,7 @@ describe('GitHub login', () => {
 
   it('refuses a callback whose state does not match this browser', async () => {
     const fetch = mockGithub(githubUser());
-    const forged = await workerFetch(`${ORIGIN}/api/auth/github/callback?code=x&state=forged`, { headers: { cookie: '__Host-moai-oauth=login.real.verifier' } });
+    const forged = await workerFetch(`${ORIGIN}/api/auth/github/callback?code=x&state=forged`, { headers: { cookie: '__Host-moai-oauth=github.login.real.verifier' } });
     expect(forged.headers.get('location')).toBe('/?auth=expired');
     const noCookie = await workerFetch(`${ORIGIN}/api/auth/github/callback?code=x&state=real`);
     expect(noCookie.headers.get('location')).toBe('/?auth=expired');
@@ -163,6 +188,65 @@ describe('GitHub login', () => {
   });
 });
 
+// Google 로그인 (2026-10-22): openid만 받아 sub로 찾는다. 초대 없이 가입할 때 계정 나이는 보지 않고 하루 한도만 쓴다
+describe('Google login', () => {
+  it('asks Google for openid only, with PKCE and a nonce tied to this browser', async () => {
+    const response = await workerFetch(`${ORIGIN}/api/auth/google/start`);
+    const location = new URL(response.headers.get('location')!);
+    expect(location.origin + location.pathname).toBe('https://accounts.google.com/o/oauth2/v2/auth');
+    expect(location.searchParams.get('client_id')).toBe('test-google-client');
+    expect(location.searchParams.get('redirect_uri')).toBe(`${ORIGIN}/api/auth/google/callback`);
+    expect(location.searchParams.get('scope')).toBe('openid');
+    expect(location.searchParams.get('code_challenge_method')).toBe('S256');
+    expect(location.searchParams.get('nonce')).toBe(location.searchParams.get('state'));
+    expect(response.headers.getSetCookie()[0]).toMatch(/^__Host-moai-oauth=google\.login\./);
+  });
+
+  it('joins without an invite, then logs the same Google account straight in', async () => {
+    const sub = String(Math.floor(Math.random() * 1e15));
+    const arrived = await viaGoogle(sub);
+    expect(arrived.headers.get('location')).toBe('/join');
+    const join = asUser(cookieOf(arrived, '__Host-moai-join')!);
+    expect(await (await api(join, '/auth/join')).json()).toEqual({ provider: 'google', github_login: null, suggested_name: '' } satisfies PendingJoin);
+    const joined = await api(join, '/auth/join', { method: 'POST', json: { agree: true, display_name: '구글' } });
+    expect(joined.status).toBe(201);
+    expect(await joined.json()).toMatchObject({ display_name: '구글', github_login: null, google_linked: true });
+    const session = asUser(cookieOf(joined, '__Host-sid')!);
+    expect(((await (await api(session, '/ai/status')).json()) as AiStatus).credits).toMatchObject({ monthly_total: 0 });
+
+    const again = await viaGoogle(sub);
+    expect(again.headers.get('location')).toBe('/');
+    expect(await (await api(asUser(cookieOf(again, '__Host-sid')!), '/me')).json()).toMatchObject({ display_name: '구글' });
+  });
+
+  it('refuses an ID token for another app, another login, another issuer or one that ran out', async () => {
+    for (const claims of [{ aud: 'someone-else' }, { nonce: 'replayed' }, { iss: 'https://evil.example' }, { exp: Math.floor(Date.now() / 1000) - 60 }]) {
+      const sub = String(Math.floor(Math.random() * 1e15));
+      expect([claims, (await viaGoogle(sub, { claims })).headers.get('location')]).toEqual([claims, '/?auth=failed']);
+      expect(await env.DB.prepare('SELECT count(*) AS n FROM pending_signups WHERE subject = ?1').bind(sub).first<number>('n')).toBe(0);
+    }
+  });
+
+  it('does not take a GitHub login state at the Google callback', async () => {
+    const start = await workerFetch(`${ORIGIN}/api/auth/github/start`);
+    const state = new URL(start.headers.get('location')!).searchParams.get('state')!;
+    const fetch = vi.spyOn(globalThis, 'fetch');
+    const response = await workerFetch(`${ORIGIN}/api/auth/google/callback?code=x&state=${state}`, { headers: { cookie: cookieOf(start, '__Host-moai-oauth')! } });
+    expect(response.headers.get('location')).toBe('/?auth=expired');
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('links Google to a signed-in account once', async () => {
+    const sub = String(Math.floor(Math.random() * 1e15));
+    const first = await newUser('첫째');
+    const second = await newUser('둘째');
+    expect((await viaGoogle(sub, { intent: 'link', cookie: first.cookie })).headers.get('location')).toBe('/settings?google=linked');
+    expect(await (await api(first, '/me')).json()).toMatchObject({ google_linked: true });
+    expect((await viaGoogle(sub, { intent: 'link', cookie: second.cookie })).headers.get('location')).toBe('/settings?google=taken');
+    expect(await (await api(second, '/me')).json()).toMatchObject({ google_linked: false });
+  });
+});
+
 describe('joining with an invite', () => {
   async function arriveAtJoin(github = githubUser('newbie')): Promise<string> {
     const response = await viaGithub(github);
@@ -182,7 +266,7 @@ describe('joining with an invite', () => {
 
   it('asks a new GitHub account for an invite code, then creates the account once', async () => {
     const join = await arriveAtJoin();
-    expect(await (await api(asUser(join), '/auth/join')).json()).toEqual({ github_login: 'newbie', suggested_name: '옥토캣' } satisfies PendingJoin);
+    expect(await (await api(asUser(join), '/auth/join')).json()).toEqual({ provider: 'github', github_login: 'newbie', suggested_name: '옥토캣' } satisfies PendingJoin);
 
     const wrong = await api(asUser(join), '/auth/join', { method: 'POST', json: { agree: true, code: 'AAAAA-AAAAA', display_name: '민수' } });
     expect(wrong.status).toBe(403);
