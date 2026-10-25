@@ -53,7 +53,7 @@ export async function notifyBudget(env: Env, now: number): Promise<number | null
   const { results: owners } = await env.DB.prepare("SELECT id FROM users WHERE role = 'owner'").all<{ id: string }>();
   const body = `이번 달 $${spent.toFixed(2)} / 한도 $${cap}${step === 100 ? ' · 새 AI 요청을 받지 않아요' : ''}`;
   for (const owner of owners) {
-    await pushToUser(env, owner.id, { title: `AI 예산 ${step}%에 닿았어요`, body, url: '/settings', tag: 'budget' }, now);
+    await pushToUser(env, owner.id, { title: `AI 예산 ${step}%에 닿았어요`, body, url: '/admin', tag: 'budget' }, now);
   }
   console.log(JSON.stringify({ event: 'budget_notified', step, spent_usd: Number(spent.toFixed(2)) }));
   return step;

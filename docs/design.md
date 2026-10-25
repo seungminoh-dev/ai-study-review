@@ -907,7 +907,7 @@ export const SaveLearningInput = z.object({
 | 1.5 | `GET /api/auth/join`, `POST /api/auth/join` (로그인 전) | GitHub 확인을 마친 브라우저가 초대 코드와 이름으로 가입 |
 | 1.5 | `POST /api/login-codes`, `POST /api/auth/login` (로그인 전) | 다른 기기 로그인 코드 만들기와 쓰기 (§8.5) |
 | 1.5 | `POST /api/auth/logout` | 이 기기의 세션만 끝내기 |
-| 1.5 | `GET /api/invites`, `POST /api/invites`, `DELETE /api/invites/:id` | 초대 목록, 만들기(코드는 이때 한 번만), 안 쓴 초대 지우기 (오너만) |
+| 1.5 | `GET /api/admin/invites`, `POST /api/admin/invites`, `DELETE /api/admin/invites/:id` | 초대 목록, 만들기(코드는 이때 한 번만), 안 쓴 초대 지우기 (오너만) |
 | 2 | `GET /api/map`, `GET /api/concepts/:key` | 지식 지도, 개념 상세 |
 | 2 | `GET /api/stats` | 스트릭·XP·목표 |
 | 2 | `POST /api/cards/:id/report`, `PATCH /api/cards/:id` | 카드 신고(즉시 정지), 카드 수정 |
@@ -916,6 +916,10 @@ export const SaveLearningInput = z.object({
 | 2 | `POST /api/import` | 붙여넣기 가져오기 요청(202) |
 | 2 | `GET /api/export`, `DELETE /api/me` | 내 데이터 내보내기(JSON), 계정 삭제 |
 | 2 | `GET /api/admin/usage` | LLM 사용량 (오너만) |
+| 3 | `GET /api/admin/members`, `POST /api/admin/members/:id/disable`, `/enable` | 회원 목록, 이용 멈추기와 다시 열기 (오너만) |
+| 3 | `GET /api/admin/credits`, `POST /api/admin/credits`, `GET /api/admin/metrics` | 사람별 AI 크레딧과 지급, 베타 지표 (오너만) |
+
+오너 관리 API는 모두 `/api/admin/*` 아래에 둔다. `app.ts`가 이 접두사 전체에 오너 검사와 `Cache-Control: no-store`를 한 번에 건다.
 
 ---
 
@@ -968,7 +972,7 @@ export const SaveLearningInput = z.object({
 
 **초대 코드**
 
-1. 오너가 설정 → 초대에서 라벨(예: "민수")을 붙여 초대를 만든다. 10자 코드(Crockford Base32, 약 50비트), 1회용, 7일 유효, `HMAC(TOKEN_PEPPER, 'invite:' + 코드)`로만 저장한다. 코드는 만들 때 한 번만 보인다.
+1. 오너가 관리 대시보드(/admin) → 초대에서 라벨(예: "민수")을 붙여 초대를 만든다. 10자 코드(Crockford Base32, 약 50비트), 1회용, 7일 유효, `HMAC(TOKEN_PEPPER, 'invite:' + 코드)`로만 저장한다. 코드는 만들 때 한 번만 보인다.
 2. 카카오톡으로 "안내와 함께 복사"한 글을 보낸다. 코드는 링크에 넣지 않는다. 로그에 남지 않고, 받은 사람이 앱 안에서 직접 입력하게 된다.
 3. 친구는 `https://moai.smoh.dev`를 열고 홈 화면에 추가한 뒤 "GitHub로 계속하기" → `/join`에서 코드와 이름을 넣는다.
 4. `POST /api/auth/join`: 코드는 대소문자, 하이픈, 0/O·1/I/L을 가리지 않는다. 한 번의 GitHub 확인으로 5번까지 틀릴 수 있다. 계정 만들기, GitHub 잇기, 초대 사용 처리는 한 batch(트랜잭션)에서 "초대가 아직 안 쓰였으면"을 조건으로 쓴다. 두 사람이 같은 코드를 동시에 넣어도 한 명만 가입한다.
@@ -1296,7 +1300,7 @@ runJob(id):
 - AI 크레딧은 앱 안 재화다. 돈으로 사거나 팔 수 없고, 현금·다른 재화로 바꾸거나 남에게 넘길 수 없다 (이용약관 6조). 결제는 만들지 않는다.
 - 월간 크레딧: 사람마다 `users.monthly_credits`(초대 코드로 가입하면 500, 초대 없이 가입하면 0, 2026-10-22). 매달 1일 0시(KST)에 다시 차고, 남은 것은 넘어가지 않는다. 원장에 적지 않고 그 열로 센다.
 - 크레딧이 모자라면 "충전 기능은 준비 중이에요. 숨은 업적을 달성해 크레딧을 모아 보세요."라고 알린다(서버 `noCreditsMessage`, 화면 `NO_CREDITS_HINT`). 모의면접 입구는 크레딧과 상관없이 보이고, 시작 화면이 고른 깊이에 모자라면 알리고 막는다.
-- 보유 크레딧: 숨은 업적 보상과 운영자 지급(설정 → 관리 → AI 크레딧 주기, `POST /api/admin/credits`)으로 받는다. 사라지지 않는다.
+- 보유 크레딧: 숨은 업적 보상과 운영자 지급(관리 대시보드(/admin) → AI 크레딧 주기, `POST /api/admin/credits`)으로 받는다. 사라지지 않는다.
 - 쓰는 값 (`CREDIT_COST`): 개념 물어보기·모의면접 질문·AI 채점 1, 대화로 카드 만들기(물어보기·면접 기록) 5, 대화 붙여넣기 10. 월간부터 쓰고, 모자라면 보유에서 뺀다.
 - 남은 크레딧 = 월간 + 받은 것 − 이번 달 쓴 것 − 지난달까지 월간을 넘겨 쓴 것 (`domain/credits.ts`). 세기와 쓰기를 한 문장(`INSERT … SELECT … WHERE 남은 양 >= 값`)으로 해서 동시에 보내도 가진 것보다 더 쓰지 못한다. 작업은 작업 행과 같은 batch로 쓴다.
 - 돌려주기: AI 비용이 들지 않은 실패만 쓴 줄을 지운다(요청 안 호출의 청구되지 않은 실패, 비용 기록 없이 끝난 작업. 매분 Cron이 한꺼번에 실패시킨 것 포함). 비용이 든 실패(거절, 잘림, 형식 오류)는 돌려주지 않는다. 실패를 되풀이해 크레딧 없이 서비스 전체 예산을 쓰지 못하게 한다.

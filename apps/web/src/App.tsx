@@ -5,7 +5,7 @@ import { OfflineError, RequestError, errorMessage, onUnauthorized, request } fro
 import { forgetSeenBadges } from './badges';
 import { CreditChip } from './credits';
 import { forgetMaterial } from './materials';
-import { IconBook, IconGrowth, IconHistory, IconHome, IconMap, IconOffline, IconSettings } from './icons';
+import { IconBook, IconDashboard, IconGrowth, IconHistory, IconHome, IconMap, IconOffline, IconSettings } from './icons';
 import { Loading, Splash } from './Loading';
 import { Mascot } from './Mascot';
 import { SNAPPY } from './motion';
@@ -56,6 +56,8 @@ const Reviews = lazyScreen(() => import('./screens/Reviews').then((module) => mo
 const Categories = lazyScreen(() => import('./screens/Categories').then((module) => module.Categories));
 const Credits = lazyScreen(() => import('./screens/Credits').then((module) => module.Credits));
 const LATER = [Review, Sessions, SessionDetail, MapScreen, Concept, Growth, Import, Materials, MaterialDetail, Settings, Welcome, Interview, Learn, Reviews, Categories, Credits];
+// 관리 대시보드는 오너만 미리 받는다
+const Admin = lazyScreen(() => import('./screens/Admin').then((module) => module.Admin));
 // 개인정보 처리방침·약관은 로그인 전에도 열고, 가끔만 보니 미리 받지 않는다
 const Legal = lazyScreen(() => import('./screens/Legal').then((module) => module.Legal));
 const legalDoc = (path: string) => (path === '/privacy' ? 'privacy' : path === '/terms' ? 'terms' : null);
@@ -82,7 +84,7 @@ function rememberedMe(): Me | null {
   }
 }
 
-type Section = 'today' | 'learn' | 'reviews' | 'map' | 'growth' | 'settings';
+type Section = 'today' | 'learn' | 'reviews' | 'map' | 'growth' | 'admin' | 'settings';
 
 /** 지금 화면이 어느 메뉴에 속하는지. 상세 화면은 부모 메뉴를 밝힌다. 자료는 학습, 공부한 대화는 복습에 속한다 */
 function sectionOf(path: string): Section | null {
@@ -91,6 +93,7 @@ function sectionOf(path: string): Section | null {
   if (path === '/reviews' || path.startsWith('/sessions') || path === '/import') return 'reviews';
   if (path === '/map' || path.startsWith('/concepts/') || path === '/categories') return 'map';
   if (path === '/growth') return 'growth';
+  if (path === '/admin') return 'admin';
   if (path === '/settings') return 'settings';
   return null;
 }
@@ -101,6 +104,7 @@ const ICONS: Record<Section, () => ReactNode> = {
   reviews: () => <IconHistory />,
   map: () => <IconMap />,
   growth: () => <IconGrowth />,
+  admin: () => <IconDashboard />,
   settings: () => <IconSettings />,
 };
 
@@ -122,7 +126,7 @@ const SIDE: { href: string; label: string; section: Section }[] = [
   { href: '/growth', label: '내 성장', section: 'growth' },
 ];
 
-function Sidebar({ current }: { current: Section | null }) {
+function Sidebar({ current, owner }: { current: Section | null; owner: boolean }) {
   const link = (item: { href: string; label: string; section: Section }) => (
     <TabLink key={item.href} href={item.href} className={current === item.section ? 'side-link current' : 'side-link'} aria-current={current === item.section ? 'page' : undefined}>
       {current === item.section ? <m.span layoutId="side-pill" className="side-pill" transition={SNAPPY} /> : null}
@@ -141,6 +145,7 @@ function Sidebar({ current }: { current: Section | null }) {
       </nav>
       <nav className="side-nav side-bottom" aria-label="설정">
         <CreditChip className="side-credit" unit />
+        {owner ? link({ href: '/admin', label: '관리', section: 'admin' }) : null}
         {link({ href: '/settings', label: '설정', section: 'settings' })}
       </nav>
     </aside>
@@ -236,7 +241,8 @@ export function App() {
   useEffect(() => {
     if (auth.state !== 'in') return;
     // 로그인하면 쉬는 틈에 나머지 화면을 받아 둔다 (오프라인이면 다음 기회에)
-    const run = () => LATER.forEach((screen) => void screen.preload().catch(() => undefined));
+    const later = auth.me.role === 'owner' ? [...LATER, Admin] : LATER;
+    const run = () => later.forEach((screen) => void screen.preload().catch(() => undefined));
     if ('requestIdleCallback' in window) {
       const id = requestIdleCallback(run, { timeout: 3000 });
       return () => cancelIdleCallback(id);
@@ -316,6 +322,8 @@ export function App() {
   else if (path === '/welcome') screen = <Welcome name={auth.me.display_name} />;
   else if (path === '/interview') screen = <Interview key={location.search} concept={query.get('concept')} category={query.get('category')} />;
   else if (legalDoc(path)) screen = <Legal doc={legalDoc(path)!} />;
+  // 회원이 /admin을 열면 오늘 화면이다. 서버의 /api/admin/*도 오너만 통과시킨다
+  else if (path === '/admin' && auth.me.role === 'owner') screen = <Admin />;
   else if (path === '/settings') {
     screen = (
       <Settings
@@ -331,11 +339,11 @@ export function App() {
 
   // 복습, 모의면접, 시작 가이드는 메뉴 없이 집중한다. 오늘·성장·지도는 컴퓨터에서 넓게 쓴다
   const focus = path === '/review' || path === '/interview' || path === '/welcome';
-  const wide = path === '/' || path === '/learn' || path === '/credits' || path === '/growth' || path === '/map' || path === '/materials/detail';
+  const wide = path === '/' || path === '/learn' || path === '/credits' || path === '/growth' || path === '/map' || path === '/materials/detail' || path === '/admin';
   const section = sectionOf(path);
   return (
     <div className={focus ? 'shell focus' : 'shell'}>
-      {focus ? null : <Sidebar current={section} />}
+      {focus ? null : <Sidebar current={section} owner={auth.me.role === 'owner'} />}
       <main className={focus ? 'app review-mode' : wide ? 'app wide' : 'app'}>
         {/* 복습 화면은 따로 알린다 */}
         {!online && !focus ? (

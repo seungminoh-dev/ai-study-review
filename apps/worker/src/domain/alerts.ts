@@ -30,7 +30,7 @@ export async function sendAlerts(env: Env, now: number): Promise<number> {
   const { results: owners } = await env.DB.prepare("SELECT id FROM users WHERE role = 'owner'").all<{ id: string }>();
   const body = rows.map((row) => `${LABEL[row.kind] ?? row.kind} ${row.pending}건`).join(', ');
   for (const owner of owners) {
-    await pushToUser(env, owner.id, { title: '모아이 서버에 문제가 있어요', body: `${body} · Cloudflare 로그를 확인해 주세요`, url: '/settings', tag: 'alert' }, now);
+    await pushToUser(env, owner.id, { title: '모아이 서버에 문제가 있어요', body: `${body} · Cloudflare 로그를 확인해 주세요`, url: '/admin', tag: 'alert' }, now);
   }
   console.log(JSON.stringify({ event: 'alerts_sent', kinds: rows.map((row) => row.kind) }));
   return rows.length;

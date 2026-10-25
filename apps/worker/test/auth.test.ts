@@ -75,7 +75,7 @@ async function viaGoogle(sub: string, options: { intent?: 'login' | 'link'; cook
 const asUser = (cookie: string): TestUser => ({ id: '', cookie });
 
 async function newInvite(owner: TestUser, label = '민수'): Promise<{ invite: InviteSummary; code: string }> {
-  const response = await api(owner, '/invites', { method: 'POST', json: { label } });
+  const response = await api(owner, '/admin/invites', { method: 'POST', json: { label } });
   expect(response.status).toBe(201);
   return response.json();
 }
@@ -285,7 +285,7 @@ describe('joining with an invite', () => {
     // 가입 쿠키는 지운다
     expect(joined.headers.getSetCookie().some((cookie) => cookie.startsWith('__Host-moai-join=;'))).toBe(true);
 
-    const { invites } = (await (await api(owner, '/invites')).json()) as { invites: InviteSummary[] };
+    const { invites } = (await (await api(owner, '/admin/invites')).json()) as { invites: InviteSummary[] };
     expect(invites[0]).toMatchObject({ label: '민수', used_by_name: '민수' });
 
     // 같은 코드는 한 번만 쓴다
@@ -358,10 +358,10 @@ describe('recovery invites', () => {
   it('log a new GitHub into the bound member, replace the old GitHub and end the lost devices', async () => {
     const member = await newUser('민수');
     await viaGithub(githubUser('lost-account'), { intent: 'link', cookie: member.cookie });
-    expect((await api(owner, '/invites', { method: 'POST', json: { label: '민수 복구', bind_user_id: owner.id } })).status).toBe(404);
-    const { members } = (await (await api(owner, '/members')).json()) as { members: { id: string }[] };
+    expect((await api(owner, '/admin/invites', { method: 'POST', json: { label: '민수 복구', bind_user_id: owner.id } })).status).toBe(404);
+    const { members } = (await (await api(owner, '/admin/members')).json()) as { members: { id: string }[] };
     expect(members.map((item) => item.id)).toContain(member.id);
-    const { code } = (await (await api(owner, '/invites', { method: 'POST', json: { label: '민수 복구', bind_user_id: member.id } })).json()) as { code: string };
+    const { code } = (await (await api(owner, '/admin/invites', { method: 'POST', json: { label: '민수 복구', bind_user_id: member.id } })).json()) as { code: string };
 
     const response = await viaGithub(githubUser('new-account'));
     const join = cookieOf(response, '__Host-moai-join')!;
@@ -373,7 +373,7 @@ describe('recovery invites', () => {
 
   it('are for the owner only', async () => {
     const member = await newUser();
-    expect((await api(member, '/members')).status).toBe(403);
+    expect((await api(member, '/admin/members')).status).toBe(403);
     expect((await api(member, '/admin/metrics')).status).toBe(403);
     expect((await api(member, '/admin/usage')).status).toBe(403);
     expect(await (await api(owner, '/admin/metrics')).json()).toMatchObject({ users: expect.any(Number), weekly_reviewers: expect.any(Number) });
@@ -383,15 +383,15 @@ describe('recovery invites', () => {
 describe('invites', () => {
   it('are for the owner only', async () => {
     const member = await newUser();
-    expect((await api(member, '/invites')).status).toBe(403);
-    expect((await api(member, '/invites', { method: 'POST', json: { label: '친구' } })).status).toBe(403);
+    expect((await api(member, '/admin/invites')).status).toBe(403);
+    expect((await api(member, '/admin/invites', { method: 'POST', json: { label: '친구' } })).status).toBe(403);
   });
 
   it('can be deleted until someone uses them', async () => {
     const { invite } = await newInvite(owner, '지울 초대');
-    expect((await api(owner, `/invites/${invite.id}`, { method: 'DELETE' })).status).toBe(204);
-    expect((await api(owner, `/invites/${invite.id}`, { method: 'DELETE' })).status).toBe(404);
-    const { invites } = (await (await api(owner, '/invites')).json()) as { invites: InviteSummary[] };
+    expect((await api(owner, `/admin/invites/${invite.id}`, { method: 'DELETE' })).status).toBe(204);
+    expect((await api(owner, `/admin/invites/${invite.id}`, { method: 'DELETE' })).status).toBe(404);
+    const { invites } = (await (await api(owner, '/admin/invites')).json()) as { invites: InviteSummary[] };
     expect(invites.map((item) => item.id)).not.toContain(invite.id);
   });
 

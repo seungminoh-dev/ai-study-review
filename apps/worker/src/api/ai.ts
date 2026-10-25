@@ -2,35 +2,29 @@ import {
   AskBody,
   AskCardsBody,
   CREDIT_COST,
-  CreditGrantBody,
   GradeAiBody,
   ImportBody,
   InterviewBody,
   InterviewSaveBody,
   type AiStatus,
   type AskResponse,
-  type BetaMetrics,
-  type CreditAdminRow,
   type CreditsResponse,
   type InterviewResponse,
   type JobView,
-  type UsageReport,
 } from '@moai/shared';
 import { Hono } from 'hono';
 import type { AppEnv } from '../context';
-import { creditBalance, creditsUsedThisMonth, grantStatement, noCreditsMessage } from '../domain/credits';
+import { creditBalance, noCreditsMessage } from '../domain/credits';
 import { sha256Hex } from '../lib/crypto';
 import { errorJson, readJson } from '../lib/http';
-import { DAY_MS, studyDayIndex, studyDayKey, studyWeekday } from '../lib/kst';
 import { llmConfigured } from '../llm/anthropic';
 import { askConcept, askToCards } from '../llm/ask';
 import { interviewTopics } from '../domain/interview';
 import { interviewTurn, saveInterview } from '../llm/interview';
-import { caps, monthStart, overBudget } from '../llm/budget';
+import { overBudget } from '../llm/budget';
 import { createJob, runJob } from '../llm/jobs';
-import { requireOwner } from './account';
 
-// 서버 LLM API (설계서 §11): 설명하기 AI 채점, 개념 물어보기, 붙여넣기 가져오기, 작업 상태, 관리자 사용량
+// 서버 LLM API (설계서 §11): 설명하기 AI 채점, 개념 물어보기, 붙여넣기 가져오기, 작업 상태. 관리자 사용량·크레딧 지급은 admin.ts
 
 export const ai = new Hono<AppEnv>();
 
@@ -158,134 +152,4 @@ ai.get('/imports', async (c) => {
     .bind(c.var.userId)
     .all<Parameters<typeof toView>[0]>();
   return c.json({ jobs: results.map(toView) });
-});
-
-ai.use('/admin/*', requireOwner);
-
-ai.get('/admin/usage', async (c) => {
-  const since = monthStart(Date.now());
-  const [byUser, byKind, byModel, jobs] = await c.env.DB.batch([
-    c.env.DB.prepare(
-      `SELECT coalesce(u.display_name, '(지운 계정)') AS name, sum(l.cost_micro_usd) AS cost, count(*) AS calls
-         FROM llm_usage l LEFT JOIN users u ON u.id = l.user_id WHERE l.created_at >= ?1 GROUP BY l.user_id ORDER BY cost DESC`,
-    ).bind(since),
-    c.env.DB.prepare('SELECT kind, sum(cost_micro_usd) AS cost, count(*) AS calls FROM llm_usage WHERE created_at >= ?1 GROUP BY kind').bind(since),
-    c.env.DB.prepare(
-      `SELECT model, sum(cost_micro_usd) AS cost, count(*) AS calls, sum(input_tokens) AS input_tokens, sum(output_tokens) AS output_tokens
-         FROM llm_usage WHERE created_at >= ?1 GROUP BY model ORDER BY cost DESC`,
-    ).bind(since),
-    c.env.DB.prepare('SELECT status, kind, error, count(*) AS n FROM llm_jobs WHERE created_at >= ?1 GROUP BY status, kind, error').bind(since),
-  ]);
-  const usd = (micro: number) => Math.round(micro) / 1e6;
-  const limit = caps(c.env);
-  const users = byUser!.results as { name: string; cost: number; calls: number }[];
-  const body: UsageReport = {
-    month_start: since,
-    total_usd: usd(users.reduce((sum, row) => sum + row.cost, 0)),
-    monthly_cap_usd: limit.monthly,
-    by_user: users.map((row) => ({ name: row.name, usd: usd(row.cost), calls: row.calls })),
-    by_kind: (byKind!.results as { kind: string; cost: number; calls: number }[]).map((row) => ({ kind: row.kind, usd: usd(row.cost), calls: row.calls })),
-    by_model: (byModel!.results as { model: string; cost: number; calls: number; input_tokens: number; output_tokens: number }[]).map((row) => ({
-      model: row.model,
-      usd: usd(row.cost),
-      calls: row.calls,
-      input_tokens: row.input_tokens,
-      output_tokens: row.output_tokens,
-    })),
-    jobs: jobs!.results as UsageReport['jobs'],
-  };
-  return c.json(body);
-});
-
-/** 사람마다 AI 크레딧 (운영자 화면) */
-ai.get('/admin/credits', async (c) => {
-  const now = Date.now();
-  const { results } = await c.env.DB.prepare('SELECT id, display_name AS name FROM users ORDER BY created_at').all<{ id: string; name: string }>();
-  const people: CreditAdminRow[] = await Promise.all(
-    results.map(async (person) => ({ ...person, credits: await creditBalance(c.env, person.id, now), used_month: await creditsUsedThisMonth(c.env, person.id, now) })),
-  );
-  return c.json({ people });
-});
-
-/** 보유 크레딧을 준다. 돈이 오가지 않는 앱 안 재화다 */
-ai.post('/admin/credits', async (c) => {
-  const body = await readJson(c, CreditGrantBody);
-  if (body instanceof Response) return body;
-  const exists = await c.env.DB.prepare('SELECT 1 FROM users WHERE id = ?1').bind(body.user_id).first();
-  if (!exists) return errorJson(404, 'not_found', '회원을 찾지 못했어요.');
-  await grantStatement(c.env, body.user_id, body.amount, 'grant', null, body.note || null, Date.now()).run();
-  console.log(JSON.stringify({ event: 'credits_granted', user_id: body.user_id, amount: body.amount }));
-  return c.body(null, 204);
-});
-
-/** 베타 지표 (설계서 §2.3, 기획서 §13): 주간 복습자, 카드 신고율, AI 비용, 14일 유지율, 저장 → 첫 복습, 2·5회차 정답률, 주간 설문 */
-ai.get('/admin/metrics', async (c) => {
-  const now = Date.now();
-  const week = now - 7 * DAY_MS;
-  const month = now - 30 * DAY_MS;
-  const weekKey = (offset: number) => {
-    const today = studyDayIndex(now);
-    return studyDayKey(today - studyWeekday(today) - offset * 7);
-  };
-  const [people, reports, reviewed, cost, retention, firstReview, accuracy, survey] = await c.env.DB.batch([
-    c.env.DB.prepare(
-      `SELECT u.display_name AS name, u.created_at AS joined_at,
-              (SELECT count(*) FROM review_logs r WHERE r.user_id = u.id AND r.reviewed_at >= ?1) AS reviews_7d,
-              (SELECT max(reviewed_at) FROM review_logs r WHERE r.user_id = u.id) AS last_review_at
-         FROM users u ORDER BY u.created_at`,
-    ).bind(week),
-    c.env.DB.prepare('SELECT count(*) AS n FROM card_reports WHERE created_at >= ?1').bind(month),
-    c.env.DB.prepare('SELECT count(DISTINCT card_id) AS n FROM review_logs WHERE reviewed_at >= ?1').bind(month),
-    c.env.DB.prepare('SELECT coalesce(sum(cost_micro_usd), 0) AS n FROM llm_usage WHERE created_at >= ?1').bind(monthStart(now)),
-    // 14일 유지율: 가입한 지 14일 넘은 사람 중 14일째부터 한 번이라도 복습한 사람
-    c.env.DB.prepare(
-      `SELECT count(*) AS eligible,
-              coalesce(sum(EXISTS (SELECT 1 FROM review_logs r WHERE r.user_id = u.id AND r.reviewed_at >= u.created_at + ?2)), 0) AS retained
-         FROM users u WHERE u.created_at <= ?1`,
-    ).bind(now - 14 * DAY_MS, 14 * DAY_MS),
-    // 저장 → 첫 복습: 하루 넘게 지난 대화 저장 중 그 저장의 카드를 한 장이라도 푼 것 (자료는 학습이라 뺀다)
-    c.env.DB.prepare(
-      `SELECT count(*) AS saved,
-              coalesce(sum(EXISTS (SELECT 1 FROM cards c JOIN review_logs r ON r.card_id = c.id WHERE c.session_id = s.id)), 0) AS reviewed
-         FROM learning_sessions s WHERE s.material IS NULL AND s.created_at <= ?1`,
-    ).bind(now - DAY_MS),
-    // 카드마다 n번째 답의 정답률 (2회차와 5회차)
-    c.env.DB.prepare(
-      `SELECT n, count(*) AS total, sum(grade >= 2) AS correct
-         FROM (SELECT grade, row_number() OVER (PARTITION BY card_id ORDER BY reviewed_at) AS n FROM review_logs)
-        WHERE n IN (2, 5) GROUP BY n`,
-    ),
-    c.env.DB.prepare('SELECT week, used, note FROM survey_answers WHERE week >= ?1 ORDER BY created_at DESC').bind(weekKey(3)),
-  ]);
-  const rate = (n: number) => {
-    const row = (accuracy!.results as { n: number; total: number; correct: number }[]).find((item) => item.n === n);
-    return { value: row && row.total > 0 ? row.correct / row.total : null, total: row?.total ?? 0 };
-  };
-  const answers = survey!.results as { week: string; used: number; note: string | null }[];
-  const rows = people!.results as BetaMetrics['people'];
-  const reportCount = (reports!.results[0] as { n: number }).n;
-  const reviewedCount = (reviewed!.results[0] as { n: number }).n;
-  const body: BetaMetrics = {
-    users: rows.length,
-    weekly_reviewers: rows.length === 0 ? 0 : rows.filter((row) => row.reviews_7d > 0).length / rows.length,
-    report_rate: reviewedCount === 0 ? 0 : reportCount / reviewedCount,
-    reports_30d: reportCount,
-    reviewed_cards_30d: reviewedCount,
-    ai_usd_month: Math.round((cost!.results[0] as { n: number }).n) / 1e6,
-    people: rows,
-    retention_14d: retention!.results[0] as BetaMetrics['retention_14d'],
-    first_review: firstReview!.results[0] as BetaMetrics['first_review'],
-    accuracy: { second: rate(2).value, second_n: rate(2).total, fifth: rate(5).value, fifth_n: rate(5).total },
-    survey: [0, 1, 2, 3].map((offset) => {
-      const week = weekKey(offset);
-      const rows = answers.filter((answer) => answer.week === week);
-      return {
-        week,
-        answered: rows.length,
-        used: rows.filter((answer) => answer.used === 1).length,
-        notes: rows.map((answer) => answer.note).filter((note): note is string => Boolean(note)),
-      };
-    }),
-  };
-  return c.json(body);
 });

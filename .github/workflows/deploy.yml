@@ -98,5 +98,6 @@ jobs:
           expect 200 /.well-known/oauth-authorization-server
           expect 200 /api/health
           expect 401 /api/me
+          expect 401 /api/admin/usage
           expect 401 /mcp -X POST -H 'content-type: application/json' -d '{}'
           echo "운영 확인: $origin, $local_js"

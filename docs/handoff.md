@@ -61,7 +61,7 @@
   - 3-4 승인한 추가 항목 (`5d5621d`):
     - 글꼴: Pretendard 1.3.9 가변 글꼴의 글자 범위별 조각(92개, 3.1MB)을 `apps/web/src/fonts/pretendard`에 넣었다 (OFL, `LICENSE.txt` 같이 둠). 화면에 나온 글자의 조각만 받고, 서비스 워커는 글꼴을 미리 받지 않는다. `_headers`가 `/assets/*`(해시가 붙은 파일)를 1년 캐시한다.
     - 링크 미리보기: `index.html`의 Open Graph·Twitter 태그와 `public/og.png`(1200×630, `npm run gen:icons`가 같이 만든다). 크롤러는 JS를 안 돌려서 모든 주소가 같은 미리보기다.
-    - 개인정보 처리방침·약관: `/privacy`, `/terms` (`screens/Legal.tsx`, 로그인 전에도 열림). 랜딩 아래, 가입 화면, 설정 맨 아래에 링크. 책임자 seungminoh-dev, 문의 contact@smoh.dev, 시행일 2026-10-19 (`Legal.tsx` 맨 위 상수). 저장하는 정보나 외부 서비스가 바뀌면 같이 고친다.
+    - 개인정보 처리방침·약관: `/privacy`, `/terms` (`screens/Legal.tsx`, 로그인 전에도 열림). 랜딩 아래, 가입 화면, 설정 바닥(버전 표시 위)에 링크. 책임자 seungminoh-dev, 문의 contact@smoh.dev, 시행일 2026-10-19 (`Legal.tsx` 맨 위 상수). 저장하는 정보나 외부 서비스가 바뀌면 같이 고친다.
     - LEVEL UP: `POST /api/reviews`가 `level_ups`(다음 단계가 열린 개념과 단계)를 준다. PWA는 답을 보낼 때 모아 두었다가(`offline/store.ts`의 `takeLevelUps`) 끝 화면에 보여 준다. 설명하기 통과도 같이 보인다. 2026-10-19부터 IndexedDB(`level-ups`)에 남겨서, 앱을 다시 열거나 오프라인 답을 나중에 보내도 다음 끝 화면이나 오늘 화면(LEVEL UP 카드)에 나온다.
     - 이정표 배지 11개: 설계서 §5.7. `/api/stats`의 `badges`, 내 성장의 이정표 선반, 오늘 화면과 끝 화면의 새 배지 축하 (`badges.tsx`, 기기마다 한 번).
     - 컴퓨터 개념 패널: 1024px 이상 복습 화면 오른쪽 (`cards/ConceptPanel.tsx`, 기존 `GET /api/concepts/:key`). 정답이 될 수 있는 내 정리·지난 설명은 답을 고른 뒤(설명하기는 비교를 펼친 뒤)에 연다.
@@ -73,7 +73,7 @@
   - 앱 안 모의면접 (2026-10-19, `/interview`, `llm/interview.ts`): 오늘 화면 카드와 개념 상세의 "이 개념으로 모의면접"에서 연다. 순서는 MCP `get_interview_chain`과 같고(흔들리는 개념 → 연결선), 개념마다 두 번쯤, 한 번에 8개까지 묻는다. 끝나면 잘한 점·고칠 점을 정리하고, "판정과 카드로 기록하기"는 대화를 가져오기 작업으로 넣는다(판정 said는 사용자 답 원문). 대화는 기기만 들고 있다. 한도: 질문 하나에 AI 크레딧 1, 기록하기는 5 + 예산. 머리(진행·제목)는 위에 붙고, 입력 칸은 면접이 끝날 때까지 아래에 둔다(보내는 동안 없애면 페이지가 짧아져 맨 위로 튀었다). 새 말이 오면 문서 끝까지 내린다.
   - 요청 안에서 바로 답하는 서버 AI(개념 채팅·모의면접)는 `llm/metered.ts`의 `meteredCall`을 같이 쓴다: 예산 → 크레딧 쓰기(세기와 한 문장) → 예상 비용 적기 → 호출 → 실제 비용으로 고치기.
   - AI 개념 채팅 2차 (2026-10-19): 대화 아래 "이 대화로 카드 만들기" → `POST /api/cards/:id/ask/cards`가 개념 key·원래 카드·주고받은 말(6번까지)을 붙여넣기 가져오기 작업(`llm_jobs` kind `import`)으로 넣는다. 매분 Cron이 만들고 끝나면 푸시로 알린다. 같은 대화는 같은 작업이고, 예산·대기 3개 한도도 가져오기와 같다.
-  - 오너 알림 (2026-10-19, `0008_alerts.sql`): 처리하지 못한 서버 오류, 매분 작업 실패, AI 호출 실패를 `alerts`에 세어 두고, 매분 Cron이 종류마다 한 시간에 한 번 오너에게 푸시한다(`domain/alerts.ts`). 오너 기기에 알림이 켜져 있어야 받는다. 자세한 내용은 Cloudflare 로그에서 본다.
+  - 오너 알림 (2026-10-19, `0008_alerts.sql`): 처리하지 못한 서버 오류, 매분 작업 실패, AI 호출 실패를 `alerts`에 세어 두고, 매분 Cron이 종류마다 한 시간에 한 번 오너에게 푸시한다(`domain/alerts.ts`, 누르면 `/admin`). 오너 기기에 알림이 켜져 있어야 받는다. 자세한 내용은 Cloudflare 로그에서 본다.
   - 개선 후보 묶음 (2026-10-19, 시안 없이 사용자 승인):
     - 오프라인이면 화면 위에 한 줄 안내(`App.tsx`의 `useOnline`, 복습 화면은 원래 안내가 있어 뺀다).
     - 되돌리기: 처음에는 다음 카드 위에 뜨는 토스트("답을 기록했어요 · 되돌리기")였는데, 매번 떠서 불편하다는 의견으로 2026-10-19에 복습 화면 위 막대 오른쪽의 ↶ 버튼으로 바꿨다. 다음 카드에서 고르기 전까지 누를 수 있고, 그 뒤에는 끝 화면에서 마지막 답을 되돌린다.
@@ -211,7 +211,7 @@
      - `POST /api/setup`으로 오너를 만든다 (Origin 헤더 필요).
      - `POST /api/mcp-token`으로 커넥터 URL을 받는다.
      - MCP `tools/call`로 `save_learning`을 부른다. 견본은 `packages/shared/fixtures/immutable-object.json`이다.
-     - `POST /api/reviews`, `PUT /api/reminders`, `POST /api/invites`도 부른다.
+     - `POST /api/reviews`, `PUT /api/reminders`, `POST /api/admin/invites`도 부른다.
   4. 서버를 끄고, 새 코드 폴더(`apps/worker`)에서 같은 `<폴더>`로 `wrangler d1 migrations apply moai --local --persist-to <폴더>`.
   5. `npx wrangler d1 execute DB --local --persist-to <폴더> --command "PRAGMA foreign_key_check"`가 비어 있는지, 행 수가 그대로인지 보고, 새 코드로 띄워 화면을 한 번 본다.
   6. 끝나면 서버 프로세스를 모두 끄고 `git worktree remove --force ../moai-deployed`. Windows에서는 꺼진 줄 알았던 `workerd`가 파일을 잡고 있을 수 있다.
@@ -222,7 +222,8 @@
 
 ## 7. 코드 읽기 전에 알아 둘 규칙
 
-- **인증**: 오너 1명(`/setup`) + GitHub·Google 로그인과 가입(초대 코드는 선택). 다른 기기는 GitHub·Google이나 10분짜리 로그인 코드로 들어온다. `/api/*`의 GET이 아닌 요청은 `Origin === APP_ORIGIN`이어야 한다. `/invites`, `/members`, `/admin/*`는 `requireOwner`다.
+- **인증**: 오너 1명(`/setup`) + GitHub·Google 로그인과 가입(초대 코드는 선택). 다른 기기는 GitHub·Google이나 10분짜리 로그인 코드로 들어온다. `/api/*`의 GET이 아닌 요청은 `Origin === APP_ORIGIN`이어야 한다. 오너 관리 API는 모두 `/api/admin/*`(`api/admin.ts`: 초대·회원·AI 사용량·크레딧 지급·베타 지표)이고, `app.ts`가 `requireUser` 바로 뒤에서 `requireOwner`(`auth/owner.ts`, 요청마다 D1에서 역할 확인)와 `Cache-Control: no-store`를 한 번에 건다. 라우터에 따로 걸지 않는다. 새 관리 API는 `/api/admin` 아래에 두면 `test/admin.test.ts`가 등록된 라우트를 모아 401·403·no-store를 본다.
+- **관리 화면** (2026-10-26): 오너 관리 화면이 설정에서 `/admin`으로 옮겨진다. 오너 알림 푸시(서버 문제 `domain/alerts.ts`, AI 예산 `llm/budget.ts`)를 누르면 `/admin`으로 간다. 회원에게 가는 알림(테스트 알림 등)은 그대로다.
 - **MCP**: `/mcp`는 OAuth Bearer 토큰(`oauth.ts`, 설계서 §8.7), 예전 방식 `/mcp/u/<토큰>`은 비밀 URL(HMAC 해시로 찾는다). 둘 다 `mcp/route.ts`의 `serveMcp`로 간다. SDK 2.3.1 legacy stateless. 도구 8개:
   - `find_concepts`, `save_learning`, `get_learner_context`
   - `get_review_queue`, `submit_review`, `get_interview_chain`

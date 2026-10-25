@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { account } from './api/account';
+import { admin } from './api/admin';
 import { ai } from './api/ai';
 import { auth } from './api/auth';
 import { cards } from './api/cards';
@@ -12,6 +13,7 @@ import { sessions } from './api/sessions';
 import { settings } from './api/settings';
 import { setup } from './api/setup';
 import { authorize } from './auth/authorize';
+import { requireOwner } from './auth/owner';
 import { requireUser } from './auth/session';
 import { raiseAlert } from './domain/alerts';
 import type { AppEnv } from './context';
@@ -44,6 +46,18 @@ const PUBLIC_API = new Set(['/api/health', '/api/setup']);
 const isPublic = (path: string) => PUBLIC_API.has(path) || path.startsWith('/api/auth/');
 app.use('/api/*', async (c, next) => (isPublic(c.req.path) ? next() : requireUser(c, next)));
 
+// 관리 API는 /api/admin/* 한 곳에 모으고, 어느 라우터에 있든 여기서 오너만 통과시킨다 (라우터마다 따로 걸지 않는다).
+// Hono는 미들웨어와 라우트를 한 라우터에서 같은 경로로 고르니, 대소문자·끝 슬래시·%인코딩을 바꿔 라우트에 닿아도 이 검사를 탄다 (test/admin.test.ts).
+// 이름·설문 메모가 들어 있어 응답(403 포함)을 어디에도 캐시하지 않는다
+app.use(
+  '/api/admin/*',
+  async (c, next) => {
+    await next();
+    c.header('Cache-Control', 'no-store');
+  },
+  requireOwner,
+);
+
 /** 매분 Cron 표시가 이만큼 묵으면 멈춘 것으로 본다 */
 const HEARTBEAT_STALE_MS = 5 * MINUTE_MS;
 
@@ -65,6 +79,7 @@ app.get('/api/health', async (c) => {
 });
 app.route('/api/setup', setup);
 app.route('/api/auth', auth);
+app.route('/api/admin', admin);
 app.route('/api', account);
 app.route('/api', ai);
 app.route('/api', cards);

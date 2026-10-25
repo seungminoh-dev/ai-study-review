@@ -185,9 +185,9 @@ describe('suspension', () => {
     await api(member, '/login-codes', { method: 'POST' });
     await api(member, '/push/subscriptions', { method: 'POST', json: await fakeSubscription() });
 
-    expect((await api(member, `/members/${owner.id}/disable`, { method: 'POST' })).status).toBe(403);
-    expect((await api(owner, `/members/${owner.id}/disable`, { method: 'POST' })).status).toBe(404);
-    expect((await api(owner, `/members/${member.id}/disable`, { method: 'POST' })).status).toBe(204);
+    expect((await api(member, `/admin/members/${owner.id}/disable`, { method: 'POST' })).status).toBe(403);
+    expect((await api(owner, `/admin/members/${owner.id}/disable`, { method: 'POST' })).status).toBe(404);
+    expect((await api(owner, `/admin/members/${member.id}/disable`, { method: 'POST' })).status).toBe(204);
 
     expect((await api(member, '/me')).status).toBe(401);
     // 멈춘 뒤에 생긴 로그인도 쓰지 못한다
@@ -195,10 +195,10 @@ describe('suspension', () => {
     expect(await findMcpUser(env, token)).toBeNull();
     expect(await env.DB.prepare('SELECT count(*) AS n FROM login_codes WHERE user_id = ?1').bind(member.id).first<number>('n')).toBe(0);
     expect(await endpoints(member.id)).toEqual([]);
-    const { members } = (await (await api(owner, '/members')).json()) as { members: MemberSummary[] };
+    const { members } = (await (await api(owner, '/admin/members')).json()) as { members: MemberSummary[] };
     expect(members.find((item) => item.id === member.id)?.disabled_at).toEqual(expect.any(Number));
 
-    expect((await api(owner, `/members/${member.id}/enable`, { method: 'POST' })).status).toBe(204);
+    expect((await api(owner, `/admin/members/${member.id}/enable`, { method: 'POST' })).status).toBe(204);
     expect((await api(await anotherLogin(member), '/me')).status).toBe(200);
     // 끊은 커넥터 주소는 다시 열리지 않는다
     expect(await findMcpUser(env, token)).toBeNull();

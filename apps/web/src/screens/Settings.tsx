@@ -1,181 +1,443 @@
-import type { AuthOptions, BetaMetrics, LoginProvider, CreditAdminRow, InviteSummary, LoginCode, LoginSummary, McpTokenStatus, Me, MemberSummary, Reminder, UsageReport } from '@moai/shared';
+import type { AuthOptions, LoginProvider, LoginCode, LoginSummary, McpTokenStatus, Me, Reminder } from '@moai/shared';
 import { MAX_REMINDERS } from '@moai/shared/client';
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { RequestError, errorMessage, request } from '../api';
 import { COACH_INSTRUCTIONS } from '../coach';
 import { IconGoogle } from '../icons';
 import { forgetAiStatus } from '../ai';
 import { copyText } from '../copy';
+import { Mascot } from '../Mascot';
 import { clearDeviceData, flushReviews, pendingCount } from '../offline/store';
 import { currentEndpoint, disablePush, dropLocalPush, enablePush, isStandalone, pushState, type PushState } from '../push';
 import { Link, useLocation } from '../router';
+import { Badge, Disclosure, Pills, RowError, SetCard, SetRow, SwitchRow, Tag, Toaster, toast } from '../settings-ui';
 import { formatDate, formatDateTime, useApi } from '../useApi';
 import { setSound, setTheme, setVibrate, soundOn, theme, vibrateOn, type Theme } from '../prefs';
 import { play } from '../sound';
 import { askConfidence, setAskConfidence } from './Review';
 
-// 설정 (설계서 §12.1): 알림 시간, 알림 켜기·테스트, 커넥터 URL, 계정과 다른 기기 로그인, 초대(오너), 코치 지침 복사(선택)
+// 설정 (설계서 §12.1, 설정 정리 시안): 한 페이지에 흰 카드 6장(알림, 복습, 화면과 소리, 클로드 연결, 계정과 기기, 내 데이터).
+// 자주 쓰는 것을 위에 두고, 한 번만 보는 것(연결 방법, 코치 지침, 예전 비밀 주소)은 접는다. 바꾸면 바로 저장하고 잠깐 알린다.
+// 오너의 초대·회원·지표는 관리 대시보드(/admin, Admin.tsx)로 옮겼다.
+
+/** 위에 붙는 바로가기 칩. id는 오늘 화면 링크(/settings#alerts)도 쓴다 */
+const JUMPS = [
+  { id: 'alerts', label: '알림' },
+  { id: 'review', label: '복습' },
+  { id: 'screen', label: '화면' },
+  { id: 'claude', label: '클로드' },
+  { id: 'account', label: '계정' },
+] as const;
 
 export function Settings({ me, onLogout }: { me: Me; onLogout: () => void }) {
   return (
-    <div className="screen">
+    <div className="screen settings">
       <h1>설정</h1>
-      <Link className="notice link" href="/welcome">
-        설치, 클로드 연결, 알림을 차례로 안내하는 시작 가이드 다시 보기 →
-      </Link>
-      <PushSection />
-      <ReminderSection />
-      <GoalSection initial={me.daily_goal} />
-      <ConfidenceSection />
-      <ScreenSection />
-      <ConnectorSection />
-      <AccountSection me={me} onLogout={onLogout} />
-      <CoachSection />
-      <DataSection me={me} onDeleted={onLogout} />
-      <p className="legal-links small">
-        <Link href="/privacy">개인정보 처리방침</Link>
-        <Link href="/terms">이용약관</Link>
-      </p>
-      {/* 오너만 쓰는 것은 내 설정과 섞이지 않게 맨 아래에 모은다 */}
-      {me.role === 'owner' ? (
-        <div className="admin">
-          <h2 className="admin-title">관리</h2>
-          <InviteSection />
-          <MemberSection />
-          <MetricsSection />
-          <UsageSection />
-          <CreditAdminSection />
-        </div>
-      ) : null}
+      <Profile me={me} />
+      <JumpBar />
+      <NotifyCard />
+      <ReviewCard initialGoal={me.daily_goal} />
+      <ScreenCard />
+      <ClaudeCard />
+      <AccountCard me={me} onLogout={onLogout} />
+      <DataCard me={me} onDeleted={onLogout} />
+      <footer className="set-footer">
+        <p>
+          <Link href="/welcome">시작 가이드 다시 보기</Link>
+          <Link href="/privacy">개인정보 처리방침</Link>
+          <Link href="/terms">이용약관</Link>
+        </p>
+        <p className="set-version">버전 {__APP_VERSION__}</p>
+      </footer>
+      <Toaster />
     </div>
   );
 }
 
-function Status({ text, tone }: { text: string; tone: 'good' | 'bad' | 'warn' | 'muted' }) {
-  return <p className={`notice ${tone}`}>{text}</p>;
-}
-
-const PUSH_TEXT: Record<PushState, string> = {
-  unsupported: '이 브라우저는 웹 푸시를 지원하지 않아요.',
-  'needs-install': 'iPhone은 Safari 공유 버튼 → "홈 화면에 추가"로 설치한 앱에서만 알림을 받을 수 있어요.',
-  'in-app': '카톡 같은 앱 안의 브라우저에서는 알림을 켤 수 없어요. 맨 위의 버튼으로 Chrome·Safari에서 열어 주세요.',
-  denied: '알림이 차단되어 있어요. 휴대폰 설정에서 이 앱의 알림을 허용해 주세요.',
-  off: '이 기기에서는 알림이 꺼져 있어요.',
-  on: '이 기기에서 알림을 받아요.',
-};
-
-function PushSection() {
-  const [state, setState] = useState<PushState | null>(null);
-  const [message, setMessage] = useState<{ text: string; tone: 'good' | 'bad' } | null>(null);
-  useEffect(() => {
-    void pushState().then(setState);
-  }, []);
-  const run = async (action: () => Promise<void>) => {
-    setMessage(null);
-    try {
-      await action();
-    } catch (error) {
-      setMessage({ text: errorMessage(error), tone: 'bad' });
-    }
-  };
+/** 맨 위 내 이름과 연결한 계정. 오너에게는 관리 대시보드로 가는 줄이 붙는다 */
+function Profile({ me }: { me: Me }) {
   return (
-    <section>
-      <h2>알림</h2>
-      {/* 차단·미지원은 오류가 아니라 기기 상태라 주의 색으로 보여 준다 */}
-      {state ? <Status text={PUSH_TEXT[state]} tone={state === 'on' ? 'good' : state === 'off' ? 'muted' : 'warn'} /> : null}
-      {!isStandalone() && state !== 'needs-install' ? <p className="muted small">홈 화면에 추가해 두면 앱처럼 열리고 알림도 잘 와요.</p> : null}
-      <div className="actions">
-        {state === 'off' ? (
-          <button type="button" className="button primary" onClick={() => void run(async () => setState(await enablePush()))}>
-            이 기기에서 알림 켜기
-          </button>
-        ) : null}
-        {state === 'on' ? (
-          <>
-            <button
-              type="button"
-              className="button"
-              onClick={() =>
-                void run(async () => {
-                  try {
-                    const result = await request<{ sent: number; failed: number }>('/push/test', { method: 'POST' });
-                    setMessage({ text: `테스트 알림을 보냈어요 (기기 ${result.sent}대).`, tone: 'good' });
-                  } catch (error) {
-                    // 서버에 이 기기의 구독이 없다(끊겼다): 다시 켠다
-                    if (error instanceof RequestError && error.status === 409) {
-                      setState(await enablePush());
-                      setMessage({ text: '알림이 끊겨 있어서 다시 켰어요. 테스트 알림을 한 번 더 눌러 보세요.', tone: 'good' });
-                    } else throw error;
-                  }
-                })
-              }
-            >
-              테스트 알림
-            </button>
-            <button type="button" className="button" onClick={() => void run(async () => setState(await disablePush()))}>
-              알림 끄기
-            </button>
-          </>
-        ) : null}
+    <section className="set-card set-profile" aria-label="내 계정">
+      <div className="set-who">
+        <Mascot size={40} still />
+        <div>
+          <strong>{me.display_name}</strong>
+          <span className="set-chips">
+            {me.github_login ? <span>GitHub @{me.github_login}</span> : null}
+            {me.google_linked ? <span>Google</span> : null}
+            {!me.github_login && !me.google_linked ? <span>로그인 코드로 들어옴</span> : null}
+          </span>
+        </div>
       </div>
-      {message ? <Status text={message.text} tone={message.tone} /> : null}
+      {me.role === 'owner' ? (
+        <Link className="set-row set-link" href="/admin">
+          <span className="set-label">
+            <strong className="accent">관리 대시보드</strong>
+            <span>베타 지표 · AI 사용량 · 초대 · 회원</span>
+          </span>
+          <span className="set-chevron" aria-hidden="true">
+            ›
+          </span>
+        </Link>
+      ) : null}
     </section>
   );
 }
 
-function ReminderSection() {
-  const { data } = useApi<{ reminders: Reminder[] }>('/reminders');
-  const [times, setTimes] = useState<string[] | null>(null);
-  const [message, setMessage] = useState<{ text: string; tone: 'good' | 'bad' } | null>(null);
+/** 지금 보고 있는 카드의 칩을 밝힌다. 칩을 누르면 그 카드로 내려간다 (주소는 바꾸지 않는다) */
+function JumpBar() {
+  const [current, setCurrent] = useState<string>(JUMPS[0].id);
+  const bar = useRef<HTMLElement>(null);
+  /** 칩을 누른 뒤 부드럽게 내려가는 동안에는 지나가는 카드의 칩으로 바꾸지 않는다 */
+  const hold = useRef(0);
   useEffect(() => {
-    if (data && times === null) setTimes(data.reminders.map((reminder) => reminder.local_time));
-  }, [data, times]);
-  if (times === null) return null;
+    // 오늘 화면의 "알림 시간을 정하면…" 링크(/settings#alerts)로 왔으면 그 카드로 내려간다.
+    // 화면을 바꿀 때 맨 위로 올린 뒤에 그려지므로 바로 내려가도 된다 (가려진 창에서는 requestAnimationFrame이 돌지 않는다)
+    if (location.hash) document.getElementById(location.hash.slice(1))?.scrollIntoView({ block: 'start' });
+    let frame = 0;
+    const spy = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        if (performance.now() < hold.current) return;
+        const edge = (bar.current?.getBoundingClientRect().bottom ?? 0) + 24;
+        let seen: string = JUMPS[0].id;
+        for (const jump of JUMPS) {
+          const top = document.getElementById(jump.id)?.getBoundingClientRect().top;
+          if (top !== undefined && top <= edge) seen = jump.id;
+        }
+        // 키가 큰 화면에서는 마지막 카드가 칩 막대까지 올라오지 못한다. 끝까지 내렸으면 마지막 칩이다
+        if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2) seen = JUMPS[JUMPS.length - 1]!.id;
+        setCurrent(seen);
+      });
+    };
+    window.addEventListener('scroll', spy, { passive: true });
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener('scroll', spy);
+    };
+  }, []);
+  return (
+    <nav ref={bar} className="set-jump" aria-label="설정 바로가기">
+      {JUMPS.map((jump) => (
+        <button
+          key={jump.id}
+          type="button"
+          className={current === jump.id ? 'current' : undefined}
+          aria-current={current === jump.id ? 'true' : undefined}
+          onClick={() => {
+            setCurrent(jump.id);
+            hold.current = performance.now() + 1000;
+            const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+            document.getElementById(jump.id)?.scrollIntoView({ block: 'start', behavior: reduce ? 'auto' : 'smooth' });
+          }}
+        >
+          {jump.label}
+        </button>
+      ))}
+    </nav>
+  );
+}
 
-  const save = async () => {
-    setMessage(null);
+/** 이 기기 알림 상태. 켜짐이 아니면 왜 안 되는지 한 줄로 알린다 (차단·미지원은 오류가 아니라 기기 상태다) */
+const PUSH: Record<PushState, { badge: string; tone: 'good' | 'warn' | 'muted'; text: string }> = {
+  unsupported: { badge: '지원 안 됨', tone: 'warn', text: '이 브라우저는 웹 푸시를 지원하지 않아요.' },
+  'needs-install': { badge: '설치 필요', tone: 'warn', text: 'iPhone은 Safari 공유 버튼 → "홈 화면에 추가"로 설치한 앱에서만 알림을 받아요.' },
+  'in-app': { badge: '앱 안 브라우저', tone: 'warn', text: '카톡 같은 앱 안의 브라우저에서는 알림을 켤 수 없어요. Chrome·Safari에서 열어 주세요.' },
+  denied: { badge: '차단됨', tone: 'warn', text: '휴대폰 설정에서 이 앱의 알림을 허용해 주세요.' },
+  off: { badge: '꺼짐', tone: 'muted', text: '이 기기에서는 알림이 꺼져 있어요.' },
+  on: { badge: '켜짐', tone: 'good', text: '복습할 카드가 있을 때만 알려요.' },
+};
+
+function NotifyCard() {
+  const [state, setState] = useState<PushState | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    void pushState().then(setState);
+  }, []);
+  const run = async (action: () => Promise<void>) => {
+    setError(null);
     try {
-      const filled = [...new Set(times.filter(Boolean))].sort();
+      await action();
+    } catch (reason) {
+      setError(errorMessage(reason));
+    }
+  };
+  const info = state ? PUSH[state] : null;
+  const installHint = !isStandalone() && state !== 'needs-install' ? ' 홈 화면에 추가하면 알림이 잘 와요.' : '';
+
+  const test = () =>
+    run(async () => {
+      try {
+        const result = await request<{ sent: number; failed: number }>('/push/test', { method: 'POST' });
+        toast(`테스트 알림을 보냈어요 (기기 ${result.sent}대).`);
+      } catch (reason) {
+        // 서버에 이 기기의 구독이 없다(끊겼다): 다시 켠다
+        if (reason instanceof RequestError && reason.status === 409) {
+          setState(await enablePush());
+          toast('알림이 끊겨 있어서 다시 켰어요. 한 번 더 보내 보세요.');
+        } else throw reason;
+      }
+    });
+
+  return (
+    <SetCard id="alerts" title="알림">
+      <SetRow label="이 기기 알림" sub={info ? `${info.text}${installHint}` : undefined}>
+        {state === 'off' ? (
+          <button type="button" className="small-button strong" onClick={() => void run(async () => setState(await enablePush()))}>
+            켜기
+          </button>
+        ) : info ? (
+          <Badge tone={info.tone}>{info.badge}</Badge>
+        ) : null}
+      </SetRow>
+      <RowError text={error} />
+      <ReminderRows />
+      {state === 'on' ? (
+        <>
+          <SetRow label="테스트 알림">
+            <button type="button" className="small-button" onClick={() => void test()}>
+              보내기
+            </button>
+          </SetRow>
+          <button type="button" className="set-row set-action quiet" onClick={() => void run(async () => setState(await disablePush()))}>
+            이 기기에서 알림 끄기
+          </button>
+        </>
+      ) : null}
+    </SetCard>
+  );
+}
+
+/** 저장할 시간 목록: 빈칸을 빼고, 같은 시간은 하나로, 이른 순서로 */
+const tidy = (times: readonly string[]) => [...new Set(times.filter(Boolean))].sort();
+const sameTimes = (a: readonly string[], b: readonly string[]) => a.length === b.length && a.every((time, index) => time === b[index]);
+/** 더할 때 넣는 시간. 이미 있는 시간과 겹치지 않는 첫 값을 쓴다 (겹치면 저장할 것이 없어 버튼이 먹통이 된다) */
+const NEW_TIMES = ['08:10', '21:30', '12:30', '07:00', '19:00'];
+
+interface TimeRow {
+  /** 줄마다 고정된 번호. 고치기·지우기를 자리 대신 이것으로 해서, 누르는 사이 줄이 바뀌어도 다른 알림을 건드리지 않는다 */
+  id: number;
+  time: string;
+}
+
+/**
+ * 알림 시간. 더하고 지우면 바로, 시간을 바꾸면 고르기를 마칠 때(1.2초 멈추거나 칸을 떠날 때) 저장한다.
+ * 저장은 한 번에 하나씩 보내고, 보내는 동안 또 바뀌면 끝난 뒤 마지막 목록을 한 번 더 보낸다. 못 저장하면 저장된 값으로 되돌린다.
+ * 서버는 시간 순서로 정리해 저장하지만, 화면의 줄 순서는 다음에 열 때까지 그대로 둔다 (고치는 도중 줄이 움직이지 않게)
+ */
+function ReminderRows() {
+  const { data } = useApi<{ reminders: Reminder[] }>('/reminders');
+  const [rows, setRows] = useState<TimeRow[] | null>(null);
+  /** 화면의 최신 줄, 서버에 저장된 목록, 마지막으로 보낸 목록, 보내는 중인지, 그동안 또 바뀌었는지 */
+  const local = useRef<TimeRow[]>([]);
+  const saved = useRef<string[]>([]);
+  const sent = useRef<string[]>([]);
+  const busy = useRef(false);
+  const again = useRef(false);
+  const nextId = useRef(0);
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const [error, setError] = useState<string | null>(null);
+  const show = (next: TimeRow[]) => {
+    local.current = next;
+    setRows(next);
+  };
+  const toRows = (times: readonly string[]) => times.map((time) => ({ id: nextId.current++, time }));
+
+  const persist = async (): Promise<void> => {
+    clearTimeout(timer.current);
+    timer.current = undefined;
+    const filled = tidy(local.current.map((row) => row.time));
+    if (sameTimes(filled, sent.current)) return;
+    if (busy.current) {
+      again.current = true;
+      return;
+    }
+    busy.current = true;
+    sent.current = filled;
+    try {
       const result = await request<{ reminders: Reminder[] }>('/reminders', { method: 'PUT', json: { times: filled } });
-      setTimes(result.reminders.map((reminder) => reminder.local_time));
-      const next = Math.min(...result.reminders.map((reminder) => reminder.next_fire_at));
-      setMessage({ text: result.reminders.length > 0 ? `저장했어요. 다음 알림은 ${formatDateTime(next)}이에요.` : '알림 시간을 모두 지웠어요.', tone: 'good' });
-    } catch (error) {
-      setMessage({ text: errorMessage(error), tone: 'bad' });
+      saved.current = result.reminders.map((reminder) => reminder.local_time);
+      sent.current = saved.current;
+      const nextFire = Math.min(...result.reminders.map((reminder) => reminder.next_fire_at));
+      toast(result.reminders.length > 0 ? `저장했어요 · 다음 알림 ${formatDateTime(nextFire)}` : '알림 시간을 모두 지웠어요.');
+    } catch (reason) {
+      // 서버에는 저장된 값이 그대로다. 그사이 바꾼 것도 버리고 저장된 값으로 되돌린다
+      sent.current = saved.current;
+      again.current = false;
+      show(toRows(saved.current));
+      setError(`${errorMessage(reason)} 저장된 시간으로 되돌렸어요.`);
+    } finally {
+      busy.current = false;
+      if (again.current) {
+        again.current = false;
+        void persist();
+      }
     }
   };
 
+  useEffect(() => {
+    if (data && rows === null) {
+      saved.current = data.reminders.map((reminder) => reminder.local_time);
+      sent.current = saved.current;
+      show(toRows(saved.current));
+    }
+  }, [data, rows]);
+  // 고르고 1.2초가 지나기 전에 화면을 떠나도 바꾼 시간을 보낸다
+  useEffect(
+    () => () => {
+      if (timer.current !== undefined) void persist();
+    },
+    [],
+  );
+
+  const change = (next: TimeRow[]) => {
+    setError(null);
+    show(next);
+  };
+
+  if (rows === null) return <div className="set-skeleton" aria-hidden="true" />;
   return (
-    <section>
-      <h2>알림 시간</h2>
-      <p className="muted small">하루 최대 {MAX_REMINDERS}번, 한국 시간이에요. 그 시각에 복습할 카드가 있을 때만 알려요.</p>
-      <ul className="times">
-        {times.map((time, index) => (
-          <li key={index}>
-            <input
-              type="time"
-              value={time}
-              aria-label={`알림 시간 ${index + 1}`}
-              onChange={(event) => setTimes(times.map((value, i) => (i === index ? event.target.value : value)))}
-            />
-            <button type="button" className="text-button" onClick={() => setTimes(times.filter((_, i) => i !== index))}>
-              지우기
-            </button>
-          </li>
-        ))}
-      </ul>
-      <div className="actions">
-        {times.length < MAX_REMINDERS ? (
-          <button type="button" className="button" onClick={() => setTimes([...times, times.length === 0 ? '08:10' : '21:30'])}>
-            시간 추가
+    <>
+      {rows.map((row, index) => (
+        <SetRow key={row.id} label={`알림 ${index + 1}`}>
+          <input
+            type="time"
+            className="set-time"
+            value={row.time}
+            aria-label={`알림 시간 ${index + 1}`}
+            onChange={(event) => {
+              const time = event.target.value;
+              change(local.current.map((item) => (item.id === row.id ? { ...item, time } : item)));
+              clearTimeout(timer.current);
+              // 휴대폰 시간 고르기는 돌리는 동안에도 값이 바뀐다. 잠깐 멈추면 저장한다
+              timer.current = time ? setTimeout(() => void persist(), 1200) : undefined;
+            }}
+            onBlur={() => void persist()}
+          />
+          <button
+            type="button"
+            className="icon-button"
+            aria-label={`알림 시간 ${index + 1} 지우기`}
+            onClick={() => {
+              change(local.current.filter((item) => item.id !== row.id));
+              void persist();
+            }}
+          >
+            ✕
           </button>
-        ) : null}
-        <button type="button" className="button primary" onClick={() => void save()}>
-          저장
+        </SetRow>
+      ))}
+      {rows.length < MAX_REMINDERS ? (
+        <button
+          type="button"
+          className="set-row set-action add"
+          onClick={() => {
+            const taken = local.current.map((item) => item.time);
+            change([...local.current, { id: nextId.current++, time: NEW_TIMES.find((time) => !taken.includes(time)) ?? '' }]);
+            void persist();
+          }}
+        >
+          + 시간 추가
         </button>
-      </div>
-      {message ? <Status text={message.text} tone={message.tone} /> : null}
-    </section>
+      ) : null}
+      <RowError text={error} />
+      <p className="set-note">하루 최대 {MAX_REMINDERS}번 · 한국 시간 · 그 시각에 복습할 카드가 있을 때만 알려요</p>
+    </>
+  );
+}
+
+const GOALS = [3, 5, 10, 15, 20].map((value) => ({ value, label: `${value}장` }));
+
+/** 하루 목표(설계서 §9.6, 서버에 저장)와 확신도 묻기(설계서 §9.3, 이 기기에만) */
+function ReviewCard({ initialGoal }: { initialGoal: number }) {
+  const [goal, setGoal] = useState(initialGoal);
+  const [error, setError] = useState<string | null>(null);
+  const [confidence, setConfidence] = useState(askConfidence);
+  const pick = async (value: number) => {
+    const before = goal;
+    setGoal(value);
+    setError(null);
+    try {
+      await request('/goal', { method: 'PUT', json: { daily_goal: value } });
+      toast(`하루 ${value}장으로 바꿨어요.`);
+    } catch (reason) {
+      setGoal(before);
+      setError(errorMessage(reason));
+    }
+  };
+  return (
+    <SetCard id="review" title="복습">
+      <SetRow label="하루 목표" sub="이만큼 한 날이 이어지면 스트릭이 돼요. 하루를 빠지면 그 주에 한 번은 프리즈가 막아 줘요." stack>
+        <Pills label="하루 목표" options={GOALS} value={goal} onPick={(value) => void pick(value)} />
+      </SetRow>
+      <RowError text={error} />
+      <SwitchRow
+        label="답을 고른 뒤 확신도 묻기"
+        tags={
+          <>
+            <Tag accent>권장</Tag>
+            <Tag>이 기기</Tag>
+          </>
+        }
+        sub="찍어서 맞힌 카드는 일찍 다시 나오고, 확신했는데 틀린 카드는 따로 짚어 줘요."
+        checked={confidence}
+        onChange={(checked) => {
+          setConfidence(checked);
+          setAskConfidence(checked);
+        }}
+      />
+    </SetCard>
+  );
+}
+
+const THEMES: { value: Theme; label: string }[] = [
+  { value: 'auto', label: '자동' },
+  { value: 'light', label: '밝게' },
+  { value: 'dark', label: '어둡게' },
+];
+
+/** 이 기기에서만: 밝게·어둡게, 진동, 효과음. 바뀐 모습이 곧 알림이라 따로 알리지 않는다 */
+function ScreenCard() {
+  const [current, setCurrent] = useState(theme);
+  const [buzzing, setBuzzing] = useState(vibrateOn);
+  const [sound, setSoundState] = useState(soundOn);
+  return (
+    <SetCard id="screen" title="화면과 소리" aside={<Tag>이 기기</Tag>}>
+      <SetRow label="테마" sub={current === 'auto' ? '기기 설정을 따라요' : undefined}>
+        <Pills
+          label="화면 밝기"
+          options={THEMES}
+          value={current}
+          onPick={(value) => {
+            setCurrent(value);
+            setTheme(value);
+          }}
+        />
+      </SetRow>
+      {/* 진동은 휴대폰에서만 뜻이 있다. 컴퓨터 Chrome도 vibrate가 있지만 아무 일도 하지 않는다 */}
+      {'vibrate' in navigator && matchMedia('(pointer: coarse)').matches ? (
+        <SwitchRow
+          label="진동"
+          sub="맞음·틀림, 목표 달성"
+          checked={buzzing}
+          onChange={(checked) => {
+            setBuzzing(checked);
+            setVibrate(checked);
+            if (checked) navigator.vibrate(15);
+          }}
+        />
+      ) : null}
+      <SwitchRow
+        label="효과음"
+        sub="맞음·틀림, 목표 달성, 숨은 업적 · iPhone은 무음 모드면 안 나요"
+        checked={sound}
+        onChange={(checked) => {
+          setSoundState(checked);
+          setSound(checked);
+          if (checked) play('right');
+        }}
+      />
+    </SetCard>
   );
 }
 
@@ -185,148 +447,137 @@ interface ConnectedApp {
   created_at: number;
 }
 
-/** claude.ai·Claude Code 연결. 권장은 OAuth 주소(/mcp)를 넣고 로그인·허용하는 것이고, 예전 비밀 주소도 계속 된다 */
-function ConnectorSection() {
+/** claude.ai·Claude Code 연결. 권장은 OAuth 주소(/mcp)를 넣고 로그인·허용하는 것이고, 예전 비밀 주소도 계속 된다. 지금 연결 상태를 맨 위에 둔다 */
+function ClaudeCard() {
   const address = `${location.origin}/mcp`;
   const { data: apps, reload: reloadApps } = useApi<{ apps: ConnectedApp[] }>('/oauth/apps');
-  const [message, setMessage] = useState<{ text: string; tone: 'good' | 'bad' } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const none = apps !== null && apps.apps.length === 0;
 
   const disconnect = async (app: ConnectedApp) => {
     if (!confirm(`${app.name} 연결을 끊을까요? 그 앱에서 모아이를 쓰려면 다시 연결해야 해요.`)) return;
+    setError(null);
     try {
       await request(`/oauth/apps/${encodeURIComponent(app.id)}`, { method: 'DELETE' });
+      toast(`${app.name} 연결을 끊었어요.`);
       reloadApps();
-    } catch (error) {
-      setMessage({ text: errorMessage(error), tone: 'bad' });
+    } catch (reason) {
+      setError(errorMessage(reason));
     }
   };
+  const copy = (text: string) => void copyText(text).then((ok) => (ok ? toast('복사했어요.') : setError('복사하지 못했어요. 길게 눌러 복사해 주세요.')));
 
   return (
-    <section>
-      <h2>클로드 커넥터</h2>
-      <p className="small">커넥터 주소에 아래 주소를 넣고 연결하면 모아이 로그인 창이 떠요. 로그인하고 "허용"을 누르면 끝이에요.</p>
-      <code className="secret-url">{address}</code>
-      <div className="actions">
-        <button
-          type="button"
-          className="button primary"
-          onClick={() => void copyText(address).then((ok) => setMessage(ok ? { text: '복사했어요.', tone: 'good' } : { text: '복사하지 못했어요. 길게 눌러 복사해 주세요.', tone: 'bad' }))}
-        >
-          주소 복사
-        </button>
-      </div>
-      <ol className="steps small">
-        <li>웹 claude.ai → Customize → Connectors → Add custom connector</li>
-        <li>이름은 "모아이", 주소에 위 주소를 넣고 연결한다. 뜨는 창에서 모아이에 로그인하고 "허용"을 누른다.</li>
-        <li>도구 7개(저장·찾기·과거 기록·복습 문제·채점·모의면접·분류 보기)를 "Always allow"로 바꾼다. 분류 바꾸기는 여러 개념을 한꺼번에 바꾸니 묻게 둔다.</li>
-        <li>Claude Code는 <code>claude mcp add --transport http --scope user moai {address}</code> 뒤 <code>/mcp</code>에서 로그인한다.</li>
-      </ol>
-      {message ? <Status text={message.text} tone={message.tone} /> : null}
-      <h3>연결한 앱</h3>
-      {apps && apps.apps.length > 0 ? (
-        <ul className="invites">
-          {apps.apps.map((app) => (
-            <li key={app.id}>
-              <p>
-                <strong>{app.name}</strong>
-                <br />
-                <span className="muted small">{formatDateTime(app.created_at)}에 연결</span>
-              </p>
-              <button type="button" className="text-button" onClick={() => void disconnect(app)}>
-                끊기
-              </button>
-            </li>
-          ))}
-        </ul>
+    <SetCard id="claude" title="클로드 연결">
+      {apps === null ? (
+        <div className="set-skeleton short" aria-hidden="true" />
+      ) : none ? (
+        <SetRow label="아직 연결한 앱이 없어요" sub="아래 주소를 claude.ai나 Claude Code의 커넥터에 넣어 주세요." />
       ) : (
-        <p className="muted small">아직 로그인으로 연결한 앱이 없어요.</p>
+        apps.apps.map((app) => (
+          <SetRow key={app.id} label={app.name} sub={`${formatDateTime(app.created_at)}에 연결`}>
+            <button type="button" className="small-button" onClick={() => void disconnect(app)}>
+              끊기
+            </button>
+          </SetRow>
+        ))
       )}
+      <SetRow label="커넥터 주소" sub={<code className="set-code">{address}</code>}>
+        <button type="button" className={none ? 'small-button strong' : 'small-button'} onClick={() => copy(address)}>
+          복사
+        </button>
+      </SetRow>
+      <RowError text={error} />
+      {/* 연결한 앱이 없으면 처음부터 펼친다. 앱 목록을 받기 전에는 접어 두고, 받은 뒤 다시 그린다 */}
+      <Disclosure key={none ? 'open' : 'closed'} label="연결 방법 보기" sub="claude.ai · Claude Code" defaultOpen={none}>
+        <ol className="steps small">
+          <li>웹 claude.ai → Customize → Connectors → Add custom connector</li>
+          <li>이름은 "모아이", 주소에 위 주소를 넣고 연결한다. 뜨는 창에서 모아이에 로그인하고 "허용"을 누른다.</li>
+          <li>도구 7개(저장·찾기·과거 기록·복습 문제·채점·모의면접·분류 보기)를 "Always allow"로 바꾼다. 분류 바꾸기는 여러 개념을 한꺼번에 바꾸니 묻게 둔다.</li>
+          <li>
+            Claude Code는 <code>claude mcp add --transport http --scope user moai {address}</code> 뒤 <code>/mcp</code>에서 로그인한다.
+          </li>
+        </ol>
+        <Link className="set-inline-link" href="/welcome">
+          처음부터 차례로 안내 받기 →
+        </Link>
+      </Disclosure>
+      <Disclosure label="코치 지침 (선택)" sub="면접 코치 프로젝트 지침에 붙여 넣는 글">
+        <p className="muted small">
+          지침이 없어도 커넥터를 켜 둔 채팅이면 어디서든 "모아이에 저장해줘"라고 하면 저장돼요. 과거에 틀린 지점부터 묻게 하고 싶을 때만 프로젝트 지침에 붙여 넣으세요. 기존 "#
+          세션 정리" 부분은 지워요.
+        </p>
+        <textarea className="instructions" readOnly value={COACH_INSTRUCTIONS} rows={8} aria-label="코치 지침" />
+        <button type="button" className="small-button" onClick={() => copy(COACH_INSTRUCTIONS)}>
+          지침 복사
+        </button>
+      </Disclosure>
       <LegacyConnector />
-    </section>
+    </SetCard>
   );
 }
 
-/** 예전 방식: 비밀 주소. 로그인 창을 못 쓰는 곳을 위해 남겨 둔다. 주소 자체가 비밀번호다 */
+/** 예전 방식: 비밀 주소. 로그인 창을 못 쓰는 곳을 위해 남겨 둔다. 주소 자체가 비밀번호다. 켜져 있어도 저절로 펼치지 않고 표시만 한다 */
 function LegacyConnector() {
   const { data, reload } = useApi<McpTokenStatus>('/mcp-token');
   const [url, setUrl] = useState<string | null>(null);
-  const [message, setMessage] = useState<{ text: string; tone: 'good' | 'bad' } | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const issue = async () => {
     if (data?.active && !confirm('새 URL을 만들면 지금 쓰는 URL은 바로 막혀요. claude.ai에서 커넥터를 지우고 새로 추가해야 해요. 계속할까요?')) return;
+    setError(null);
     try {
       const result = await request<{ url: string }>('/mcp-token', { method: 'POST' });
       setUrl(result.url);
-      setMessage(null);
       reload();
-    } catch (error) {
-      setMessage({ text: errorMessage(error), tone: 'bad' });
+    } catch (reason) {
+      setError(errorMessage(reason));
+    }
+  };
+  const drop = async () => {
+    if (!confirm('비밀 주소를 지울까요? 그 주소로 연결한 커넥터는 바로 끊겨요.')) return;
+    setError(null);
+    try {
+      await request('/mcp-token', { method: 'DELETE' });
+      toast('비밀 주소를 지웠어요.');
+      reload();
+    } catch (reason) {
+      setError(errorMessage(reason));
     }
   };
 
   return (
-    <details className="legacy-connector" open={Boolean(data?.active) || undefined}>
-      <summary>예전 방식: 비밀 주소로 연결</summary>
+    <Disclosure label="예전 방식: 비밀 주소" badge={data?.active ? <Badge tone="warn">켜져 있음</Badge> : <Badge>꺼짐</Badge>}>
       {data ? (
-        <p className="muted small">{data.active && data.created_at
+        <p className="muted small">
+          {data.active && data.created_at
             ? `${formatDateTime(data.created_at)}에 만든 비밀 주소를 쓰고 있어요 (마지막 사용 ${data.last_used_at ? formatDate(data.last_used_at) : '아직 없음'}). 90일 동안 안 쓰면 저절로 끊겨요. 로그인으로 연결했다면 이 주소는 지워도 돼요.`
-            : '비밀 주소가 없어요. 위의 로그인 연결을 권해요.'}</p>
+            : '비밀 주소가 없어요. 위의 로그인 연결을 권해요.'}
+        </p>
       ) : null}
       {url ? (
         <div className="secret">
           <p className="small">이 주소는 지금 한 번만 보여요. 비밀번호처럼 다른 사람에게 보이지 마세요.</p>
           <code className="secret-url">{url}</code>
-          <button
-            type="button"
-            className="button primary"
-            onClick={() => void copyText(url).then((ok) => setMessage(ok ? { text: '복사했어요.', tone: 'good' } : { text: '복사하지 못했어요. 길게 눌러 복사해 주세요.', tone: 'bad' }))}
-          >
+          <button type="button" className="small-button strong" onClick={() => void copyText(url).then((ok) => (ok ? toast('복사했어요.') : setError('복사하지 못했어요. 길게 눌러 복사해 주세요.')))}>
             URL 복사
           </button>
           <p className="small">커넥터를 추가할 때 이 주소를 넣고 "No sign in"을 고른다.</p>
         </div>
       ) : (
-        <div className="actions">
-          <button type="button" className="button" onClick={() => void issue()}>
+        <div className="set-buttons">
+          <button type="button" className="small-button" onClick={() => void issue()}>
             {data?.active ? '비밀 주소 다시 만들기' : '비밀 주소 만들기'}
           </button>
           {data?.active ? (
-            <button
-              type="button"
-              className="button"
-              onClick={() =>
-                void request('/mcp-token', { method: 'DELETE' })
-                  .then(() => reload())
-                  .catch((error) => setMessage({ text: errorMessage(error), tone: 'bad' }))
-              }
-            >
+            <button type="button" className="small-button danger-text" onClick={() => void drop()}>
               비밀 주소 지우기
             </button>
           ) : null}
         </div>
       )}
-      {message ? <Status text={message.text} tone={message.tone} /> : null}
-    </details>
-  );
-}
-
-function CoachSection() {
-  const [copied, setCopied] = useState<boolean | null>(null);
-  return (
-    <section>
-      <h2>코치 지침 (선택)</h2>
-      <p className="muted small">
-        지침이 없어도 커넥터를 켜 둔 채팅이면 어디서든 "모아이에 저장해줘"라고 하면 저장돼요. 면접 코치 프로젝트에서 과거에 틀린 지점부터 묻게 하고
-        싶을 때만 프로젝트 지침에 붙여 넣으세요. 기존 "# 세션 정리" 부분은 지워요.
-      </p>
-      <textarea className="instructions" readOnly value={COACH_INSTRUCTIONS} rows={12} aria-label="코치 지침" />
-      <div className="actions">
-        <button type="button" className="button" onClick={() => void copyText(COACH_INSTRUCTIONS).then(setCopied)}>
-          지침 복사
-        </button>
-      </div>
-      {copied === null ? null : <Status text={copied ? '복사했어요.' : '복사하지 못했어요. 위 글을 길게 눌러 복사해 주세요.'} tone={copied ? 'good' : 'bad'} />}
-    </section>
+      <RowError text={error} />
+    </Disclosure>
   );
 }
 
@@ -347,16 +598,19 @@ const LINK_TEXT: Record<LoginProvider, Record<string, { text: string; tone: 'goo
   },
 };
 
-function AccountSection({ me, onLogout }: { me: Me; onLogout: () => void }) {
+/** 로그인 방법(GitHub·Google), 다른 기기 로그인 코드, 로그인한 곳, 로그아웃. 다른 기기에 미치는 동작은 맨 아래 빨간 줄이다 */
+function AccountCard({ me, onLogout }: { me: Me; onLogout: () => void }) {
   const { data: options } = useApi<AuthOptions>('/auth/options');
   const { query } = useLocation();
-  const linked = [me.github_login ? `GitHub @${me.github_login}` : null, me.google_linked ? 'Google' : null].filter(Boolean);
-  const signIn = [me.github_login ? 'GitHub' : null, me.google_linked ? 'Google' : null].filter(Boolean).join('나 ');
-  const canLink = (['google', 'github'] as const).filter((provider) => options?.[provider] && !(provider === 'github' ? me.github_login : me.google_linked));
   const [result] = useState(() => LINK_TEXT.github[query.get('github') ?? ''] ?? LINK_TEXT.google[query.get('google') ?? '']);
   const [code, setCode] = useState<LoginCode | null>(null);
-  const [message, setMessage] = useState<{ text: string; tone: 'good' | 'bad' } | null>(null);
+  const [error, setError] = useState<string | null>(result?.tone === 'bad' ? result.text : null);
+  const signIn = [me.github_login ? 'GitHub' : null, me.google_linked ? 'Google' : null].filter(Boolean).join('나 ');
 
+  // 연결 결과는 처음 열 때 한 번만 알린다 (result는 처음 값 그대로라 다시 돌지 않는다)
+  useEffect(() => {
+    if (result?.tone === 'good') toast(result.text);
+  }, [result]);
   useEffect(() => {
     // 새로 고침해도 같은 안내가 다시 나오지 않게 주소에서 뺀다
     // 기록 깊이(history.state)는 그대로 둔다. 지우면 뒤로가기 규칙이 깨진다
@@ -364,11 +618,11 @@ function AccountSection({ me, onLogout }: { me: Me; onLogout: () => void }) {
   }, [query]);
 
   const issue = async () => {
-    setMessage(null);
+    setError(null);
     try {
       setCode(await request<LoginCode>('/login-codes', { method: 'POST' }));
-    } catch (error) {
-      setMessage({ text: errorMessage(error), tone: 'bad' });
+    } catch (reason) {
+      setError(errorMessage(reason));
     }
   };
 
@@ -384,392 +638,104 @@ function AccountSection({ me, onLogout }: { me: Me; onLogout: () => void }) {
       await clearDeviceData();
       forgetAiStatus();
       onLogout();
-    } catch (error) {
-      setMessage({ text: errorMessage(error), tone: 'bad' });
+    } catch (reason) {
+      setError(errorMessage(reason));
     }
   };
 
+  const provider = (name: 'github' | 'google') => {
+    const linked = name === 'github' ? me.github_login !== null : me.google_linked;
+    if (linked) return <Badge tone="good">연결됨</Badge>;
+    if (!options?.[name]) return <Badge>못 씀</Badge>;
+    return (
+      <a className="small-button" href={`/api/auth/${name}/start?intent=link`}>
+        {name === 'google' ? <IconGoogle /> : null}
+        연결
+      </a>
+    );
+  };
+
   return (
-    <section>
-      <h2>계정 · 다른 기기</h2>
-      {result ? <Status text={result.text} tone={result.tone} /> : null}
-      <p className="small">
-        {me.display_name} · {linked.length ? `${linked.join(', ')} 연결됨` : 'GitHub·Google 연결 안 됨'}
-      </p>
-      {linked.length ? (
-        <p className="muted small">컴퓨터나 새 휴대폰에서 {location.host}를 열고 "{signIn}로 계속하기"를 누르면 이 계정으로 로그인돼요.</p>
-      ) : canLink.length ? (
-        <p className="muted small">GitHub나 Google을 연결해 두면 컴퓨터나 새 휴대폰에서 바로 로그인해요.</p>
-      ) : null}
-      {canLink.length ? (
-        <div className="actions">
-          {canLink.includes('google') ? (
-            <a className="button" href="/api/auth/google/start?intent=link">
-              <IconGoogle />
-              Google 연결
-            </a>
-          ) : null}
-          {canLink.includes('github') ? (
-            <a className="button primary" href="/api/auth/github/start?intent=link">
-              GitHub 연결
-            </a>
-          ) : null}
-        </div>
-      ) : null}
+    <SetCard id="account" title="계정과 기기">
+      <RowError text={error} />
+      <h3>로그인 방법</h3>
+      <SetRow label="GitHub" sub={me.github_login ? `@${me.github_login}` : undefined}>
+        {provider('github')}
+      </SetRow>
+      <SetRow label="Google">{provider('google')}</SetRow>
+      <SetRow label="다른 기기에서 로그인" sub={signIn ? `${location.host}에서 "${signIn}로 계속하기"를 누르거나 코드를 쓰세요` : '로그인 코드를 만들어 다른 기기에 넣으세요'}>
+        {code ? null : (
+          <button type="button" className="small-button" onClick={() => void issue()}>
+            코드 만들기
+          </button>
+        )}
+      </SetRow>
       {code ? (
-        <div className="secret">
+        <div className="set-more">
           <p className="small">다른 기기의 로그인 화면에서 "로그인 코드로"에 넣으세요. {formatDateTime(code.expires_at)}까지 한 번만 쓸 수 있어요.</p>
           <code className="secret-url login-code">{code.code}</code>
         </div>
-      ) : (
-        <div className="actions">
-          <button type="button" className="button" onClick={() => void issue()}>
-            다른 기기 로그인 코드 만들기
-          </button>
-        </div>
-      )}
-      {message ? <Status text={message.text} tone={message.tone} /> : null}
-      <Logins />
-      <button type="button" className="text-button" onClick={() => void logout()}>
-        이 기기에서 로그아웃
-      </button>
-    </section>
+      ) : null}
+      <Logins onLogout={() => void logout()} />
+    </SetCard>
   );
 }
 
 /** 로그인한 기기와 다른 기기 모두 로그아웃 (잃어버린 기기를 끊을 때). 기기 이름은 저장하지 않아서 마지막 사용일만 보여 준다 */
-function Logins() {
+function Logins({ onLogout }: { onLogout: () => void }) {
   const { data, reload } = useApi<{ logins: LoginSummary[] }>('/logins');
-  const [message, setMessage] = useState<{ text: string; tone: 'good' | 'bad' } | null>(null);
-  if (!data) return null;
-  const others = data.logins.filter((login) => !login.current);
+  const [error, setError] = useState<string | null>(null);
+  const others = data?.logins.filter((login) => !login.current) ?? [];
 
   const endOthers = async () => {
     if (!confirm('이 기기만 남기고 다른 기기에서 모두 로그아웃할까요? 다른 기기의 알림도 꺼져요. Claude 커넥터는 그대로예요.')) return;
+    setError(null);
     try {
       const endpoint = await currentEndpoint();
       const result = await request<{ ended: number }>('/logins', { method: 'DELETE', json: endpoint ? { endpoint } : {} });
-      setMessage({ text: `${result.ended}곳에서 로그아웃했어요.`, tone: 'good' });
+      toast(`${result.ended}곳에서 로그아웃했어요.`);
       reload();
-    } catch (error) {
-      setMessage({ text: errorMessage(error), tone: 'bad' });
+    } catch (reason) {
+      setError(errorMessage(reason));
     }
   };
 
   return (
     <>
-      <p className="muted small">
-        로그인한 곳: 이 기기{others.map((login) => ` · 다른 기기(마지막 사용 ${formatDate(login.last_seen_at)})`).join('')}
-      </p>
+      <h3>로그인한 곳</h3>
+      {data === null ? (
+        <div className="set-skeleton short" aria-hidden="true" />
+      ) : (
+        <>
+          <SetRow label="이 기기">
+            <Badge>지금</Badge>
+          </SetRow>
+          {others.map((login, index) => (
+            <SetRow key={`${login.created_at}-${index}`} label="다른 기기" sub={`마지막 사용 ${formatDate(login.last_seen_at)}`} />
+          ))}
+        </>
+      )}
+      <RowError text={error} />
       {others.length > 0 ? (
-        <button type="button" className="text-button danger-text" onClick={() => void endOthers()}>
+        <button type="button" className="set-row set-action danger" onClick={() => void endOthers()}>
           다른 기기 모두 로그아웃
         </button>
       ) : null}
-      {message ? <Status text={message.text} tone={message.tone} /> : null}
+      <button type="button" className="set-row set-action" onClick={onLogout}>
+        이 기기에서 로그아웃
+      </button>
     </>
   );
 }
 
-function inviteState(invite: InviteSummary): string {
-  const kind = invite.bind_name ? `${invite.bind_name}님 기기 복구 · ` : '';
-  if (invite.used_at) return `${kind}${invite.used_by_name ?? '누군가'}님이 ${invite.bind_name ? '들어왔어요' : '가입했어요'}`;
-  if (invite.expires_at <= Date.now()) return `${kind}만료됐어요`;
-  return `${kind}${formatDate(invite.expires_at)}까지`;
-}
-
-
-function InviteSection() {
-  const { data, reload } = useApi<{ invites: InviteSummary[] }>('/invites');
-  const [label, setLabel] = useState('');
-  const [created, setCreated] = useState<{ label: string; code: string; recovery: boolean } | null>(null);
-  const [message, setMessage] = useState<{ text: string; tone: 'good' | 'bad' } | null>(null);
-
-  const { data: members } = useApi<{ members: MemberSummary[] }>('/members');
-  const [bind, setBind] = useState('');
-
-  const create = async (event: FormEvent) => {
-    event.preventDefault();
-    setMessage(null);
-    try {
-      const result = await request<{ invite: InviteSummary; code: string }>('/invites', {
-        method: 'POST',
-        json: bind ? { label, bind_user_id: bind } : { label },
-      });
-      setCreated({ label: result.invite.label, code: result.code, recovery: result.invite.bind_name !== null });
-      setLabel('');
-      reload();
-    } catch (error) {
-      setMessage({ text: errorMessage(error), tone: 'bad' });
-    }
-  };
-
-  const remove = async (invite: InviteSummary) => {
-    if (!confirm(`"${invite.label}" 초대를 지울까요? 그 코드로는 가입할 수 없게 돼요.`)) return;
-    try {
-      await request(`/invites/${invite.id}`, { method: 'DELETE' });
-      reload();
-    } catch (error) {
-      setMessage({ text: errorMessage(error), tone: 'bad' });
-    }
-  };
-
-  // 코드는 링크에 넣지 않는다. 받은 사람이 앱 안에서 직접 입력한다 (설계서 §8.4)
-  const shareText = created
-    ? `모아이 초대 코드: ${created.code}\n${location.origin} 을 Chrome이나 Safari로 열어서(카톡 안에서는 설치와 알림이 안 돼요) GitHub나 Google로 로그인한 뒤 이 코드를 넣어 주세요. ${created.recovery ? '24시간' : '7일'} 동안 한 번 쓸 수 있어요.`
-    : '';
-
-  return (
-    <section>
-      <h2>초대</h2>
-      <p className="muted small">초대 코드는 한 사람이 한 번 써요. 새 친구 초대는 7일, 기기 복구 초대는 24시간 동안 유효하고, 만들 때 한 번만 보여요.</p>
-      {created ? (
-        <div className="secret">
-          <p className="small">{created.label}님에게 보낼 코드예요.</p>
-          <code className="secret-url login-code">{created.code}</code>
-          <button
-            type="button"
-            className="button primary"
-            onClick={() => void copyText(shareText).then((ok) => setMessage(ok ? { text: '안내 문구와 함께 복사했어요.', tone: 'good' } : { text: '복사하지 못했어요. 코드를 길게 눌러 복사해 주세요.', tone: 'bad' }))}
-          >
-            안내와 함께 복사
-          </button>
-        </div>
-      ) : null}
-      <form onSubmit={(event) => void create(event)}>
-        <label className="field">
-          <span>누구에게 보낼까요?</span>
-          <input value={label} onChange={(event) => setLabel(event.target.value)} maxLength={30} placeholder="예: 민수" required />
-        </label>
-        {members && members.members.length > 0 ? (
-          <label className="field">
-            <span>종류</span>
-            <select value={bind} onChange={(event) => setBind(event.target.value)}>
-              <option value="">새 친구 가입</option>
-              {members.members.map((member) => (
-                <option key={member.id} value={member.id}>
-                  기기 복구: {member.display_name}
-                  {member.github_login ? ` (@${member.github_login})` : ''}
-                </option>
-              ))}
-            </select>
-            {bind ? <span className="muted small">이 코드로 들어오면 그 사람 계정으로 로그인하고 GitHub를 새로 이어요. 다른 기기의 로그인, 커넥터 URL, 알림 구독은 모두 끊겨서 커넥터 URL을 다시 만들어야 해요.</span> : null}
-          </label>
-        ) : null}
-        <div className="actions">
-          <button type="submit" className="button">
-            초대 코드 만들기
-          </button>
-        </div>
-      </form>
-      {message ? <Status text={message.text} tone={message.tone} /> : null}
-      {data && data.invites.length > 0 ? (
-        <ul className="list invites">
-          {data.invites.map((invite) => (
-            <li key={invite.id}>
-              <div>
-                <strong>{invite.label}</strong>
-                <p className="muted small">{inviteState(invite)}</p>
-              </div>
-              {invite.used_at ? null : (
-                <button type="button" className="text-button" onClick={() => void remove(invite)}>
-                  지우기
-                </button>
-              )}
-            </li>
-          ))}
-        </ul>
-      ) : null}
-    </section>
-  );
-}
-
-const GOALS = [3, 5, 10, 15, 20];
-
-/** 하루 목표: 이만큼 복습한 날이 이어지면 스트릭이 된다 (설계서 §9.6) */
-/** 회원 이용 멈추기·다시 열기 (이용약관의 이용 정지). 멈추면 그 회원의 로그인·커넥터·알림이 모두 끊긴다 */
-function MemberSection() {
-  const { data, reload } = useApi<{ members: MemberSummary[] }>('/members');
-  const [message, setMessage] = useState<{ text: string; tone: 'good' | 'bad' } | null>(null);
-  if (!data || data.members.length === 0) return null;
-
-  const toggle = async (member: MemberSummary) => {
-    const disable = member.disabled_at === null;
-    if (disable && !confirm(`${member.display_name}님의 이용을 멈출까요? 그 사람의 로그인, 커넥터, 알림이 모두 끊기고 다시 열 때까지 로그인할 수 없어요. 데이터는 지우지 않아요.`)) return;
-    try {
-      await request(`/members/${member.id}/${disable ? 'disable' : 'enable'}`, { method: 'POST' });
-      setMessage({ text: disable ? `${member.display_name}님의 이용을 멈췄어요.` : `${member.display_name}님이 다시 로그인할 수 있어요.`, tone: 'good' });
-      reload();
-    } catch (error) {
-      setMessage({ text: errorMessage(error), tone: 'bad' });
-    }
-  };
-
-  return (
-    <section>
-      <h2>회원</h2>
-      <ul className="list invites">
-        {data.members.map((member) => (
-          <li key={member.id}>
-            <div>
-              <strong>{member.display_name}</strong>
-              <p className="muted small">
-                {member.github_login ? `@${member.github_login} · ` : ''}
-                {member.disabled_at ? `${formatDate(member.disabled_at)}부터 멈춤` : `${formatDate(member.created_at)} 가입`}
-              </p>
-            </div>
-            <button type="button" className={member.disabled_at ? 'text-button' : 'text-button danger-text'} onClick={() => void toggle(member)}>
-              {member.disabled_at ? '다시 열기' : '이용 멈추기'}
-            </button>
-          </li>
-        ))}
-      </ul>
-      {message ? <Status text={message.text} tone={message.tone} /> : null}
-    </section>
-  );
-}
-
-function GoalSection({ initial }: { initial: number }) {
-  const [goal, setGoal] = useState(initial);
-  const [message, setMessage] = useState<{ text: string; tone: 'good' | 'bad' } | null>(null);
-  const save = async (value: number) => {
-    setGoal(value);
-    try {
-      await request('/goal', { method: 'PUT', json: { daily_goal: value } });
-      setMessage({ text: `하루 ${value}장으로 바꿨어요.`, tone: 'good' });
-    } catch (error) {
-      setMessage({ text: errorMessage(error), tone: 'bad' });
-    }
-  };
-  return (
-    <section>
-      <h2>하루 목표</h2>
-      <p className="muted small">이만큼 복습한 날이 이어지면 스트릭이 돼요. 하루를 빠지면 그 주에 한 번은 프리즈가 자동으로 막아 줘요.</p>
-      <div className="segmented" role="group" aria-label="하루 목표">
-        {GOALS.map((value) => (
-          <button key={value} type="button" className={value === goal ? 'current' : ''} aria-pressed={value === goal} onClick={() => void save(value)}>
-            {value}장
-          </button>
-        ))}
-      </div>
-      {message ? <Status text={message.text} tone={message.tone} /> : null}
-    </section>
-  );
-}
-
-const usd = (value: number) => `$${value.toFixed(2)}`;
-
-/** 관리자 사용량 (설계서 §11.5): 이번 달 서버 AI 비용. 단가는 보수적으로 센 값이고, 실제 청구는 Anthropic Console에서 본다 */
-function UsageSection() {
-  const { data, error } = useApi<UsageReport>('/admin/usage');
-  if (error) return null;
-  if (!data) return null;
-  return (
-    <section>
-      <h2>AI 사용량 (이번 달)</h2>
-      <p className="small">
-        {usd(data.total_usd)} / 서비스 전체 한도 {usd(data.monthly_cap_usd)} · 한 사람이 쓰는 양은 AI 크레딧이 정해요
-      </p>
-      <p className="muted small">코드에 둔 단가로 넉넉히 센 값이에요. 실제 청구는 Anthropic Console에서 확인하세요.</p>
-      {data.by_user.length > 0 ? (
-        <ul className="list">
-          {data.by_user.map((row) => (
-            <li key={row.name}>
-              {row.name} · {usd(row.usd)} · {row.calls}번
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="muted small">아직 쓴 사람이 없어요.</p>
-      )}
-      {data.by_model.map((row) => (
-        <p key={row.model} className="muted small">
-          {row.model}: {row.calls}번, 입력 {row.input_tokens.toLocaleString()} · 출력 {row.output_tokens.toLocaleString()} 토큰, 1번에 평균 {usd(row.usd / Math.max(1, row.calls))}
-        </p>
-      ))}
-      {data.jobs.some((job) => job.status === 'failed') ? (
-        <p className="muted small">
-          실패:{' '}
-          {data.jobs
-            .filter((job) => job.status === 'failed')
-            .map((job) => `${job.kind} ${job.error ?? ''} ${job.n}건`)
-            .join(', ')}
-        </p>
-      ) : null}
-    </section>
-  );
-}
-
-/** 오너: 보유 크레딧 주기. 돈이 오가지 않는다 */
-function CreditAdminSection() {
-  const { data, reload } = useApi<{ people: CreditAdminRow[] }>('/admin/credits');
-  const [target, setTarget] = useState('');
-  const [amount, setAmount] = useState(100);
-  const [note, setNote] = useState('');
-  const [message, setMessage] = useState<{ text: string; tone: 'good' | 'bad' } | null>(null);
-  if (!data) return null;
-  const grant = async (event: FormEvent) => {
-    event.preventDefault();
-    setMessage(null);
-    try {
-      await request('/admin/credits', { method: 'POST', json: { user_id: target, amount, ...(note.trim() ? { note: note.trim() } : {}) } });
-      setMessage({ text: `보유 크레딧 ${amount}을 줬어요.`, tone: 'good' });
-      setNote('');
-      forgetAiStatus();
-      reload();
-    } catch (error) {
-      setMessage({ text: errorMessage(error), tone: 'bad' });
-    }
-  };
-  return (
-    <section>
-      <h2>AI 크레딧 주기</h2>
-      <ul className="list">
-        {data.people.map((person) => (
-          <li key={person.id} className="small">
-            {person.name} · 월간 {person.credits.monthly} · 보유 {person.credits.held} · 이번 달 {person.used_month} 씀
-          </li>
-        ))}
-      </ul>
-      <form onSubmit={(event) => void grant(event)}>
-        <label className="field">
-          <span>누구에게</span>
-          <select value={target} onChange={(event) => setTarget(event.target.value)} required>
-            <option value="">고르기</option>
-            {data.people.map((person) => (
-              <option key={person.id} value={person.id}>
-                {person.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="field">
-          <span>얼마나</span>
-          <input type="number" min={1} max={100000} value={amount} onChange={(event) => setAmount(Number(event.target.value))} required />
-        </label>
-        <label className="field">
-          <span>메모 (받는 사람 기록에 보여요)</span>
-          <input value={note} onChange={(event) => setNote(event.target.value)} maxLength={80} placeholder="예: 베타 감사" />
-        </label>
-        <div className="actions">
-          <button type="submit" className="button">
-            보유 크레딧 주기
-          </button>
-        </div>
-      </form>
-      {message ? <Status text={message.text} tone={message.tone} /> : null}
-    </section>
-  );
-}
-
-/** 내 데이터 내보내기와 계정 지우기 (설계서 §14) */
-function DataSection({ me, onDeleted }: { me: Me; onDeleted: () => void }) {
-  const [message, setMessage] = useState<{ text: string; tone: 'good' | 'bad' } | null>(null);
+/** 내 데이터 내보내기와 계정 지우기 (설계서 §14). 오너는 계정을 지울 수 없다 */
+function DataCard({ me, onDeleted }: { me: Me; onDeleted: () => void }) {
+  const [error, setError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [name, setName] = useState('');
 
   const download = async () => {
-    setMessage(null);
+    setError(null);
     try {
       const response = await fetch('/api/export', { credentials: 'same-origin' });
       if (!response.ok) throw new Error('내보내지 못했어요. 잠시 뒤에 다시 해 주세요.');
@@ -779,9 +745,9 @@ function DataSection({ me, onDeleted }: { me: Me; onDeleted: () => void }) {
       link.download = `moai-export-${new Date().toISOString().slice(0, 10)}.json`;
       link.click();
       setTimeout(() => URL.revokeObjectURL(url), 10_000);
-      setMessage({ text: '내려받았어요.', tone: 'good' });
-    } catch (error) {
-      setMessage({ text: errorMessage(error), tone: 'bad' });
+      toast('내려받았어요.');
+    } catch (reason) {
+      setError(errorMessage(reason));
     }
   };
 
@@ -794,22 +760,21 @@ function DataSection({ me, onDeleted }: { me: Me; onDeleted: () => void }) {
       await clearDeviceData();
       forgetAiStatus();
       onDeleted();
-    } catch (error) {
-      setMessage({ text: errorMessage(error), tone: 'bad' });
+    } catch (reason) {
+      setError(errorMessage(reason));
     }
   };
 
   return (
-    <section>
-      <h2>내 데이터</h2>
-      <div className="actions">
-        <button type="button" className="button" onClick={() => void download()}>
-          내 데이터 내보내기 (JSON)
+    <SetCard id="data" title="내 데이터">
+      <SetRow label="내 데이터 내보내기" sub="개념·카드·복습 기록을 JSON 파일로">
+        <button type="button" className="small-button" onClick={() => void download()}>
+          내려받기
         </button>
-      </div>
-      {message ? <Status text={message.text} tone={message.tone} /> : null}
+      </SetRow>
+      <RowError text={error} />
       {me.role === 'owner' ? null : confirming ? (
-        <form className="danger" onSubmit={(event) => void remove(event)}>
+        <form className="danger set-danger" onSubmit={(event) => void remove(event)}>
           <p className="small">계정을 지우면 저장한 개념, 카드, 복습 기록, 알림 설정이 모두 사라져요. 먼저 내보내기를 해 두세요.</p>
           <label className="field">
             <span>확인을 위해 내 이름을 그대로 써 주세요: {me.display_name}</span>
@@ -825,161 +790,10 @@ function DataSection({ me, onDeleted }: { me: Me; onDeleted: () => void }) {
           </div>
         </form>
       ) : (
-        <button type="button" className="text-button" onClick={() => setConfirming(true)}>
+        <button type="button" className="set-row set-action danger" onClick={() => setConfirming(true)}>
           계정 지우기
         </button>
       )}
-    </section>
-  );
-}
-
-/** 확신도 묻기 (설계서 §9.3): 이 기기에만 저장한다 */
-function ConfidenceSection() {
-  const [on, setOn] = useState(askConfidence);
-  return (
-    <section>
-      <h2>복습 방식</h2>
-      <label className="toggle">
-        <input
-          type="checkbox"
-          checked={on}
-          onChange={(event) => {
-            setOn(event.target.checked);
-            setAskConfidence(event.target.checked);
-          }}
-        />{' '}
-        답을 고른 뒤 확신도 묻기 (권장)
-      </label>
-      <p className="muted small">찍어서 맞힌 카드는 조금 일찍 다시 나오고, 확신했는데 틀린 카드는 따로 짚어 줘요. 한 번 더 누르는 대신 기억이 정확해져요.</p>
-    </section>
-  );
-}
-
-const THEMES: { value: Theme; label: string }[] = [
-  { value: 'auto', label: '기기 설정 따르기' },
-  { value: 'light', label: '밝게' },
-  { value: 'dark', label: '어둡게' },
-];
-
-/** 이 기기에서만: 밝게·어둡게, 진동 */
-function ScreenSection() {
-  const [current, setCurrent] = useState(theme);
-  const [buzzing, setBuzzing] = useState(vibrateOn);
-  const [sound, setSoundState] = useState(soundOn);
-  return (
-    <section>
-      <h2>화면과 소리</h2>
-      <div className="theme-picker" role="radiogroup" aria-label="화면 밝기">
-        {THEMES.map((item) => (
-          <label key={item.value} className={current === item.value ? 'theme-option current' : 'theme-option'}>
-            <input
-              type="radio"
-              name="theme"
-              value={item.value}
-              checked={current === item.value}
-              onChange={() => {
-                setCurrent(item.value);
-                setTheme(item.value);
-              }}
-            />
-            {item.label}
-          </label>
-        ))}
-      </div>
-      {/* 진동은 휴대폰에서만 뜻이 있다. 컴퓨터 Chrome도 vibrate가 있지만 아무 일도 하지 않는다 */}
-      {'vibrate' in navigator && matchMedia('(pointer: coarse)').matches ? (
-        <label className="toggle">
-          <input
-            type="checkbox"
-            checked={buzzing}
-            onChange={(event) => {
-              setBuzzing(event.target.checked);
-              setVibrate(event.target.checked);
-              if (event.target.checked) navigator.vibrate(15);
-            }}
-          />{' '}
-          진동 (맞음·틀림, 목표 달성)
-        </label>
-      ) : null}
-      <label className="toggle">
-        <input
-          type="checkbox"
-          checked={sound}
-          onChange={(event) => {
-            setSoundState(event.target.checked);
-            setSound(event.target.checked);
-            if (event.target.checked) play('right');
-          }}
-        />{' '}
-        효과음 (맞음·틀림, 목표 달성, 숨은 업적)
-      </label>
-      <p className="muted small">이 기기에만 적용돼요. iPhone은 무음 모드면 소리가 나지 않아요.</p>
-    </section>
-  );
-}
-
-const percent = (value: number) => `${Math.round(value * 100)}%`;
-
-/** 베타 지표 (설계서 §2.3 끝났다는 기준): 주간 복습자 60% 이상, 카드 신고율 5% 미만, AI 지출 월 $100 미만 */
-function MetricsSection() {
-  const { data } = useApi<BetaMetrics>('/admin/metrics');
-  if (!data) return null;
-  const checks = [
-    { label: '주간 복습자', value: percent(data.weekly_reviewers), ok: data.weekly_reviewers >= 0.6, goal: '60% 이상' },
-    { label: '카드 신고율 (30일)', value: `${percent(data.report_rate)} (${data.reports_30d}/${data.reviewed_cards_30d})`, ok: data.report_rate < 0.05, goal: '5% 미만' },
-    { label: '이번 달 AI 비용', value: `$${data.ai_usd_month.toFixed(2)}`, ok: data.ai_usd_month < 100, goal: '$100 미만' },
-  ];
-  return (
-    <section>
-      <h2>베타 지표 ({data.users}명)</h2>
-      <ul className="list">
-        {checks.map((check) => (
-          <li key={check.label} className="metric">
-            <span>{check.ok ? '✓' : '✗'} {check.label}</span>
-            <span className={check.ok ? 'good-text' : 'bad-text'}>
-              {check.value} <span className="muted small">목표 {check.goal}</span>
-            </span>
-          </li>
-        ))}
-      </ul>
-      <h3>참고 지표</h3>
-      <ul className="list">
-        <li className="metric">
-          <span>14일 유지율</span>
-          <span>
-            {data.retention_14d.eligible === 0 ? '아직 14일 지난 사람이 없어요' : `${percent(data.retention_14d.retained / data.retention_14d.eligible)} (${data.retention_14d.retained}/${data.retention_14d.eligible})`}
-          </span>
-        </li>
-        <li className="metric">
-          <span>저장 → 첫 복습</span>
-          <span>{data.first_review.saved === 0 ? '아직 하루 지난 저장이 없어요' : `${percent(data.first_review.reviewed / data.first_review.saved)} (${data.first_review.reviewed}/${data.first_review.saved})`}</span>
-        </li>
-        <li className="metric">
-          <span>정답률 2회차 → 5회차</span>
-          <span>
-            {data.accuracy.second === null ? '–' : percent(data.accuracy.second)} → {data.accuracy.fifth === null ? '–' : percent(data.accuracy.fifth)}{' '}
-            <span className="muted small">
-              ({data.accuracy.second_n}장 · {data.accuracy.fifth_n}장)
-            </span>
-          </span>
-        </li>
-      </ul>
-      <h3>주간 설문: 써먹은 개념이 있었나요?</h3>
-      <ul className="list">
-        {data.survey.map((week) => (
-          <li key={week.week} className="small">
-            {week.week} 주 · 답 {week.answered}명 · 써먹음 {week.used}명
-            {week.notes.length > 0 ? <span className="muted"> · {week.notes.join(' / ')}</span> : null}
-          </li>
-        ))}
-      </ul>
-      <ul className="list">
-        {data.people.map((person) => (
-          <li key={`${person.name}-${person.joined_at}`} className="small">
-            {person.name} · 7일 {person.reviews_7d}장 · 마지막 {person.last_review_at ? formatDate(person.last_review_at) : '없음'}
-          </li>
-        ))}
-      </ul>
-    </section>
+    </SetCard>
   );
 }

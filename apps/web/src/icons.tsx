@@ -67,6 +67,16 @@ export const IconBook = ({ size }: Props) => (
   </Icon>
 );
 
+/** 관리 대시보드: 크기가 다른 칸 네 개 */
+export const IconDashboard = ({ size }: Props) => (
+  <Icon size={size}>
+    <rect x="4" y="4" width="7" height="7" rx="1.5" />
+    <rect x="13" y="4" width="7" height="4" rx="1.5" />
+    <rect x="13" y="10" width="7" height="10" rx="1.5" />
+    <rect x="4" y="13" width="7" height="7" rx="1.5" />
+  </Icon>
+);
+
 export const IconSettings = ({ size }: Props) => (
   <Icon size={size}>
     <path d="M4 7h9" />
