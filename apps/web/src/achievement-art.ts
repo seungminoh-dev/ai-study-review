@@ -1,0 +1,284 @@
+import type { Art } from './credits';
+
+// 숨은 업적 그림 (12×12 도트). 업적마다 하나씩, 시안 "숨은 업적 도트 아이콘"대로 그렸다.
+// 그림은 글자 지도이고 credits.tsx의 Sprite가 그린다. 색은 styles.css의 .px-* 가 정한다:
+// o 테두리(마스코트 테두리 색), y 금색, g 초록, k 짙은 초록, h 흰색, c 크림, a 주황, r 짙은 주황,
+// i 하늘, b 파랑, p 빨강, v 은회색, n 갈색. 업적 목록은 apps/worker/src/domain/achievements.ts에 있다.
+
+const ART = new Map<string, Art>([
+  // 올빼미
+  [
+    'night_owl',
+    [
+      '.oo......oo.',
+      '.ono....ono.',
+      '.onnoooonno.',
+      'onnnnnnnnnno',
+      'onyyynnyyyno',
+      'onyoynnyoyno',
+      'onyyyaayyyno',
+      'onnnnaannnno',
+      'ornnnnnnnnro',
+      'orrnnnnnnrro',
+      '.orrnnnnrro.',
+      'nnoyonnoyonn',
+    ],
+  ],
+  // 아침형 인간
+  [
+    'early_bird',
+    [
+      '.....yy.....',
+      '.y........y.',
+      '..y.oooo.y..',
+      '...oyyyyo...',
+      'y.oyhyyyao.y',
+      '.oyyyyyyyao.',
+      '.oyyyyyyyao.',
+      'oooooooooooo',
+      '............',
+      '..bbbyybbb..',
+      '............',
+      '....byyb....',
+    ],
+  ],
+  // 완벽주의자
+  [
+    'perfectionist',
+    [
+      '.y..........',
+      '...oooooo...',
+      '..oihiibio..',
+      '.oihiiiibio.',
+      'oooooooooooo',
+      '.oiibiibiio.',
+      '..oibiibio..',
+      '...obiibo...',
+      '....obbo....',
+      '.....oo...y.',
+      '.........yyy',
+      '..........y.',
+    ],
+  ],
+  // 돌아온 복습러
+  [
+    'comeback',
+    [
+      '...o........',
+      '..oao.......',
+      '.oaaoooooo..',
+      'oaaaaaaaaao.',
+      'oaaaaaaaaaao',
+      '.oaaoooooaao',
+      '..oao...oaao',
+      '...o....oaao',
+      '..oooooooaao',
+      '..oaaaaaaaao',
+      '..orrrrrrro.',
+      '...ooooooo..',
+    ],
+  ],
+  // 마라토너
+  [
+    'marathon',
+    [
+      '............',
+      '............',
+      '.oooo.......',
+      '.oaaao......',
+      '.oaaaaoo....',
+      '.oaaahahoo..',
+      '.oaaaahahao.',
+      '.oayyyyaaaao',
+      '.ohhhhhhhhho',
+      '..ooooooooo.',
+      '............',
+      '............',
+    ],
+  ],
+  // 탐험가
+  [
+    'explorer',
+    [
+      '......oppp..',
+      '......opp...',
+      '......o.....',
+      '......o.....',
+      '.....oo.....',
+      '....ohho....',
+      '...ohhhho...',
+      '..ovhvvhvo..',
+      '.ovvvvvvvvo.',
+      'ovvvvvvvvvvo',
+      'ovvvvvvvvvvo',
+      '.oooooooooo.',
+    ],
+  ],
+  // 완독
+  [
+    'finisher',
+    [
+      '............',
+      'ooo......ooo',
+      'occoo..oocco',
+      'occccoocccco',
+      'ocvvcoocvvco',
+      'occccoocccco',
+      'ocvvcoocvvco',
+      'occccoocccco',
+      'oooccooccooo',
+      '...ooppoo...',
+      '.....pp.....',
+      '.....pp.....',
+    ],
+  ],
+  // 설욕전
+  [
+    'redemption',
+    [
+      'pp..pp......',
+      '.pppp.......',
+      '..pp........',
+      '.pppp.......',
+      'pp..ppoooo..',
+      '.....oggggo.',
+      '....oggooggo',
+      '....ogo..ogo',
+      '....ogo..ogo',
+      '....oggooggo',
+      '.....oggggo.',
+      '......oooo..',
+    ],
+  ],
+  // 명사수
+  [
+    'sharpshooter',
+    [
+      '....oooo..ao',
+      '..ooppppoooa',
+      '.oppccccpo..',
+      '.opccppcopo.',
+      'opccpppoccpo',
+      'opcppyyppcpo',
+      'opcppyyppcpo',
+      'opccppppccpo',
+      '.opccppccpo.',
+      '.oppccccppo.',
+      '..ooppppoo..',
+      '....oooo....',
+    ],
+  ],
+  // 찍기의 신
+  [
+    'lucky_guess',
+    [
+      '...oo..oo...',
+      '..oggooggo..',
+      '.ooggggggoo.',
+      'oggoggggoggo',
+      'ogggoggogggo',
+      '.ogggkkgggo.',
+      '.ogggkkgggo.',
+      'ogggoggogggo',
+      'oggoggggoggo',
+      '.ooggggggoo.',
+      '..oggooggo..',
+      '...oo..oo...',
+    ],
+  ],
+  // 말하기 선수
+  [
+    'orator',
+    [
+      '....oooo....',
+      '.a.ovvvvo.a.',
+      'a.ovhovovo.a',
+      'a.ohvvovvo.a',
+      'a.ovvovovo.a',
+      '.a.ovvvvo.a.',
+      '...oaaaao...',
+      '....orro....',
+      '....orro....',
+      '....orro....',
+      '....orro....',
+      '.....oo.....',
+    ],
+  ],
+  // 호기심 대장
+  [
+    'curious',
+    [
+      '..oooooooo..',
+      '.ohhhhhhhho.',
+      'ohhhaaaahhho',
+      'ohhaahhaahho',
+      'ohhhhhaahhho',
+      'ohhhhaahhhho',
+      'ohhhhhhhhhho',
+      'ohhhhaahhhho',
+      '.ohhhhhhhho.',
+      '.ohhoooooo..',
+      '.oho........',
+      '..o.........',
+    ],
+  ],
+  // 면접 단골
+  [
+    'interviewee',
+    [
+      '....oooo....',
+      '...obbbbo...',
+      '....obbo....',
+      '....oooo....',
+      '....obbo....',
+      '...obbbyo...',
+      '...obbybo...',
+      '..obbybbbo..',
+      '..obybbbyo..',
+      '...obbbyo...',
+      '....obyo....',
+      '.....oo.....',
+    ],
+  ],
+  // 퀘스트 장인
+  [
+    'quest_master',
+    [
+      '..........y.',
+      '.........yyy',
+      '..ooooooooy.',
+      '.onnnnnnnno.',
+      'onynnnnnnyno',
+      'onynnnnnnyno',
+      'oooooyyooooo',
+      'onynnyynnyno',
+      'onynnnnnnyno',
+      'onynnnnnnyno',
+      'orrrrrrrrrro',
+      '.oooooooooo.',
+    ],
+  ],
+  // 백일 동안
+  [
+    'devoted',
+    [
+      '.....o......',
+      '....oao.....',
+      '..o.oaaoo...',
+      '.oaoaaaoao..',
+      '.oaoaaaaao..',
+      '.oaaaaaaao..',
+      '.oaaayaaaao.',
+      '.oaayyyaaao.',
+      '.oaayyyyaao.',
+      '..oaayyaao..',
+      '...oaaaao...',
+      '....oooo....',
+    ],
+  ],
+]);
+
+/** 업적 id의 그림. 그림이 아직 없는 업적이면 undefined */
+export function achievementArt(id: string): Art | undefined {
+  return ART.get(id);
+}

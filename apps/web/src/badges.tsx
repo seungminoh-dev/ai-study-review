@@ -1,7 +1,9 @@
 import type { Achievement, Badge, BadgeId, StatsResponse } from '@moai/shared';
 import { useEffect, useState, type CSSProperties } from 'react';
+import { achievementArt } from './achievement-art';
 import { forgetAiStatus } from './ai';
 import { Confetti } from './Confetti';
+import { Sprite } from './credits';
 import { IconStar } from './icons';
 import { play } from './sound';
 import { Mascot, type Mood } from './Mascot';
@@ -161,11 +163,19 @@ export function BadgeShelf({ badges }: { badges: readonly Badge[] }) {
   );
 }
 
-/** 업적 보석. 숨은 것은 물음표 */
-function Gem({ hidden = false }: { hidden?: boolean }) {
+/** 업적 그림 칸. 업적마다 12×12 도트(achievement-art.ts)를 그린다. 숨은 것은 물음표, 그림이 아직 없는 업적은 별 */
+function Gem({ id, px = 3 }: { id?: string; px?: number }) {
+  if (id === undefined) {
+    return (
+      <span className="achievement-gem hidden" aria-hidden="true">
+        ?
+      </span>
+    );
+  }
+  const art = achievementArt(id);
   return (
-    <span className={hidden ? 'achievement-gem hidden' : 'achievement-gem'} aria-hidden="true">
-      {hidden ? '?' : <IconStar size={18} />}
+    <span className="achievement-gem" aria-hidden="true">
+      {art ? <Sprite art={art} px={px} /> : <IconStar size={18} />}
     </span>
   );
 }
@@ -190,7 +200,7 @@ export function NewAchievements({ achievements, className }: { achievements: rea
       <ul className="badge-new-list">
         {unseen.map((item, index) => (
           <li key={item.id} style={{ '--i': index } as CSSProperties}>
-            <Gem />
+            <Gem id={item.id} px={4} />
             <div>
               <strong>{item.title}</strong>
               <p className="small muted">{item.text}</p>
@@ -219,7 +229,7 @@ export function AchievementShelf({ achievements }: { achievements: StatsResponse
         <ul className="achievement-list">
           {achievements.earned.map((item) => (
             <li key={item.id} className={fresh.has(item.id) ? 'fresh' : undefined}>
-              <Gem />
+              <Gem id={item.id} />
               <div className="grow">
                 <strong>{item.title}</strong>
                 <p className="small muted">{item.text}</p>
@@ -236,7 +246,7 @@ export function AchievementShelf({ achievements }: { achievements: StatsResponse
         <div className="achievement-hidden">
           <span className="achievement-hidden-gems" aria-hidden="true">
             {Array.from({ length: Math.min(hidden, 5) }, (_, index) => (
-              <Gem key={index} hidden />
+              <Gem key={index} />
             ))}
           </span>
           <p className="small muted">

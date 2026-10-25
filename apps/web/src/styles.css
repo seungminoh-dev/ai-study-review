@@ -16,6 +16,8 @@
   --muted: #5a6378;
   --border: #e9e1d3;
   --border-strong: #d9d0c0;
+  /* 숨은 업적 그림 칸 */
+  --gem-tile: #fff6e3;
   --pen: #192849;
   --pen-text: #ffffff;
   --pen-soft: #fff0c7;
@@ -74,6 +76,7 @@
     --muted: #a7b0c4;
     --border: #2a3754;
     --border-strong: #3a4868;
+    --gem-tile: #2a3754;
     --pen: #ff914d;
     --pen-text: #192849;
     --pen-soft: #33281f;
@@ -123,6 +126,7 @@
   --muted: #a7b0c4;
   --border: #2a3754;
   --border-strong: #3a4868;
+  --gem-tile: #2a3754;
   --pen: #ff914d;
   --pen-text: #192849;
   --pen-soft: #33281f;
@@ -7420,6 +7424,43 @@ a.notice.link:active,
   fill: var(--border-strong);
 }
 
+/* 숨은 업적 그림(achievement-art.ts)에만 쓰는 색 */
+.px-h {
+  fill: #ffffff;
+}
+
+.px-c {
+  fill: #fff0c7;
+}
+
+.px-a {
+  fill: #ff914d;
+}
+
+.px-r {
+  fill: #c9611f;
+}
+
+.px-i {
+  fill: #bfe3fa;
+}
+
+.px-b {
+  fill: #4a7fd4;
+}
+
+.px-p {
+  fill: #c2412f;
+}
+
+.px-v {
+  fill: #a7b0c4;
+}
+
+.px-n {
+  fill: #8a5a2b;
+}
+
 .credit-chip {
   display: inline-flex;
   align-items: center;
@@ -7578,21 +7619,22 @@ a.notice.link:active,
   }
 }
 
-/* 숨은 업적: 보석 모양 표시, 내 성장의 목록, 새로 찾았을 때의 축하 카드 */
+/* 숨은 업적: 업적마다 다른 도트 그림 칸, 내 성장의 목록, 새로 찾았을 때의 축하 카드 */
 .achievement-gem {
   display: inline-grid;
   flex: none;
   place-items: center;
-  width: 40px;
-  height: 40px;
-  clip-path: polygon(50% 0, 100% 28%, 100% 72%, 50% 100%, 0 72%, 0 28%);
-  background: linear-gradient(150deg, #ffd166, var(--accent) 70%);
-  color: var(--accent-text);
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: var(--gem-tile);
+  color: var(--accent-ink);
 }
 
 .achievement-gem.hidden {
   width: 28px;
   height: 28px;
+  border-radius: 8px;
   background: var(--surface-2);
   color: var(--muted);
   font-family: var(--mono);
@@ -7653,7 +7695,7 @@ a.notice.link:active,
 .achievement-hidden-gems {
   display: flex;
   flex: none;
-  gap: 2px;
+  gap: 4px;
 }
 
 .achievement-new {
@@ -7669,6 +7711,12 @@ a.notice.link:active,
 
 .achievement-new .confetti {
   top: 48px;
+}
+
+.achievement-new .achievement-gem {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
 }
 
 .achievement-new h2,

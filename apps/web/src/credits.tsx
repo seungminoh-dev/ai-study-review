@@ -6,8 +6,9 @@ import { Link } from './router';
 
 // AI 크레딧 도트 (6단계 시안 "AI 크레딧 도트"): 엽전(가운데 네모 구멍)과 보석 그림, 오늘 화면·사이드바의 엽전 칩.
 // 그림은 글자 지도다. 한 줄에서 같은 글자가 이어지면 사각형 하나로 그리고, 색은 styles.css의 .px-* 가 정한다.
+// 숨은 업적 그림(achievement-art.ts)도 Sprite로 그린다.
 
-type Art = readonly string[];
+export type Art = readonly string[];
 
 /** o 테두리, y 금색, w 빛, d 그늘. 가운데 o 네모가 엽전 구멍이다 */
 const COIN: Art = ['..oooooo..', '.oyyyyyyo.', 'oywwyyyydo', 'oywyyyyydo', 'oyyyooyydo', 'oyyyooyydo', 'oyyyyyyydo', 'oyyyyyyddo', '.oddddddo.', '..oooooo..'];
@@ -17,7 +18,7 @@ const COIN_EMPTY: Art = ['..ssssss..', '.seeeeees.', 'seeeeeeees', 'seeeeeeees',
 const GEM: Art = ['..oooooo..', '.owlgggko.', 'owlggggkko', 'oggggggkko', '.oggggkko.', '..oggkko..', '...okko...', '....oo....'];
 const GEM_EMPTY: Art = ['..ssssss..', '.seeeeees.', 'seeeeeeees', 'seeeeeeees', '.seeeeees.', '..seeees..', '...sees...', '....ss....'];
 
-function Sprite({ art, px }: { art: Art; px: number }) {
+export function Sprite({ art, px }: { art: Art; px: number }) {
   const width = Math.max(...art.map((row) => row.length));
   const rects = art.flatMap((row, y) => {
     const runs: ReactElement[] = [];
