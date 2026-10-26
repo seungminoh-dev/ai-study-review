@@ -1,4 +1,4 @@
-import type { ImportResult, InterviewDepth, InterviewLevel, InterviewResponse, InterviewSummary, InterviewTopicSuggestion } from '@moai/shared';
+import type { ImportResult, InterviewBody, InterviewDepth, InterviewLevel, InterviewResponse, InterviewSummary, InterviewTopicSuggestion } from '@moai/shared';
 import { CREDIT_COST, INTERVIEW_DEPTHS, INTERVIEW_LEVELS, creditsLeft, interviewCost } from '@moai/shared/client';
 import * as m from 'motion/react-m';
 import { Fragment, useEffect, useRef, useState, type FormEvent } from 'react';
@@ -17,17 +17,8 @@ import { useApi } from '../useApi';
 // 한 질문씩 답하고, 끝나면 잘한 점과 고칠 점을 정리한다. 원하면 판정과 카드로 기록에 남긴다. 대화는 기기에만 있다.
 
 /** 시작 화면에서 고른 것. topic은 직접 적은 주제 */
-interface Plan {
-  concept_key?: string;
-  topic?: string;
-  depth: InterviewDepth;
-  level: InterviewLevel;
-}
-
-interface Turn {
-  question: string;
-  answer: string;
-}
+type Plan = Pick<InterviewBody, 'concept_key' | 'topic' | 'depth' | 'level'>;
+type Turn = InterviewBody['turns'][number];
 
 type Saving = { state: 'idle' } | { state: 'saving' } | { state: 'done'; summary: string; sessionId: string } | { state: 'failed'; message: string };
 

@@ -6,6 +6,9 @@ import { materialHref, materialReview, partView } from '../materials';
 import { Link } from '../router';
 import { useApi } from '../useApi';
 
+/** 푼 비율 (0~100) */
+export const percentOf = (solved: number, cards: number) => (cards === 0 ? 0 : Math.round((solved / cards) * 100));
+
 // 자료 목록 (설계서 §5.6, 3단계 시안): PDF 하나가 카드 하나다. 섹션별 진행은 자료 상세(MaterialDetail)에서 본다.
 // 자료 카드는 풀기 전까지 내 지식이 아니고, 한 번 푼 카드는 평소 복습에 들어간다.
 
@@ -22,7 +25,7 @@ export function BookTile({ title, sections, done = false }: { title: string; sec
 function MaterialCard({ material }: { material: MaterialSummary }) {
   const sections = Math.max(material.parts.length, 1);
   const done = material.cards > 0 && material.unsolved_open === 0;
-  const percent = material.cards === 0 ? 0 : Math.round((material.solved / material.cards) * 100);
+  const percent = percentOf(material.solved, material.cards);
   const next = material.next ? partView(material.next.part, Math.max(material.parts.indexOf(material.next.part), 0), material.part_labels[material.next.part]) : null;
   return (
     <article className="material-item">

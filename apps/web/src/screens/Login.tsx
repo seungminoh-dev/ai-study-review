@@ -19,7 +19,7 @@ const AUTH_TEXT: Record<string, string> = {
 };
 
 /** 커넥터 허용 화면에서 로그인하러 왔으면 그리로 돌아간다. 남의 사이트로 보내지 않게 /authorize?만 따른다 */
-const nextOf = (value: string | null) => (value && value.startsWith('/authorize?') ? value : null);
+export const nextOf = (value: string | null) => (value && value.startsWith('/authorize?') ? value : null);
 
 export function Login({ github, google, onDone }: { github: boolean; google: boolean; onDone: (me: Me) => void }) {
   const { query } = useLocation();

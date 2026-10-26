@@ -4,6 +4,7 @@ import { RequestError, errorMessage, request } from '../api';
 import { IconCheck } from '../icons';
 import { Splash } from '../Loading';
 import { Mascot } from '../Mascot';
+import { nextOf } from './Login';
 
 // 가입 (설계서 §8.4, 3단계 시안). GitHub나 Google 확인을 마치고 서버가 이 화면으로 보낸다. 가입하면 시작 가이드로 간다.
 // 초대 코드는 있으면 넣는다 (2026-10-22부터 없어도 가입한다).
@@ -31,9 +32,6 @@ function Steps({ provider }: { provider: LoginProvider }) {
     </ol>
   );
 }
-
-/** Claude 커넥터 허용 화면에서 가입하러 왔으면 가입한 뒤 그리로 돌아간다. 남의 사이트로 보내지 않게 /authorize?만 따른다 */
-const nextOf = (value: string | null) => (value && value.startsWith('/authorize?') ? value : null);
 
 export function Join({ onDone }: { onDone: (me: Me) => void }) {
   const next = nextOf(new URLSearchParams(location.search).get('next'));

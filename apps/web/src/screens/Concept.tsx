@@ -1,6 +1,6 @@
 import type { ConceptDetail } from '@moai/shared';
-import { useEffect, useState } from 'react';
-import { aiOn, aiStatus } from '../ai';
+import { useState } from 'react';
+import { useCanInterview } from '../ai';
 import { errorMessage, request } from '../api';
 import { STATE_LABEL } from '../concept-state';
 import { copyText } from '../copy';
@@ -21,10 +21,7 @@ const EDGE_LABEL: Record<string, { out: string; in: string }> = {
 export function Concept({ conceptKey }: { conceptKey: string }) {
   const { data, error } = useApi<ConceptDetail>(`/concepts/${encodeURIComponent(conceptKey)}`);
   const [copied, setCopied] = useState<boolean | null>(null);
-  const [canInterview, setCanInterview] = useState(false);
-  useEffect(() => {
-    void aiStatus().then((status) => setCanInterview(aiOn(status)));
-  }, []);
+  const canInterview = useCanInterview();
   if (error) return <div className="screen"><p className="notice bad">{error}</p></div>;
   if (!data) return <Loading />;
   return (

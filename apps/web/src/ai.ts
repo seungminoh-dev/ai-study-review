@@ -1,5 +1,6 @@
 import type { AiStatus, CreditKind, JobView } from '@moai/shared';
 import { CREDIT_COST, creditsLeft } from '@moai/shared/client';
+import { useEffect, useState } from 'react';
 import { request } from './api';
 
 // 서버 LLM 작업 (설계서 §11.3): 요청하면 작업 id를 받고, 끝날 때까지 1.5초마다 확인한다.
@@ -52,3 +53,12 @@ export const JOB_ERROR: Record<string, string> = {
   card_missing: '카드를 찾지 못했어요.',
   unavailable: '서버에 AI 설정이 없어요.',
 };
+
+/** 서버 AI를 쓸 수 있는지 (모의면접 버튼을 보일지). 확인하기 전에는 false */
+export function useCanInterview(): boolean {
+  const [can, setCan] = useState(false);
+  useEffect(() => {
+    void aiStatus().then((status) => setCan(aiOn(status)));
+  }, []);
+  return can;
+}

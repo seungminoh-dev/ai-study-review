@@ -39,7 +39,8 @@ export function choicesOf(card: QueueCard): Choice[] {
   }
 }
 
-const KIND: Record<QueueCard['type'], string> = { ox: 'OX', mcq: '객관식', cloze: '빈칸', explain: '설명하기' };
+/** 카드 종류 이름 (복습, 공부한 대화, 자료 미리 보기가 같이 쓴다) */
+export const CARD_TYPE: Record<QueueCard['type'], string> = { ox: 'OX', mcq: '객관식', cloze: '빈칸', explain: '설명하기' };
 
 function ClozePrompt({ prompt, filled }: { prompt: string; filled: string | null }) {
   const [before, after] = prompt.split('____');
@@ -73,7 +74,7 @@ export function QuestionCard({
     <div className="question">
       <div className="question-meta">
         <span className="muted">
-          {KIND[card.type]} · {card.rung === 1 ? '알아보기' : '떠올리기'}
+          {CARD_TYPE[card.type]} · {card.rung === 1 ? '알아보기' : '떠올리기'}
         </span>
         {/* 개념 이름이 곧 정답인 문제가 많아서("이것을 무엇이라 하나요?") 답한 뒤에 보여 준다 */}
         {answered ? <span className="chip">{card.concept_name}</span> : null}
