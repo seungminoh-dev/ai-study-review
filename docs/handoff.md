@@ -125,7 +125,7 @@
     - 복습 탭의 "공부한 대화"는 대화만 보여 준다. 자료 섹션은 학습 탭에 있다.
   - 컴퓨터 화면 폭 (2026-10-19): `.app`이 `.shell` 그리드 칸에서 내용 폭으로 줄던 것을 `width: 100%`로 고쳤다. 이제 화면마다 760px(넓은 화면 1120px)까지 칸을 채운다. 내 성장은 오늘 화면처럼 두 칸(왼쪽 이정표·분류별 진행, 오른쪽 최근 12주)이고, 최근 12주 히트맵은 컴퓨터에서 칸 폭에 맞춰 날짜 칸을 키운다. 휴대폰은 그대로다.
 - **테스트**: worker 164개, web 4개(`src/offline/store.test.ts`, fake-indexeddb), shared 23개 통과. CI·Deploy 모두 초록.
-- **브랜치**: `main`만 쓴다. 열린 PR은 없다.
+- **브랜치**: `main`이 운영이다. 2026-10-26부터 변경은 버전 브랜치 `release/vX.Y.Z`와 PR로만 올린다 ([운영 가이드 "버전과 PR"](runbook.md#버전과-pr)). 지금 열린 PR은 없다.
 - **확인 못 한 것**:
   1. 실제 카톡 링크 미리보기. 주소를 한 번 보내 본다. 예전 미리보기가 캐시돼 있으면 카카오 개발자 사이트의 공유 디버거로 지운다.
   2. 움직임 자체. 확인용 브라우저 패널이 동작 줄이기 상태이거나 숨겨져 있었다. 보이는 브라우저에서 복습 한 번, 끝 화면 한 번을 본다.
@@ -149,7 +149,7 @@
 - 답은 **한국어 해요체로 짧게**. 진행 상황, 요약, 질문, 버튼 글도 한국어다. 코드·명령·경로는 원래 표기 그대로.
 - **테스트는 되돌릴 수 없는 주요 작업만** 한다: 마이그레이션, 삭제, 비용·예산, 데이터 상태를 바꾸는 일. 전부 테스트하지 않는다.
 - **운영 서비스라 배포 전에 항상 보안 점검**을 한다 (IDOR, 인증 우회, 비밀값 노출, 프롬프트 주입, 비용 폭주). 찾은 것은 고친 뒤 배포한다.
-- 커밋·push는 사용자가 요청할 때 한다. **PR 없이 `main`에 바로** 올린다 (PR은 요청할 때만). push 뒤에는 CI·Deploy 결과와 운영 확인 결과를 알려 준다.
+- **운영(prod)이다 (2026-10-26부터)**. `main`에 직접 push하지 않는다. 변경은 버전 브랜치 `release/vX.Y.Z`에 모아 PR 하나로 올린다. 머지는 사용자가 하거나 하라고 할 때만 한다. 커밋·push는 사용자가 요청할 때 한다. 머지 뒤에는 CI·Deploy 결과와 운영 확인 결과를 알려 준다. 절차는 [운영 가이드 "버전과 PR"](runbook.md#버전과-pr).
 - 디자인을 바꿀 때는 **시안부터** 보여 주고 승인받는다 (§4의 캔버스).
 - 비밀값:
   - `TOKEN_PEPPER`, `BOOTSTRAP_CODE`, `VAPID_PRIVATE_KEY`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `ANTHROPIC_API_KEY`, `GRADER_MODEL`은 `wrangler secret put`으로만 넣는다. 레포·로그·채팅에 남기지 않는다.
@@ -201,7 +201,7 @@
 
 ## 6. 배포와 마이그레이션
 
-- `main`에 push하면 **Deploy**가 `npm ci` → 빌드 → 테스트 → `wrangler d1 migrations apply moai --remote` → `wrangler deploy` → 운영 확인(화면 JS 일치, 401 등)을 한다. GitHub 저장소 secret(`CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`)은 이미 들어 있다. **CI**는 `main`·`claude/**` push마다 돈다. 결과는 `gh run list`, `gh run view <id> --log`로 본다.
+- 버전 PR을 `main`에 머지하면 **Deploy**가 `npm ci` → 빌드 → 테스트 → `wrangler d1 migrations apply moai --remote` → `wrangler deploy` → 운영 확인(화면 JS 일치, 401 등)을 한다. GitHub 저장소 secret(`CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`)은 이미 들어 있다. **CI**는 PR과 `main`·`claude/**` push마다 돈다. 결과는 `gh run list`, `gh run view <id> --log`로 본다.
 - 마이그레이션은 **열·테이블 추가만** 한다. 기존 행을 바꾸는 UPDATE가 필요하면 결과를 미리 확인한다.
 - **업그레이드 테스트 (🤖 자동, 2026-10-20)**: `test/migrations.test.ts`가 테스트용 두 번째 D1(`UPGRADE_DB`)에 마지막 마이그레이션 직전까지 적용하고, 지금 코드(`saveLearning`, `recordReviews`)로 데이터를 채운 뒤 마지막 마이그레이션을 얹는다. 외래 키 검사가 비어 있는지, 있던 테이블의 행 수가 그대로인지 본다. 채우는 코드가 새 마이그레이션의 열·테이블을 쓰기 시작하면 이 테스트가 깨지니, 그때는 채우는 단계를 직전 모양에 맞춘다.
 - **운영 비슷한 데이터로 미리 돌려 보기** (기존 행을 바꾸는 마이그레이션이 있을 때. 열·테이블을 더하기만 하면 위 업그레이드 테스트로 충분하다):
