@@ -29,7 +29,7 @@ import {
   removeFromOutbox,
   takeLevelUps,
 } from '../offline/store';
-import { buzz } from '../prefs';
+import { buzz, readStored, writeStored } from '../prefs';
 import { play, type Sound } from '../sound';
 import { StreakGoal } from '../progress';
 import { currentMaterial, materialReview, partView, rememberMaterial } from '../materials';
@@ -47,21 +47,8 @@ interface Result {
 const ASK_CONFIDENCE = 'moai:ask-confidence';
 
 /** 답을 고른 뒤 확신도를 물을지. 기기마다 설정에서 끌 수 있다 (기본 켬) */
-export function askConfidence(): boolean {
-  try {
-    return localStorage.getItem(ASK_CONFIDENCE) !== 'off';
-  } catch {
-    return true;
-  }
-}
-
-export function setAskConfidence(on: boolean): void {
-  try {
-    localStorage.setItem(ASK_CONFIDENCE, on ? 'on' : 'off');
-  } catch {
-    // 저장소를 못 쓰면 기본값(켬)으로 둔다
-  }
-}
+export const askConfidence = () => readStored(ASK_CONFIDENCE) !== 'off';
+export const setAskConfidence = (on: boolean) => writeStored(ASK_CONFIDENCE, on ? 'on' : 'off');
 
 const CONFIDENCE_LABEL: Record<Confidence, string> = { sure: '확실해요', unsure: '반반이에요', guess: '찍었어요' };
 
@@ -86,10 +73,7 @@ function useWide(): boolean {
 const RUNG_NEXT: Record<number, string> = { 2: '이제 빈칸·코드 문제가 나와요', 3: '이제 직접 설명하는 카드가 나와요' };
 
 /** 복습을 시작할 때 서버가 센 오늘 XP와 장수 */
-interface TodayBefore {
-  xp: number;
-  reviewed: number;
-}
+type TodayBefore = StatsResponse['today'];
 
 /** left: 이번 묶음 다음에 같은 범위에 남은 장수 (끝 화면의 "이어서 더"). 오프라인이면 0 */
 type Load = { state: 'loading' } | { state: 'error'; message: string } | { state: 'ready'; cards: QueueCard[]; offline: boolean; before?: TodayBefore | null; left?: number };
@@ -147,7 +131,7 @@ export function Review({
         // 자료 섹션은 따로 남겨 둔다. 지하철에서 연결이 끊겨도 이어서 학습한다
         if (material && !exam) await cacheMaterialQueue(material, part ?? null, queue.cards.filter((card) => !pending.has(card.id)));
         if (!cancelled) {
-          setLoad({ state: 'ready', cards, offline: false, before: before && { xp: before.today.xp, reviewed: before.today.reviewed }, left: Math.max(0, queue.remaining - cards.length) });
+          setLoad({ state: 'ready', cards, offline: false, before: before && before.today, left: Math.max(0, queue.remaining - cards.length) });
         }
       } catch (error) {
         if (error instanceof OfflineError && material && !exam) {

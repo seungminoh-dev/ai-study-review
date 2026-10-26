@@ -53,8 +53,3 @@ export function normalizeCategory(input: string | null | undefined): string | nu
     .map((segment) => (KNOWN[segment.toLowerCase()] ?? segment).slice(0, MAX_CATEGORY_SEGMENT));
   return segments.length > 0 ? segments.join('/') : null;
 }
-
-/** path가 parent 분류이거나 그 아래면 true ("인프라/DevOps"는 "인프라" 안에 있다) */
-export function inCategory(path: string | null, parent: string): boolean {
-  return path !== null && (path === parent || path.startsWith(`${parent}/`));
-}

@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 // 서버 LLM (설계서 §11): 설명하기 AI 채점과 붙여넣기 가져오기의 입출력.
 
-import { MAX_IMPORT_CHARS } from './llm-limits';
+import { MAX_IMPORT_CHARS } from './limits';
 import { ConceptKey } from './save-learning';
 
 export { MAX_IMPORT_CHARS };

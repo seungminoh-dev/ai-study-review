@@ -1,10 +1,10 @@
 import { JoinBody, LoginCodeBody, LogoutBody, TERMS_VERSION, type AuthOptions, type LoginProvider, type PendingJoin } from '@moai/shared';
 import { Hono, type Context } from 'hono';
-import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
-import { authorizeUrl, fetchGithubUser, githubConfigured, pkceChallenge } from '../auth/github';
+import { getCookie } from 'hono/cookie';
+import { authorizeUrl, fetchGithubUser, githubConfigured, pkceChallenge, type ProviderUser } from '../auth/github';
 import { fetchGoogleSubject, googleAuthorizeUrl, googleConfigured } from '../auth/google';
 import { revokeAccessStatements, revokeAllGrants } from '../auth/grants';
-import { currentSession, endSession, startSession } from '../auth/session';
+import { currentSession, dropCookie, endSession, shortCookie, startSession } from '../auth/session';
 import type { AppEnv } from '../context';
 import { loadMe } from '../domain/users';
 import { INVITE_CODE_LENGTH, LOGIN_CODE_LENGTH, normalizeCode } from '../lib/codes';
@@ -33,25 +33,9 @@ const OPEN_JOINS_PER_DAY = 30;
 
 type Intent = 'login' | 'link';
 
-/** 로그인 방법마다 확인해서 받는 계정. id는 바뀌지 않는 값(GitHub 숫자 id, Google sub), login은 보여 줄 아이디(Google은 '') */
-interface ProviderUser {
-  id: string;
-  login: string;
-  name: string | null;
-  createdAt: number | null;
-}
-
 const PROVIDER_NAME: Record<LoginProvider, string> = { github: 'GitHub', google: 'Google' };
 const isProvider = (value: string | undefined): value is LoginProvider => value === 'github' || value === 'google';
 const configured = (c: Context<AppEnv>, provider: LoginProvider) => (provider === 'github' ? githubConfigured(c.env) : googleConfigured(c.env));
-
-function shortCookie(c: Context<AppEnv>, name: string, value: string, ttlMs: number): void {
-  setCookie(c, name, value, { httpOnly: true, secure: true, sameSite: 'Lax', path: '/', maxAge: ttlMs / 1000 });
-}
-
-function dropCookie(c: Context<AppEnv>, name: string): void {
-  deleteCookie(c, name, { path: '/', secure: true });
-}
 
 auth.get('/options', async (c) => {
   const owner = await c.env.DB.prepare("SELECT 1 FROM users WHERE role = 'owner' LIMIT 1").first();
@@ -208,10 +192,7 @@ auth.post('/join', async (c) => {
   const existing = await c.env.DB.prepare('SELECT user_id FROM user_identities WHERE provider = ?1 AND subject = ?2')
     .bind(pending.provider, pending.subject)
     .first<string>('user_id');
-  if (existing) {
-    await finishJoin(c, pending.token_hash, existing, now);
-    return c.json(await loadMe(c.env, existing));
-  }
+  if (existing) return finishJoin(c, pending.token_hash, existing, now);
 
   // 초대 코드를 비우면 초대 없이 가입한다. 적었는데 틀리면 초대 없는 가입으로 넘기지 않고 알린다
   if (!body.code) return openJoin(c, pending, body.display_name, now);
@@ -242,8 +223,7 @@ auth.post('/join', async (c) => {
   ]);
   if (created!.meta.changes === 0) return errorJson(403, 'wrong_code', '방금 다른 사람이 이 초대 코드를 썼어요.');
   console.log(JSON.stringify({ event: 'user_joined', user_id: userId }));
-  await finishJoin(c, pending.token_hash, userId, now);
-  return c.json(await loadMe(c.env, userId), 201);
+  return finishJoin(c, pending.token_hash, userId, now, 201);
 });
 
 /**
@@ -266,8 +246,7 @@ async function openJoin(c: Context<AppEnv>, pending: PendingRow, displayName: st
   ]);
   if (created!.meta.changes === 0) return errorJson(429, 'join_full', '오늘은 초대 없이 가입할 수 있는 자리가 다 찼어요. 내일 다시 해 주세요.');
   console.log(JSON.stringify({ event: 'user_joined', user_id: userId, invite: false, provider: pending.provider }));
-  await finishJoin(c, pending.token_hash, userId, now);
-  return c.json(await loadMe(c.env, userId), 201);
+  return finishJoin(c, pending.token_hash, userId, now, 201);
 }
 
 /**
@@ -301,14 +280,15 @@ async function recoverAccount(c: Context<AppEnv>, pending: PendingRow, invite: s
   if (claim!.meta.changes === 0) return errorJson(403, 'wrong_code', '방금 이 초대 코드를 누가 썼어요.');
   await revokeAllGrants(c.env, userId);
   console.log(JSON.stringify({ event: 'account_recovered', user_id: userId }));
-  await finishJoin(c, pending.token_hash, userId, now);
-  return c.json(await loadMe(c.env, userId));
+  return finishJoin(c, pending.token_hash, userId, now);
 }
 
-async function finishJoin(c: Context<AppEnv>, pendingHash: string, userId: string, now: number): Promise<void> {
+/** 가입을 마친다: 기다리던 가입을 지우고 로그인한 뒤 내 정보를 돌려준다 */
+async function finishJoin(c: Context<AppEnv>, pendingHash: string, userId: string, now: number, status: 200 | 201 = 200): Promise<Response> {
   await c.env.DB.prepare('DELETE FROM pending_signups WHERE token_hash = ?1').bind(pendingHash).run();
   dropCookie(c, JOIN_COOKIE);
   await startSession(c, userId, now);
+  return c.json(await loadMe(c.env, userId), status);
 }
 
 // 다른 기기에서 받은 코드로 로그인한다. 코드는 한 번 쓰면 지운다

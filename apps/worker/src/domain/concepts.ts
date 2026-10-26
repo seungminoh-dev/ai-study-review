@@ -51,7 +51,8 @@ export function conceptState(stats: { cards: number; active: number; unstable: n
   return '흔들림';
 }
 
-interface StatsRow {
+/** statsQuery가 돌려주는 개념마다의 카드 집계 */
+export interface StatsRow {
   id: string;
   cards: number;
   active: number;

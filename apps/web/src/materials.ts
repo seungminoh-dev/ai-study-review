@@ -1,5 +1,6 @@
 import type { MaterialSummary } from '@moai/shared';
 import { splitPart } from '@moai/shared/client';
+import { readStoredJson, writeStored } from './prefs';
 
 // 자료 화면들이 같이 쓰는 주소와 표시 도우미
 
@@ -37,29 +38,18 @@ const PICK = 'moai:material';
 
 /** 이 기기에서 고르거나 풀기 시작한 자료를 적어 둔다. 학습 탭, 오늘 화면, 복습 끝 화면이 이 자료로 이어서 연다 */
 export function rememberMaterial(title: string): void {
-  try {
-    localStorage.setItem(PICK, JSON.stringify({ title, at: Date.now() }));
-  } catch {
-    // 못 적으면 마지막으로 푼 자료를 따른다
-  }
+  // 못 적으면 마지막으로 푼 자료를 따른다
+  writeStored(PICK, JSON.stringify({ title, at: Date.now() }));
 }
 
 /** 로그아웃하면 지운다. 같은 기기의 다음 사람에게 남기지 않는다 */
 export function forgetMaterial(): void {
-  try {
-    localStorage.removeItem(PICK);
-  } catch {
-    // 저장소를 못 쓰면 지울 것도 없다
-  }
+  writeStored(PICK, null);
 }
 
 function readPick(): { title: string; at: number } | null {
-  try {
-    const value = JSON.parse(localStorage.getItem(PICK) ?? 'null') as { title?: unknown; at?: unknown } | null;
-    return value && typeof value.title === 'string' && typeof value.at === 'number' ? { title: value.title, at: value.at } : null;
-  } catch {
-    return null;
-  }
+  const value = readStoredJson(PICK) as { title?: unknown; at?: unknown } | null;
+  return value && typeof value.title === 'string' && typeof value.at === 'number' ? { title: value.title, at: value.at } : null;
 }
 
 /**

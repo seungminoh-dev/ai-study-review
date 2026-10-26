@@ -125,7 +125,7 @@
     - 복습 탭의 "공부한 대화"는 대화만 보여 준다. 자료 섹션은 학습 탭에 있다.
   - 컴퓨터 화면 폭 (2026-10-19): `.app`이 `.shell` 그리드 칸에서 내용 폭으로 줄던 것을 `width: 100%`로 고쳤다. 이제 화면마다 760px(넓은 화면 1120px)까지 칸을 채운다. 내 성장은 오늘 화면처럼 두 칸(왼쪽 이정표·분류별 진행, 오른쪽 최근 12주)이고, 최근 12주 히트맵은 컴퓨터에서 칸 폭에 맞춰 날짜 칸을 키운다. 휴대폰은 그대로다.
 - **테스트**: worker 164개, web 4개(`src/offline/store.test.ts`, fake-indexeddb), shared 23개 통과. CI·Deploy 모두 초록.
-- **브랜치**: `main`이 운영이다. 2026-10-26부터 변경은 버전 브랜치 `release/vX.Y.Z`와 PR로만 올린다 ([운영 가이드 "버전과 PR"](runbook.md#버전과-pr)). 지금 열린 PR은 없다.
+- **브랜치**: `main`이 운영이다. 2026-10-26부터 변경은 버전 브랜치 `release/vX.Y.Z`와 PR로만 올린다 ([운영 가이드 "버전과 PR"](runbook.md#버전과-pr)). `release/v1.0.1`(동작을 바꾸지 않는 과설계 정리)이 PR 전이다.
 - **확인 못 한 것**:
   1. 실제 카톡 링크 미리보기. 주소를 한 번 보내 본다. 예전 미리보기가 캐시돼 있으면 카카오 개발자 사이트의 공유 디버거로 지운다.
   2. 움직임 자체. 확인용 브라우저 패널이 동작 줄이기 상태이거나 숨겨져 있었다. 보이는 브라우저에서 복습 한 번, 끝 화면 한 번을 본다.
@@ -222,6 +222,7 @@
 
 ## 7. 코드 읽기 전에 알아 둘 규칙
 
+- **공용 도우미 (v1.0.1)**: localStorage는 `apps/web/src/prefs.ts`의 `readStored`·`readStoredJson`·`writeStored`로, 버튼 하나의 요청·오류 표시는 `useApi.ts`의 `useRun`으로 한다. 쿠키는 `auth/session.ts`의 `shortCookie`·`dropCookie`, 매분 Cron의 일은 `cron.ts`의 `step`으로 감싼다. worker는 lib ES2024라 `Map.groupBy`를 쓴다.
 - **인증**: 오너 1명(`/setup`) + GitHub·Google 로그인과 가입(초대 코드는 선택). 다른 기기는 GitHub·Google이나 10분짜리 로그인 코드로 들어온다. `/api/*`의 GET이 아닌 요청은 `Origin === APP_ORIGIN`이어야 한다. 오너 관리 API는 모두 `/api/admin/*`(`api/admin.ts`: 초대·회원·AI 사용량·크레딧 지급·베타 지표)이고, `app.ts`가 `requireUser` 바로 뒤에서 `requireOwner`(`auth/owner.ts`, 요청마다 D1에서 역할 확인)와 `Cache-Control: no-store`를 한 번에 건다. 라우터에 따로 걸지 않는다. 새 관리 API는 `/api/admin` 아래에 두면 `test/admin.test.ts`가 등록된 라우트를 모아 401·403·no-store를 본다.
 - **관리 화면** (2026-10-26): 오너 관리 화면이 설정에서 `/admin`으로 옮겨진다. 오너 알림 푸시(서버 문제 `domain/alerts.ts`, AI 예산 `llm/budget.ts`)를 누르면 `/admin`으로 간다. 회원에게 가는 알림(테스트 알림 등)은 그대로다.
 - **MCP**: `/mcp`는 OAuth Bearer 토큰(`oauth.ts`, 설계서 §8.7), 예전 방식 `/mcp/u/<토큰>`은 비밀 URL(HMAC 해시로 찾는다). 둘 다 `mcp/route.ts`의 `serveMcp`로 간다. SDK 2.3.1 legacy stateless. 도구 8개:

@@ -13,7 +13,7 @@ export const scheduler = fsrs(
   }),
 );
 
-/** cards 테이블의 FSRS 열. 시각은 UTC epoch ms다. */
+/** cards 테이블의 FSRS 열. 시각은 UTC epoch ms다. ts-fsrs가 숫자 시각과 null last_review를 그대로 받는다 */
 export interface FsrsFields {
   due: number;
   stability: number;
@@ -25,21 +25,6 @@ export interface FsrsFields {
   lapses: number;
   state: number;
   last_review: number | null;
-}
-
-export function toFsrsCard(fields: FsrsFields): Card {
-  return {
-    due: new Date(fields.due),
-    stability: fields.stability,
-    difficulty: fields.difficulty,
-    elapsed_days: fields.elapsed_days,
-    scheduled_days: fields.scheduled_days,
-    learning_steps: fields.learning_steps,
-    reps: fields.reps,
-    lapses: fields.lapses,
-    state: fields.state,
-    ...(fields.last_review === null ? {} : { last_review: new Date(fields.last_review) }),
-  };
 }
 
 export function fromFsrsCard(card: Card): FsrsFields {
@@ -63,7 +48,7 @@ export function emptyFsrsFields(now: number): FsrsFields {
 
 /** 채점 시각 reviewedAt에 grade로 답했을 때의 다음 FSRS 상태 */
 export function nextFsrsFields(fields: FsrsFields, reviewedAt: number, grade: 1 | 2 | 3 | 4): FsrsFields {
-  return fromFsrsCard(scheduler.next(toFsrsCard(fields), new Date(reviewedAt), grade as Grade).card);
+  return fromFsrsCard(scheduler.next(fields, reviewedAt, grade as Grade).card);
 }
 
 export function pickFsrsFields(row: FsrsFields): FsrsFields {
@@ -73,7 +58,7 @@ export function pickFsrsFields(row: FsrsFields): FsrsFields {
 
 /** 지금 등급마다 답하면 다음 복습까지 얼마나 남는지 (설명하기 버튼의 간격 표시, 설계서 §9.1) */
 export function previewIntervals(fields: FsrsFields, now: number): GradeIntervals {
-  const preview = scheduler.repeat(toFsrsCard(fields), new Date(now));
+  const preview = scheduler.repeat(fields, now);
   const after = (grade: Grade) => Math.max(0, preview[grade].card.due.getTime() - now);
   return { '1': after(1 as Grade), '2': after(2 as Grade), '3': after(3 as Grade), '4': after(4 as Grade) };
 }

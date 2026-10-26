@@ -67,13 +67,11 @@ function show(direction: Direction, toTop: boolean): void {
   }, 400);
 }
 
-if (typeof window !== 'undefined') {
-  // 처음 연 화면을 맨 아래 칸으로 표시한다. 새로고침해도 브라우저가 이 값을 그대로 돌려준다
-  if ((history.state as Partial<NavState> | null)?.moai !== 1) history.replaceState({ moai: 1, depth: 0, from: null } satisfies NavState, '', here());
-  window.addEventListener('popstate', () => {
-    if (!rewinding) show('back', false);
-  });
-}
+// 처음 연 화면을 맨 아래 칸으로 표시한다. 새로고침해도 브라우저가 이 값을 그대로 돌려준다
+if ((history.state as Partial<NavState> | null)?.moai !== 1) history.replaceState({ moai: 1, depth: 0, from: null } satisfies NavState, '', here());
+window.addEventListener('popstate', () => {
+  if (!rewinding) show('back', false);
+});
 
 /** replace는 보통 돌아가기라 뒤로 가는 방향으로 넘긴다. 로그인 뒤처럼 다르면 direction을 준다 */
 export function navigate(path: string, options: { replace?: boolean; direction?: Direction } = {}): void {
@@ -139,13 +137,7 @@ export function leave(): void {
 export function useLocation(): { path: string; query: URLSearchParams } {
   const read = () => ({ path: location.pathname, query: new URLSearchParams(location.search) });
   const [value, setValue] = useState(read);
-  useEffect(() => {
-    const update = () => setValue(read());
-    listeners.add(update);
-    return () => {
-      listeners.delete(update);
-    };
-  }, []);
+  useEffect(() => onNavigate(() => setValue(read())), []);
   return value;
 }
 

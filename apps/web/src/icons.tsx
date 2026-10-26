@@ -52,14 +52,6 @@ export const IconGrowth = ({ size }: Props) => (
   </Icon>
 );
 
-export const IconRecords = ({ size }: Props) => (
-  <Icon size={size}>
-    <path d="M6 4h10a2 2 0 0 1 2 2v14H8a2 2 0 0 1-2-2z" />
-    <path d="M6 16a2 2 0 0 1 2-2h10" />
-    <path d="M10 8h4" />
-  </Icon>
-);
-
 export const IconBook = ({ size }: Props) => (
   <Icon size={size}>
     <path d="M5 5a2 2 0 0 1 2-2h12v15H7a2 2 0 0 0-2 2z" />

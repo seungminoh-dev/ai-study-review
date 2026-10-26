@@ -8,6 +8,7 @@ import { materialHref } from '../materials';
 import { forgetAnswered } from '../offline/store';
 import { BackLink, Link, goBack } from '../router';
 import { formatDate, formatDateTime, useApi } from '../useApi';
+import { CARD_TYPE } from '../cards/QuestionCard';
 
 // 공부한 대화 (설계서 §12.1): 세션별 개념·판정·카드, 카드 고치기·끄기, 대화 지우기
 // 자료(PDF)는 섹션마다 저장이 하나씩 생겨서, 목록에서는 자료 하나로 묶고 누르면 자료 상세로 간다.
@@ -38,6 +39,20 @@ function rowsOf(sessions: SessionSummary[]): Row[] {
   return rows;
 }
 
+/** 공부한 대화 한 줄 (공부한 대화 목록, 복습 탭) */
+export function SessionItem({ session }: { session: SessionSummary }) {
+  return (
+    <li>
+      <Link href={`/sessions/${session.id}`} className="row-link">
+        <span>{session.topic}</span>
+        <span className="muted small">
+          {formatDate(session.created_at)} · 개념 {session.concepts}개 · 카드 {session.cards}장
+        </span>
+      </Link>
+    </li>
+  );
+}
+
 export function Sessions() {
   const { data, error } = useApi<{ sessions: SessionSummary[] }>('/sessions');
   if (error) return <div className="screen"><p className="notice bad">{error}</p></div>;
@@ -52,14 +67,7 @@ export function Sessions() {
       <ul className="list">
         {rowsOf(data.sessions).map((row) =>
           row.kind === 'session' ? (
-            <li key={row.session.id}>
-              <Link href={`/sessions/${row.session.id}`} className="row-link">
-                <span>{row.session.topic}</span>
-                <span className="muted small">
-                  {formatDate(row.session.created_at)} · 개념 {row.session.concepts}개 · 카드 {row.session.cards}장
-                </span>
-              </Link>
-            </li>
+            <SessionItem key={row.session.id} session={row.session} />
           ) : (
             <li key={`material:${row.title}`}>
               <Link href={materialHref(row.title)} className="row-link">
@@ -79,7 +87,6 @@ export function Sessions() {
 }
 
 const STATUS: Record<SessionCard['status'], string> = { active: '복습 중', locked: '잠김', suspended: '꺼짐' };
-const TYPE: Record<SessionCard['type'], string> = { ox: 'OX', mcq: '객관식', cloze: '빈칸', explain: '설명하기' };
 
 function CardAnswer({ card }: { card: SessionCard }) {
   switch (card.type) {
@@ -118,19 +125,6 @@ function draftOf(card: SessionCard): Draft {
   }
 }
 
-function applyDraft(card: SessionCard, draft: Draft): SessionCard {
-  switch (draft.type) {
-    case 'ox':
-      return { ...card, prompt: draft.prompt, answer: draft.answer, explain: draft.explain };
-    case 'mcq':
-      return { ...card, prompt: draft.prompt, options: draft.options, explain: draft.explain };
-    case 'cloze':
-      return { ...card, prompt: draft.prompt, answer: draft.answer, choices: draft.choices, explain: draft.explain };
-    case 'explain':
-      return { ...card, prompt: draft.prompt, checklist: draft.checklist };
-  }
-}
-
 /** 카드 고치기 (설계서 §2.3 7번). 종류는 그대로 두고 글자와 정답만 고친다 */
 function EditForm({ card, onSaved, onCancel }: { card: SessionCard; onSaved: (card: SessionCard) => void; onCancel: () => void }) {
   const [draft, setDraft] = useState<Draft>(() => draftOf(card));
@@ -144,7 +138,7 @@ function EditForm({ card, onSaved, onCancel }: { card: SessionCard; onSaved: (ca
     setError(null);
     try {
       await request(`/cards/${card.id}`, { method: 'PATCH', json: draft });
-      onSaved(applyDraft(card, draft));
+      onSaved({ ...card, ...draft });
     } catch (reason) {
       setError(errorMessage(reason));
     } finally {
@@ -259,7 +253,7 @@ export function CardRow({ card: initial }: { card: SessionCard }) {
       <div className="card-row-head">
         <span className="chip">{card.concept_name}</span>
         <span className="muted small">
-          {TYPE[card.type]} · {card.rung}단계 · {STATUS[status]}
+          {CARD_TYPE[card.type]} · {card.rung}단계 · {STATUS[status]}
         </span>
       </div>
       {editing ? (

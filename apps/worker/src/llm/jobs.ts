@@ -1,5 +1,4 @@
 import { GradeResult, SaveLearningInput, checkSaveLearning, type CreditKind, type ImportResult } from '@moai/shared';
-import { z } from 'zod';
 import { pushToUser } from '../domain/push';
 import { availableSql, creditMonthStart, refundCredits, refundFailedJobsStatement, spendForJobStatement } from '../domain/credits';
 import { saveLearning } from '../domain/save-learning';
@@ -9,7 +8,7 @@ import { callClaude, llmConfigured, parseJson, type CallResult } from './anthrop
 import { overBudget } from './budget';
 import { costMicroUsd, type Usage } from './pricing';
 import { GRADER_SYSTEM, IMPORT_SYSTEM, gradingInput, importInput, repairInput } from './prompts';
-import { toOutputSchema } from './schema';
+import { outputSchema } from './schema';
 
 // 작업 테이블 (설계서 §11.3). 요청은 작업만 만들고, 실행은 waitUntil(채점)이나 매분 Cron(가져오기, 채점 이어 받기)이 한다.
 
@@ -40,8 +39,8 @@ let gradeSchema: Record<string, unknown> | null = null;
 let importSchema: Record<string, unknown> | null = null;
 const schemaFor = (kind: JobKind) =>
   kind === 'grade'
-    ? (gradeSchema ??= toOutputSchema(z.toJSONSchema(GradeResult, { target: 'draft-2020-12' }) as Record<string, unknown>))
-    : (importSchema ??= toOutputSchema(z.toJSONSchema(SaveLearningInput, { target: 'draft-2020-12', io: 'input' }) as Record<string, unknown>));
+    ? (gradeSchema ??= outputSchema(GradeResult))
+    : (importSchema ??= outputSchema(SaveLearningInput, 'input'));
 
 /**
  * 작업을 만들고 그 크레딧을 쓴다. 끝나지 않은 같은 종류 작업이 이미 MAX_PENDING개면 'too_many', 크레딧이 모자라면 'no_credits'.

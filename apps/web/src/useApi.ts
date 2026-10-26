@@ -25,6 +25,20 @@ export function useApi<T>(path: string): { data: T | null; error: string | null;
   return { data, error, reload: useCallback(() => setNonce((value) => value + 1), []) };
 }
 
+/** 버튼 하나의 일을 한다. 시작할 때 지난 오류를 지우고, 실패하면 그 이유를 error에 둔다 */
+export function useRun(initial: string | null = null): { error: string | null; setError: (error: string | null) => void; run: (action: () => Promise<void>) => Promise<void> } {
+  const [error, setError] = useState(initial);
+  const run = async (action: () => Promise<void>) => {
+    setError(null);
+    try {
+      await action();
+    } catch (reason) {
+      setError(errorMessage(reason));
+    }
+  };
+  return { error, setError, run };
+}
+
 const dateFormat = new Intl.DateTimeFormat('ko-KR', { month: 'long', day: 'numeric', weekday: 'short', timeZone: 'Asia/Seoul' });
 const timeFormat = new Intl.DateTimeFormat('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Seoul' });
 

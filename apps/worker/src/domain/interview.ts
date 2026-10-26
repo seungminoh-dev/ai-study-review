@@ -55,17 +55,12 @@ export async function interviewChain(
   else start = byId.get((weak!.results as { id: string }[])[0]?.id ?? '') ?? rows[0];
   if (!start) return null;
 
-  const neighbors = new Map<string, { id: string; type: string }[]>();
-  for (const edge of edges!.results as { from_id: string; to_id: string; type: string }[]) {
-    for (const [a, b] of [
-      [edge.from_id, edge.to_id],
-      [edge.to_id, edge.from_id],
-    ] as const) {
-      const list = neighbors.get(a) ?? [];
-      list.push({ id: b, type: edge.type });
-      neighbors.set(a, list);
-    }
-  }
+  // 연결은 양쪽 끝에서 모두 이웃이다
+  const links = (edges!.results as { from_id: string; to_id: string; type: string }[]).flatMap((edge) => [
+    { at: edge.from_id, id: edge.to_id, type: edge.type },
+    { at: edge.to_id, id: edge.from_id, type: edge.type },
+  ]);
+  const neighbors = Map.groupBy(links, (link) => link.at);
   // 지금 개념에서 아직 안 고른 이웃 중, 꼬리질문 연결 → 많이 틀린 개념 순으로 하나씩 고른다
   const length = Math.min(Math.max(request.length ?? DEFAULT_LENGTH, 1), 5);
   const chain = [start];

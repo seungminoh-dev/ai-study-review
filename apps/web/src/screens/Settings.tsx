@@ -11,10 +11,12 @@ import { clearDeviceData, flushReviews, pendingCount } from '../offline/store';
 import { currentEndpoint, disablePush, dropLocalPush, enablePush, isStandalone, pushState, type PushState } from '../push';
 import { Link, useLocation } from '../router';
 import { Badge, Disclosure, Pills, RowError, SetCard, SetRow, SwitchRow, Tag, Toaster, toast } from '../settings-ui';
-import { formatDate, formatDateTime, useApi } from '../useApi';
+import { formatDate, formatDateTime, useApi, useRun } from '../useApi';
 import { setSound, setTheme, setVibrate, soundOn, theme, vibrateOn, type Theme } from '../prefs';
 import { play } from '../sound';
 import { askConfidence, setAskConfidence } from './Review';
+// 레포 package.json의 버전 (버전 PR마다 올린다). version만 번들에 들어간다
+import { version } from '../../../../package.json';
 
 // 설정 (설계서 §12.1, 설정 정리 시안): 한 페이지에 흰 카드 6장(알림, 복습, 화면과 소리, 클로드 연결, 계정과 기기, 내 데이터).
 // 자주 쓰는 것을 위에 두고, 한 번만 보는 것(연결 방법, 코치 지침, 예전 비밀 주소)은 접는다. 바꾸면 바로 저장하고 잠깐 알린다.
@@ -47,7 +49,7 @@ export function Settings({ me, onLogout }: { me: Me; onLogout: () => void }) {
           <Link href="/privacy">개인정보 처리방침</Link>
           <Link href="/terms">이용약관</Link>
         </p>
-        <p className="set-version">버전 {__APP_VERSION__}</p>
+        <p className="set-version">버전 v{version}</p>
       </footer>
       <Toaster />
     </div>
@@ -150,18 +152,10 @@ const PUSH: Record<PushState, { badge: string; tone: 'good' | 'warn' | 'muted'; 
 
 function NotifyCard() {
   const [state, setState] = useState<PushState | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const { error, run } = useRun();
   useEffect(() => {
     void pushState().then(setState);
   }, []);
-  const run = async (action: () => Promise<void>) => {
-    setError(null);
-    try {
-      await action();
-    } catch (reason) {
-      setError(errorMessage(reason));
-    }
-  };
   const info = state ? PUSH[state] : null;
   const installHint = !isStandalone() && state !== 'needs-install' ? ' 홈 화면에 추가하면 알림이 잘 와요.' : '';
 
@@ -451,19 +445,16 @@ interface ConnectedApp {
 function ClaudeCard() {
   const address = `${location.origin}/mcp`;
   const { data: apps, reload: reloadApps } = useApi<{ apps: ConnectedApp[] }>('/oauth/apps');
-  const [error, setError] = useState<string | null>(null);
+  const { error, setError, run } = useRun();
   const none = apps !== null && apps.apps.length === 0;
 
   const disconnect = async (app: ConnectedApp) => {
     if (!confirm(`${app.name} 연결을 끊을까요? 그 앱에서 모아이를 쓰려면 다시 연결해야 해요.`)) return;
-    setError(null);
-    try {
+    await run(async () => {
       await request(`/oauth/apps/${encodeURIComponent(app.id)}`, { method: 'DELETE' });
       toast(`${app.name} 연결을 끊었어요.`);
       reloadApps();
-    } catch (reason) {
-      setError(errorMessage(reason));
-    }
+    });
   };
   const copy = (text: string) => void copyText(text).then((ok) => (ok ? toast('복사했어요.') : setError('복사하지 못했어요. 길게 눌러 복사해 주세요.')));
 
@@ -521,29 +512,23 @@ function ClaudeCard() {
 function LegacyConnector() {
   const { data, reload } = useApi<McpTokenStatus>('/mcp-token');
   const [url, setUrl] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const { error, setError, run } = useRun();
 
   const issue = async () => {
     if (data?.active && !confirm('새 URL을 만들면 지금 쓰는 URL은 바로 막혀요. claude.ai에서 커넥터를 지우고 새로 추가해야 해요. 계속할까요?')) return;
-    setError(null);
-    try {
+    await run(async () => {
       const result = await request<{ url: string }>('/mcp-token', { method: 'POST' });
       setUrl(result.url);
       reload();
-    } catch (reason) {
-      setError(errorMessage(reason));
-    }
+    });
   };
   const drop = async () => {
     if (!confirm('비밀 주소를 지울까요? 그 주소로 연결한 커넥터는 바로 끊겨요.')) return;
-    setError(null);
-    try {
+    await run(async () => {
       await request('/mcp-token', { method: 'DELETE' });
       toast('비밀 주소를 지웠어요.');
       reload();
-    } catch (reason) {
-      setError(errorMessage(reason));
-    }
+    });
   };
 
   return (
@@ -604,7 +589,7 @@ function AccountCard({ me, onLogout }: { me: Me; onLogout: () => void }) {
   const { query } = useLocation();
   const [result] = useState(() => LINK_TEXT.github[query.get('github') ?? ''] ?? LINK_TEXT.google[query.get('google') ?? '']);
   const [code, setCode] = useState<LoginCode | null>(null);
-  const [error, setError] = useState<string | null>(result?.tone === 'bad' ? result.text : null);
+  const { error, setError, run } = useRun(result?.tone === 'bad' ? result.text : null);
   const signIn = [me.github_login ? 'GitHub' : null, me.google_linked ? 'Google' : null].filter(Boolean).join('나 ');
 
   // 연결 결과는 처음 열 때 한 번만 알린다 (result는 처음 값 그대로라 다시 돌지 않는다)
@@ -617,14 +602,10 @@ function AccountCard({ me, onLogout }: { me: Me; onLogout: () => void }) {
     if (query.has('github') || query.has('google')) history.replaceState(history.state, '', '/settings');
   }, [query]);
 
-  const issue = async () => {
-    setError(null);
-    try {
+  const issue = () =>
+    run(async () => {
       setCode(await request<LoginCode>('/login-codes', { method: 'POST' }));
-    } catch (reason) {
-      setError(errorMessage(reason));
-    }
-  };
+    });
 
   const logout = async () => {
     await flushReviews();
@@ -684,20 +665,17 @@ function AccountCard({ me, onLogout }: { me: Me; onLogout: () => void }) {
 /** 로그인한 기기와 다른 기기 모두 로그아웃 (잃어버린 기기를 끊을 때). 기기 이름은 저장하지 않아서 마지막 사용일만 보여 준다 */
 function Logins({ onLogout }: { onLogout: () => void }) {
   const { data, reload } = useApi<{ logins: LoginSummary[] }>('/logins');
-  const [error, setError] = useState<string | null>(null);
+  const { error, run } = useRun();
   const others = data?.logins.filter((login) => !login.current) ?? [];
 
   const endOthers = async () => {
     if (!confirm('이 기기만 남기고 다른 기기에서 모두 로그아웃할까요? 다른 기기의 알림도 꺼져요. Claude 커넥터는 그대로예요.')) return;
-    setError(null);
-    try {
+    await run(async () => {
       const endpoint = await currentEndpoint();
       const result = await request<{ ended: number }>('/logins', { method: 'DELETE', json: endpoint ? { endpoint } : {} });
       toast(`${result.ended}곳에서 로그아웃했어요.`);
       reload();
-    } catch (reason) {
-      setError(errorMessage(reason));
-    }
+    });
   };
 
   return (
@@ -730,13 +708,12 @@ function Logins({ onLogout }: { onLogout: () => void }) {
 
 /** 내 데이터 내보내기와 계정 지우기 (설계서 §14). 오너는 계정을 지울 수 없다 */
 function DataCard({ me, onDeleted }: { me: Me; onDeleted: () => void }) {
-  const [error, setError] = useState<string | null>(null);
+  const { error, setError, run } = useRun();
   const [confirming, setConfirming] = useState(false);
   const [name, setName] = useState('');
 
-  const download = async () => {
-    setError(null);
-    try {
+  const download = () =>
+    run(async () => {
       const response = await fetch('/api/export', { credentials: 'same-origin' });
       if (!response.ok) throw new Error('내보내지 못했어요. 잠시 뒤에 다시 해 주세요.');
       const url = URL.createObjectURL(await response.blob());
@@ -746,10 +723,7 @@ function DataCard({ me, onDeleted }: { me: Me; onDeleted: () => void }) {
       link.click();
       setTimeout(() => URL.revokeObjectURL(url), 10_000);
       toast('내려받았어요.');
-    } catch (reason) {
-      setError(errorMessage(reason));
-    }
-  };
+    });
 
   const remove = async (event: FormEvent) => {
     event.preventDefault();

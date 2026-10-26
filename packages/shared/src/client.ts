@@ -1,8 +1,7 @@
 // PWA가 런타임에 쓰는 것만 모은 입구. 타입은 '@moai/shared'에서 import type으로 가져온다.
 export * from './grading';
 export * from './limits';
-export { MAX_IMPORT_CHARS } from './llm-limits';
-export { inCategory, normalizeCategory } from './category';
+export { normalizeCategory } from './category';
 export { isPdf, materialLabel, splitPart } from './material';
 export { QUESTS, QUEST_XP } from './quests';
-export { CREDIT_COST, INTERVIEW_DEPTHS, INTERVIEW_LEVELS, MONTHLY_CREDITS, creditsLeft, interviewCost } from './credits';
+export { CREDIT_COST, INTERVIEW_DEPTHS, INTERVIEW_LEVELS, creditsLeft, interviewCost } from './credits';

@@ -98,11 +98,11 @@ export function MapScreen() {
     [data, aspect],
   );
   const layout = useLayout(request);
-  const positions = layout?.positions ?? new Map<string, { x: number; y: number }>();
   const materialCount = raw?.nodes.filter((node) => node.state === 'material').length ?? 0;
   if (error) return <div className="screen"><p className="notice bad">{error}</p></div>;
   if (!data || !raw || !layout) return <Loading />;
-  if (raw && raw.nodes.length === 0) {
+  const positions = layout.positions;
+  if (raw.nodes.length === 0) {
     return (
       <div className="screen">
         <h1>지식 지도</h1>

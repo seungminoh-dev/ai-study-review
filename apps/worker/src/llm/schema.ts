@@ -1,6 +1,8 @@
 // structured outputs가 받는 JSON Schema로 바꾼다 (Anthropic TypeScript SDK의 transformJSONSchema와 같은 규칙, MIT).
 // 지원하지 않는 제약(길이, 범위, 패턴 등)은 description으로 옮긴다. 응답은 어차피 서버에서 zod로 다시 검사한다.
 
+import { z } from 'zod';
+
 type Schema = Record<string, unknown>;
 
 const SUPPORTED_STRING_FORMATS = new Set(['date-time', 'time', 'date', 'duration', 'email', 'hostname', 'uri', 'ipv4', 'ipv6', 'uuid']);
@@ -61,6 +63,7 @@ function strict(input: Schema): Schema {
   return out;
 }
 
-export function toOutputSchema(jsonSchema: Schema): Schema {
-  return strict(JSON.parse(JSON.stringify(jsonSchema)) as Schema);
+/** zod 스키마를 structured outputs 스키마로. io가 'input'이면 기본값이 있는 칸을 받는 쪽 모양으로 만든다. strict는 받은 객체를 고치지 않는다 */
+export function outputSchema(type: z.ZodType, io?: 'input'): Schema {
+  return strict(z.toJSONSchema(type, { target: 'draft-2020-12', io }) as Schema);
 }

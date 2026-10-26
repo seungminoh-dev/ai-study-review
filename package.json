@@ -1,6 +1,6 @@
 {
   "name": "moai",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "type": "module",
   "workspaces": [
@@ -21,7 +21,6 @@
     "gen:vapid": "node scripts/gen-vapid.mjs",
     "gen:token": "node scripts/gen-token.mjs",
     "gen:icons": "node scripts/gen-icons.mjs",
-    "replay": "node scripts/replay.mjs",
     "build": "npm run build -w @moai/web",
     "dev:web": "npm run dev -w @moai/web"
   }

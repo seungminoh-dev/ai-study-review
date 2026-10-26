@@ -1,7 +1,7 @@
 import { normalizeSearch, type EdgeType, type JudgmentLabel, type McqOption } from '@moai/shared';
 import type { Env } from '../env';
 import { DAY_MS, formatKstDate } from '../lib/kst';
-import { conceptState, statesFrom, statsQuery, type ConceptRow, type ConceptState } from './concepts';
+import { conceptState, statesFrom, statsQuery, type ConceptRow, type ConceptState, type StatsRow } from './concepts';
 
 // get_learner_context (설계서 §6.7, 부록 D)
 
@@ -132,15 +132,10 @@ export async function learnerContext(
     ).bind(userId, ids, now - FOLLOWUP_WINDOW_MS),
   ]);
 
-  const states = statesFrom(stats!.results as unknown as Parameters<typeof statesFrom>[0]);
-  const group = <T extends { concept_id: string }>(rows: readonly T[]) => {
-    const map = new Map<string, T[]>();
-    for (const row of rows) map.set(row.concept_id, [...(map.get(row.concept_id) ?? []), row]);
-    return map;
-  };
-  const judgmentsBy = group(judgments!.results as unknown as JudgmentRow[]);
-  const weakBy = group(weak!.results as unknown as WeakLogRow[]);
-  const followupsBy = group(followups!.results as unknown as FollowupRow[]);
+  const states = statesFrom(stats!.results as unknown as StatsRow[]);
+  const judgmentsBy = Map.groupBy(judgments!.results as unknown as JudgmentRow[], (row) => row.concept_id);
+  const weakBy = Map.groupBy(weak!.results as unknown as WeakLogRow[], (row) => row.concept_id);
+  const followupsBy = Map.groupBy(followups!.results as unknown as FollowupRow[], (row) => row.concept_id);
   const neighborRows = neighbors!.results as unknown as NeighborRow[];
 
   const blocks: string[] = [];
@@ -178,8 +173,7 @@ export async function learnerContext(
 
 /** 최근 30일 안에 틀린 카드. 예전 내 오답을 다시 골랐는지도 본다 */
 function weakCards(logs: readonly WeakLogRow[]): { prompt: string; reasons: string[] }[] {
-  const byCard = new Map<string, WeakLogRow[]>();
-  for (const log of logs) byCard.set(log.card_id, [...(byCard.get(log.card_id) ?? []), log]);
+  const byCard = Map.groupBy(logs, (log) => log.card_id);
   const result: { prompt: string; reasons: string[]; fails: number }[] = [];
   for (const cardLogs of byCard.values()) {
     const fails = cardLogs.filter((log) => log.grade === 1);

@@ -9,6 +9,7 @@ import { IconArrow } from '../icons';
 import { Mascot } from '../Mascot';
 import { Link } from '../router';
 import { LEAVE, SOFT } from '../motion';
+import { writeStored } from '../prefs';
 
 // AI 개념 채팅 (3단계 시안 "AI 개념 채팅"): 복습에서 답을 고른 카드(틀렸든 맞혔든)나 설명하기를 비교한 카드의 개념을 묻는다.
 // 휴대폰은 답 아래 "이 개념 물어보기"로 여는 시트, 컴퓨터는 개념 패널의 "물어보기" 탭이다. 질문과 답은 기기에도 서버에도 남기지 않는다.
@@ -53,11 +54,8 @@ export function useAiNotice(): { show: boolean; dismiss: () => void } {
   });
   const dismiss = () => {
     setShow(false);
-    try {
-      localStorage.setItem(AI_NOTICE, '1');
-    } catch {
-      // 못 적으면 다음에 한 번 더 보인다
-    }
+    // 못 적으면 다음에 한 번 더 보인다
+    writeStored(AI_NOTICE, '1');
   };
   return { show, dismiss };
 }

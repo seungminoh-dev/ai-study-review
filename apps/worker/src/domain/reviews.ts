@@ -122,18 +122,14 @@ export async function recordReviews(
   // 열린 단계 아래에 갇힌 카드도 같이 연다 (LEVEL UP은 아니다)
   const stuck = stuckCards([...rows.values()]);
   if (stuck.length > 0) {
-    await env.DB.prepare("UPDATE cards SET status = 'active', due = ?3 WHERE user_id = ?1 AND status = 'locked' AND id IN (SELECT value FROM json_each(?2))")
-      .bind(userId, JSON.stringify(stuck), now)
-      .run();
+    await openLocked(env, userId, stuck, now).run();
   }
   const levelUps: LevelUp[] = [];
   if (unlock.length > 0) {
     // 끝 화면의 LEVEL UP: 개념마다 새로 열린 단계 하나 (한 번에 한 단계만 열린다)
     const opened = new Map(unlock.map((id) => [rows.get(id)!.concept_id, rows.get(id)!.rung]));
     const [, names] = await env.DB.batch([
-      env.DB.prepare(
-        "UPDATE cards SET status = 'active', due = ?3 WHERE user_id = ?1 AND status = 'locked' AND id IN (SELECT value FROM json_each(?2))",
-      ).bind(userId, JSON.stringify(unlock), now),
+      openLocked(env, userId, unlock, now),
       env.DB.prepare('SELECT id, key, name FROM concepts WHERE user_id = ?1 AND id IN (SELECT value FROM json_each(?2))').bind(userId, JSON.stringify([...opened.keys()])),
     ]);
     for (const concept of names!.results as { id: string; key: string; name: string }[]) {
@@ -173,11 +169,14 @@ export async function setCardSuspended(env: Env, userId: string, cardId: string,
   const statements = [env.DB.prepare('UPDATE cards SET status = ?3 WHERE id = ?1 AND user_id = ?2').bind(cardId, userId, status)];
   if (unlock.length > 0) {
     statements.push(
-      env.DB.prepare(
-        "UPDATE cards SET status = 'active', due = ?3 WHERE user_id = ?1 AND status = 'locked' AND id IN (SELECT value FROM json_each(?2))",
-      ).bind(userId, JSON.stringify(unlock), now),
+      openLocked(env, userId, unlock, now),
     );
   }
   await env.DB.batch(statements);
   return true;
+}
+
+/** 잠긴 카드를 열어 지금부터 나오게 한다 */
+export function openLocked(env: Env, userId: string, ids: readonly string[], now: number): D1PreparedStatement {
+  return env.DB.prepare("UPDATE cards SET status = 'active', due = ?3 WHERE user_id = ?1 AND status = 'locked' AND id IN (SELECT value FROM json_each(?2))").bind(userId, JSON.stringify(ids), now);
 }

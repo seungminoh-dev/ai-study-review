@@ -1,8 +1,7 @@
 import { DeleteAccountBody, LogoutBody, TERMS_VERSION, type LoginSummary } from '@moai/shared';
 import { Hono } from 'hono';
-import { deleteCookie } from 'hono/cookie';
 import { revokeAllGrants } from '../auth/grants';
-import { SESSION_COOKIE } from '../auth/session';
+import { SESSION_COOKIE, dropCookie } from '../auth/session';
 import type { AppEnv } from '../context';
 import type { Env } from '../env';
 import { errorJson, readJson } from '../lib/http';
@@ -11,83 +10,58 @@ import { errorJson, readJson } from '../lib/http';
 
 export const me = new Hono<AppEnv>();
 
+/** 내보내기 파일의 칸마다 채우는 쿼리 (이 순서로 들어간다). user와 github_login은 첫 행만 쓴다 */
+const EXPORT_QUERIES: Record<string, string> = {
+  user: 'SELECT display_name, role, timezone, daily_new_limit, daily_review_limit, daily_goal, created_at FROM users WHERE id = ?1',
+  github_login: "SELECT login FROM user_identities WHERE user_id = ?1 AND provider = 'github'",
+  sessions: 'SELECT id, source, topic, material, material_part, final_answer, key_terms, summary, created_at FROM learning_sessions WHERE user_id = ?1 ORDER BY created_at',
+  concepts: 'SELECT id, key, name, aliases, domain, final_answer, created_at, updated_at, adopted_at FROM concepts WHERE user_id = ?1 ORDER BY created_at',
+  edges: `SELECT f.key AS from_key, t.key AS to_key, e.type, e.created_at FROM edges e
+    JOIN concepts f ON f.id = e.from_id JOIN concepts t ON t.id = e.to_id WHERE e.user_id = ?1`,
+  judgments: 'SELECT id, concept_id, session_id, label, said, note, created_at FROM judgments WHERE user_id = ?1 ORDER BY created_at',
+  followups: 'SELECT id, concept_id, session_id, question, created_at, resolved_at FROM followups WHERE user_id = ?1 ORDER BY created_at',
+  cards: `SELECT id, concept_id, session_id, rung, type, prompt, code, answer, options, explain, checklist, status, due, stability, difficulty,
+    elapsed_days, scheduled_days, learning_steps, reps, lapses, state, last_review, created_at, edited_at, origin
+    FROM cards WHERE user_id = ?1 ORDER BY created_at`,
+  review_logs: 'SELECT id, card_id, grade, response, confidence, elapsed_ms, reviewed_at, run_id, prev_card FROM review_logs WHERE user_id = ?1 ORDER BY reviewed_at',
+  reminders: 'SELECT local_time, enabled FROM reminder_slots WHERE user_id = ?1',
+  streak_freezes: 'SELECT day FROM streak_freezes WHERE user_id = ?1 ORDER BY day',
+  card_reports: 'SELECT card_id, reason, note, created_at FROM card_reports WHERE user_id = ?1 ORDER BY created_at',
+  shared_questions: 'SELECT concept_name, question, created_at FROM shared_questions WHERE user_id = ?1 ORDER BY created_at',
+  category_aliases: 'SELECT alias, path, created_at FROM category_aliases WHERE user_id = ?1 ORDER BY created_at',
+  badges: 'SELECT badge, earned_at FROM badges WHERE user_id = ?1 ORDER BY earned_at',
+  material_labels: 'SELECT material, label, updated_at FROM material_labels WHERE user_id = ?1',
+  material_part_labels: 'SELECT material, part, label, updated_at FROM material_part_labels WHERE user_id = ?1',
+  survey_answers: 'SELECT week, used, note, created_at FROM survey_answers WHERE user_id = ?1 ORDER BY week',
+  credit_ledger: 'SELECT amount, kind, note, created_at FROM credit_ledger WHERE user_id = ?1 ORDER BY created_at',
+  achievements: 'SELECT achievement, earned_at FROM achievements WHERE user_id = ?1 ORDER BY earned_at',
+  // AI 작업은 결과만, 사용량은 달·종류별 합계만 (입력 원문과 비용은 넣지 않는다)
+  ai_jobs: 'SELECT id, kind, status, card_id, result, error, created_at, updated_at FROM llm_jobs WHERE user_id = ?1 ORDER BY created_at',
+  ai_usage: `SELECT strftime('%Y-%m', created_at / 1000, 'unixepoch') AS month, kind, count(*) AS calls, sum(input_tokens) AS input_tokens, sum(output_tokens) AS output_tokens
+    FROM llm_usage WHERE user_id = ?1 GROUP BY month, kind ORDER BY month, kind`,
+};
+
 /** 내 학습 기록 전체를 JSON으로. 토큰·해시·푸시 키처럼 로그인과 기기에 쓰는 값은 넣지 않는다 */
 me.get('/export', async (c) => {
-  const userId = c.var.userId;
-  const query = (sql: string) => c.env.DB.prepare(sql).bind(userId);
-  const results = await c.env.DB.batch([
-    query('SELECT display_name, role, timezone, daily_new_limit, daily_review_limit, daily_goal, created_at FROM users WHERE id = ?1'),
-    query("SELECT login FROM user_identities WHERE user_id = ?1 AND provider = 'github'"),
-    query('SELECT id, source, topic, material, material_part, final_answer, key_terms, summary, created_at FROM learning_sessions WHERE user_id = ?1 ORDER BY created_at'),
-    query('SELECT id, key, name, aliases, domain, final_answer, created_at, updated_at, adopted_at FROM concepts WHERE user_id = ?1 ORDER BY created_at'),
-    query(
-      `SELECT f.key AS from_key, t.key AS to_key, e.type, e.created_at FROM edges e
-         JOIN concepts f ON f.id = e.from_id JOIN concepts t ON t.id = e.to_id WHERE e.user_id = ?1`,
-    ),
-    query('SELECT id, concept_id, session_id, label, said, note, created_at FROM judgments WHERE user_id = ?1 ORDER BY created_at'),
-    query('SELECT id, concept_id, session_id, question, created_at, resolved_at FROM followups WHERE user_id = ?1 ORDER BY created_at'),
-    query(
-      `SELECT id, concept_id, session_id, rung, type, prompt, code, answer, options, explain, checklist, status, due, stability, difficulty,
-              elapsed_days, scheduled_days, learning_steps, reps, lapses, state, last_review, created_at, edited_at, origin
-         FROM cards WHERE user_id = ?1 ORDER BY created_at`,
-    ),
-    query('SELECT id, card_id, grade, response, confidence, elapsed_ms, reviewed_at, run_id, prev_card FROM review_logs WHERE user_id = ?1 ORDER BY reviewed_at'),
-    query('SELECT local_time, enabled FROM reminder_slots WHERE user_id = ?1'),
-    query('SELECT day FROM streak_freezes WHERE user_id = ?1 ORDER BY day'),
-    query('SELECT card_id, reason, note, created_at FROM card_reports WHERE user_id = ?1 ORDER BY created_at'),
-    query('SELECT concept_name, question, created_at FROM shared_questions WHERE user_id = ?1 ORDER BY created_at'),
-    query('SELECT alias, path, created_at FROM category_aliases WHERE user_id = ?1 ORDER BY created_at'),
-    query('SELECT badge, earned_at FROM badges WHERE user_id = ?1 ORDER BY earned_at'),
-    query('SELECT material, label, updated_at FROM material_labels WHERE user_id = ?1'),
-    query('SELECT material, part, label, updated_at FROM material_part_labels WHERE user_id = ?1'),
-    query('SELECT week, used, note, created_at FROM survey_answers WHERE user_id = ?1 ORDER BY week'),
-    query('SELECT amount, kind, note, created_at FROM credit_ledger WHERE user_id = ?1 ORDER BY created_at'),
-    query('SELECT achievement, earned_at FROM achievements WHERE user_id = ?1 ORDER BY earned_at'),
-    // AI 작업은 결과만, 사용량은 달·종류별 합계만 (입력 원문과 비용은 넣지 않는다)
-    query('SELECT id, kind, status, card_id, result, error, created_at, updated_at FROM llm_jobs WHERE user_id = ?1 ORDER BY created_at'),
-    query(
-      `SELECT strftime('%Y-%m', created_at / 1000, 'unixepoch') AS month, kind, count(*) AS calls, sum(input_tokens) AS input_tokens, sum(output_tokens) AS output_tokens
-         FROM llm_usage WHERE user_id = ?1 GROUP BY month, kind ORDER BY month, kind`,
-    ),
-  ]);
-  const [user, identity, sessions, concepts, edges, judgments, followups, cards, reviews, reminders, freezes, reports, shared, categoryAliases, badges, materialLabels, partLabels, surveyAnswers, credits, achievements, aiJobs, aiUsage] = results.map(
-    (result) => result.results,
-  );
+  const keys = Object.keys(EXPORT_QUERIES);
+  const results = await c.env.DB.batch(keys.map((key) => c.env.DB.prepare(EXPORT_QUERIES[key]!).bind(c.var.userId)));
+  const rows = Object.fromEntries(keys.map((key, i) => [key, results[i]!.results]));
+  const day = new Date().toISOString().slice(0, 10);
   const body = {
     format: 'moai-export-v2',
     exported_at: new Date().toISOString(),
-    user: user![0] ?? null,
-    github_login: (identity![0] as { login?: string } | undefined)?.login ?? null,
-    sessions,
-    concepts,
-    edges,
-    judgments,
-    followups,
-    cards,
-    review_logs: reviews,
-    reminders,
-    streak_freezes: freezes,
-    card_reports: reports,
-    shared_questions: shared,
-    category_aliases: categoryAliases,
-    badges,
-    material_labels: materialLabels,
-    material_part_labels: partLabels,
-    survey_answers: surveyAnswers,
-    credit_ledger: credits,
-    achievements,
-    ai_jobs: aiJobs,
-    ai_usage: aiUsage,
+    ...rows,
+    user: rows.user![0] ?? null,
+    github_login: (rows.github_login![0] as { login?: string } | undefined)?.login ?? null,
   };
-  const day = new Date().toISOString().slice(0, 10);
-  return new Response(JSON.stringify(body), {
-    headers: {
-      'content-type': 'application/json; charset=utf-8',
-      'content-disposition': `attachment; filename="moai-export-${day}.json"`,
-      'cache-control': 'no-store',
-    },
-  });
+  return c.json(body, 200, { 'content-disposition': `attachment; filename="moai-export-${day}.json"`, 'cache-control': 'no-store' });
 });
+
+/** user_id로 그 사람 행을 모두 지우는 테이블 (외래 키 순서). 상수라 SQL에 이름을 그대로 넣는다 */
+const USER_TABLES = [
+  'cards', 'judgments', 'followups', 'edges', 'concepts', 'material_labels', 'material_part_labels', 'survey_answers', 'credit_ledger', 'achievements', 'learning_sessions',
+  'push_subscriptions', 'reminder_slots', 'mcp_tokens', 'auth_sessions', 'login_codes', 'user_identities', 'streak_freezes', 'badges', 'shared_questions', 'category_aliases', 'llm_jobs',
+];
 
 /** 한 사용자의 행을 모두 지운다. 외래 키 순서대로, 한 batch(트랜잭션)로. 비용 기록은 이번 달 합계가 맞도록 익명으로 남긴다 */
 export function deleteUserStatements(env: Env, userId: string): D1PreparedStatement[] {
@@ -95,28 +69,7 @@ export function deleteUserStatements(env: Env, userId: string): D1PreparedStatem
   return [
     run('DELETE FROM review_logs WHERE user_id = ?1 OR card_id IN (SELECT id FROM cards WHERE user_id = ?1)'),
     run('DELETE FROM card_reports WHERE user_id = ?1 OR card_id IN (SELECT id FROM cards WHERE user_id = ?1)'),
-    run('DELETE FROM cards WHERE user_id = ?1'),
-    run('DELETE FROM judgments WHERE user_id = ?1'),
-    run('DELETE FROM followups WHERE user_id = ?1'),
-    run('DELETE FROM edges WHERE user_id = ?1'),
-    run('DELETE FROM concepts WHERE user_id = ?1'),
-    run('DELETE FROM material_labels WHERE user_id = ?1'),
-    run('DELETE FROM material_part_labels WHERE user_id = ?1'),
-    run('DELETE FROM survey_answers WHERE user_id = ?1'),
-    run('DELETE FROM credit_ledger WHERE user_id = ?1'),
-    run('DELETE FROM achievements WHERE user_id = ?1'),
-    run('DELETE FROM learning_sessions WHERE user_id = ?1'),
-    run('DELETE FROM push_subscriptions WHERE user_id = ?1'),
-    run('DELETE FROM reminder_slots WHERE user_id = ?1'),
-    run('DELETE FROM mcp_tokens WHERE user_id = ?1'),
-    run('DELETE FROM auth_sessions WHERE user_id = ?1'),
-    run('DELETE FROM login_codes WHERE user_id = ?1'),
-    run('DELETE FROM user_identities WHERE user_id = ?1'),
-    run('DELETE FROM streak_freezes WHERE user_id = ?1'),
-    run('DELETE FROM badges WHERE user_id = ?1'),
-    run('DELETE FROM shared_questions WHERE user_id = ?1'),
-    run('DELETE FROM category_aliases WHERE user_id = ?1'),
-    run('DELETE FROM llm_jobs WHERE user_id = ?1'),
+    ...USER_TABLES.map((table) => run(`DELETE FROM ${table} WHERE user_id = ?1`)),
     run("UPDATE llm_usage SET user_id = 'deleted' WHERE user_id = ?1"),
     // 쓴 초대는 남기되(초대한 사람의 목록), 이름이 든 라벨은 지운다
     run("UPDATE invites SET used_by = NULL, label = '지운 회원' WHERE used_by = ?1"),
@@ -170,6 +123,6 @@ me.delete('/me', async (c) => {
   await revokeAllGrants(c.env, c.var.userId);
   await c.env.DB.batch(deleteUserStatements(c.env, c.var.userId));
   console.log(JSON.stringify({ event: 'account_deleted', user_id: c.var.userId }));
-  deleteCookie(c, SESSION_COOKIE, { path: '/', secure: true });
+  dropCookie(c, SESSION_COOKIE);
   return c.body(null, 204);
 });

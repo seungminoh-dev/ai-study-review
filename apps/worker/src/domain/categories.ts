@@ -216,36 +216,3 @@ export async function updateCategories(
   const renamed = moveRows.length > 0 ? results.at(-1)!.meta.changes : 0;
   return { assigned, renamed, moves: moveRows, merged };
 }
-
-/**
- * 매시 보정 (cron). 1. 0006 전에 저장해 모양이 안 맞는 분류를 맞춘다. 2. 0006을 적용한 뒤 새 코드가 배포되기 전에 저장된 개념을 내 지식에 넣는다.
- * 둘 다 한 번 맞추고 나면 바꿀 것이 없다. 공부해서 저장한 개념(카드나 판정이 있는 개념)만 넣는다. 판정은 자료 저장에서 받지 않는다.
- */
-export async function repairLibrary(env: Env): Promise<{ normalized: number; adopted: number }> {
-  const { results } = await env.DB.prepare('SELECT DISTINCT user_id, domain FROM concepts WHERE domain IS NOT NULL LIMIT 5000').all<{
-    user_id: string;
-    domain: string;
-  }>();
-  const fixes = results
-    .map((row) => ({ user_id: row.user_id, from: row.domain, to: normalizeCategory(row.domain) }))
-    .filter((row) => row.to !== row.from);
-  const statements = [
-    env.DB.prepare(
-      `UPDATE concepts SET adopted_at = created_at
-        WHERE adopted_at IS NULL
-          AND (EXISTS (SELECT 1 FROM cards WHERE cards.concept_id = concepts.id AND cards.origin = 'study')
-               OR EXISTS (SELECT 1 FROM judgments WHERE judgments.concept_id = concepts.id))`,
-    ),
-  ];
-  if (fixes.length > 0) {
-    statements.push(
-      env.DB.prepare(
-        `UPDATE concepts SET domain = json_extract(f.value, '$.to')
-           FROM json_each(?1) AS f
-          WHERE concepts.user_id = json_extract(f.value, '$.user_id') AND concepts.domain = json_extract(f.value, '$.from')`,
-      ).bind(JSON.stringify(fixes)),
-    );
-  }
-  const [adopted, normalized] = await env.DB.batch(statements);
-  return { adopted: adopted!.meta.changes, normalized: normalized?.meta.changes ?? 0 };
-}

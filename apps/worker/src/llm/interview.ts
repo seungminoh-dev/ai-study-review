@@ -1,5 +1,4 @@
 import { CREDIT_COST, INTERVIEW_DEPTHS, INTERVIEW_LEVELS, InterviewQuestion, InterviewSummary, type InterviewBody, type InterviewResponse } from '@moai/shared';
-import { z } from 'zod';
 import { creditBalance, noCreditsMessage } from '../domain/credits';
 import { interviewChain } from '../domain/interview';
 import { learnerContext } from '../domain/learner-context';
@@ -10,7 +9,7 @@ import { overBudget } from './budget';
 import { createJob } from './jobs';
 import { fail, meteredCall, type Failure } from './metered';
 import { INTERVIEW_SYSTEM, interviewInput } from './prompts';
-import { toOutputSchema } from './schema';
+import { outputSchema } from './schema';
 
 // 앱 안 모의면접: MCP의 get_interview_chain처럼 흔들리는 개념에서 시작해 연결선을 따라 묻는다.
 // 서버는 대화를 저장하지 않는다. 기기가 지금까지의 질문과 답을 들고 있다가 매번 같이 보낸다.
@@ -24,8 +23,8 @@ let questionSchema: Record<string, unknown> | null = null;
 let summarySchema: Record<string, unknown> | null = null;
 const schemaOf = (final: boolean) =>
   final
-    ? (summarySchema ??= toOutputSchema(z.toJSONSchema(InterviewSummary, { target: 'draft-2020-12' }) as Record<string, unknown>))
-    : (questionSchema ??= toOutputSchema(z.toJSONSchema(InterviewQuestion, { target: 'draft-2020-12' }) as Record<string, unknown>));
+    ? (summarySchema ??= outputSchema(InterviewSummary))
+    : (questionSchema ??= outputSchema(InterviewQuestion));
 
 
 /** 받은 key 중 내 개념인 것만 그 순서대로 */

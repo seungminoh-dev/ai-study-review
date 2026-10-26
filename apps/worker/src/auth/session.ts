@@ -1,7 +1,6 @@
 import type { Context, MiddlewareHandler } from 'hono';
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import type { AppEnv } from '../context';
-import type { Env } from '../env';
 import { hashToken, randomToken } from '../lib/crypto';
 import { DAY_MS } from '../lib/kst';
 import { errorJson } from '../lib/http';
@@ -15,14 +14,13 @@ const SESSION_MAX_MS = 365 * DAY_MS;
 /** 쓸 때마다 연장하되, DB 쓰기를 줄이려고 하루에 한 번만 갱신한다 */
 const TOUCH_EVERY_MS = DAY_MS;
 
-function writeCookie(c: Context, token: string): void {
-  setCookie(c, SESSION_COOKIE, token, {
-    httpOnly: true,
-    secure: true,
-    sameSite: 'Lax',
-    path: '/',
-    maxAge: SESSION_TTL_MS / 1000,
-  });
+/** 이 사이트에서만 쓰는 쿠키 (자바스크립트로 읽지 못하고, https에서만 보낸다) */
+export function shortCookie(c: Context, name: string, value: string, ttlMs: number): void {
+  setCookie(c, name, value, { httpOnly: true, secure: true, sameSite: 'Lax', path: '/', maxAge: ttlMs / 1000 });
+}
+
+export function dropCookie(c: Context, name: string): void {
+  deleteCookie(c, name, { path: '/', secure: true });
 }
 
 export async function startSession(c: Context<AppEnv>, userId: string, now: number): Promise<void> {
@@ -30,7 +28,7 @@ export async function startSession(c: Context<AppEnv>, userId: string, now: numb
   await c.env.DB.prepare('INSERT INTO auth_sessions (token_hash, user_id, created_at, last_seen_at, expires_at) VALUES (?1, ?2, ?3, ?3, ?4)')
     .bind(await hashToken(c.env.TOKEN_PEPPER, token), userId, now, now + SESSION_TTL_MS)
     .run();
-  writeCookie(c, token);
+  shortCookie(c, SESSION_COOKIE, token, SESSION_TTL_MS);
 }
 
 interface SessionRow {
@@ -40,22 +38,18 @@ interface SessionRow {
   expires_at: number;
 }
 
-async function findSession(env: Env, token: string): Promise<(SessionRow & { token_hash: string }) | null> {
-  const tokenHash = await hashToken(env.TOKEN_PEPPER, token);
+/** 쿠키의 세션이 살아 있으면 돌려준다. 로그인하지 않아도 되는 경로에서 "로그인했으면"을 볼 때 쓴다. */
+export async function currentSession(c: Context<AppEnv>, now: number): Promise<(SessionRow & { token_hash: string; token: string }) | null> {
+  const token = getCookie(c, SESSION_COOKIE);
+  if (!token || !c.env.TOKEN_PEPPER) return null;
+  const tokenHash = await hashToken(c.env.TOKEN_PEPPER, token);
   // 이용을 멈춘 회원의 세션은 없는 것으로 본다
-  const row = await env.DB.prepare(
+  const row = await c.env.DB.prepare(
     'SELECT s.user_id, s.created_at, s.last_seen_at, s.expires_at FROM auth_sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = ?1 AND u.disabled_at IS NULL',
   )
     .bind(tokenHash)
     .first<SessionRow>();
-  return row ? { ...row, token_hash: tokenHash } : null;
-}
-
-/** 쿠키의 세션이 살아 있으면 돌려준다. 로그인하지 않아도 되는 경로에서 "로그인했으면"을 볼 때 쓴다. */
-export async function currentSession(c: Context<AppEnv>, now: number): Promise<(SessionRow & { token_hash: string; token: string }) | null> {
-  const token = getCookie(c, SESSION_COOKIE);
-  const session = token && c.env.TOKEN_PEPPER ? await findSession(c.env, token) : null;
-  return session && session.expires_at > now && now - session.created_at < SESSION_MAX_MS ? { ...session, token: token! } : null;
+  return row && row.expires_at > now && now - row.created_at < SESSION_MAX_MS ? { ...row, token_hash: tokenHash, token } : null;
 }
 
 /** 이 기기의 세션만 끝낸다. 다른 기기의 로그인은 그대로다. */
@@ -64,7 +58,7 @@ export async function endSession(c: Context<AppEnv>): Promise<void> {
   if (token && c.env.TOKEN_PEPPER) {
     await c.env.DB.prepare('DELETE FROM auth_sessions WHERE token_hash = ?1').bind(await hashToken(c.env.TOKEN_PEPPER, token)).run();
   }
-  deleteCookie(c, SESSION_COOKIE, { path: '/', secure: true });
+  dropCookie(c, SESSION_COOKIE);
 }
 
 /** /api/*에서 로그인을 요구한다. 세션이 있으면 c.var.userId를 채운다. */
@@ -83,6 +77,6 @@ export const requireUser: MiddlewareHandler<AppEnv> = async (c, next) => {
         .run(),
     );
     // 응답이 정해진 뒤라 setCookie가 c.res의 헤더에 바로 붙는다
-    writeCookie(c, token);
+    shortCookie(c, SESSION_COOKIE, token, SESSION_TTL_MS);
   }
 };

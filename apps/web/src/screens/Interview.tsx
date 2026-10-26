@@ -1,4 +1,4 @@
-import type { ImportResult, InterviewDepth, InterviewLevel, InterviewResponse, InterviewSummary, InterviewTopicSuggestion } from '@moai/shared';
+import type { ImportResult, InterviewBody, InterviewDepth, InterviewLevel, InterviewResponse, InterviewSummary, InterviewTopicSuggestion } from '@moai/shared';
 import { CREDIT_COST, INTERVIEW_DEPTHS, INTERVIEW_LEVELS, creditsLeft, interviewCost } from '@moai/shared/client';
 import * as m from 'motion/react-m';
 import { Fragment, useEffect, useRef, useState, type FormEvent } from 'react';
@@ -11,23 +11,15 @@ import { Mascot } from '../Mascot';
 import { SOFT } from '../motion';
 import { Link, leave } from '../router';
 import { useApi } from '../useApi';
+import { Pills } from '../settings-ui';
 
 // 앱 안 모의면접 (MCP 모의면접과 같은 순서): 흔들리는 개념에서 시작해 연결된 개념으로 꼬리질문을 이어 간다.
 // 시작 화면에서 추천 주제나 직접 적은 주제, 난이도, 깊이(질문 수와 크레딧)를 고른다 (2026-10-21).
 // 한 질문씩 답하고, 끝나면 잘한 점과 고칠 점을 정리한다. 원하면 판정과 카드로 기록에 남긴다. 대화는 기기에만 있다.
 
 /** 시작 화면에서 고른 것. topic은 직접 적은 주제 */
-interface Plan {
-  concept_key?: string;
-  topic?: string;
-  depth: InterviewDepth;
-  level: InterviewLevel;
-}
-
-interface Turn {
-  question: string;
-  answer: string;
-}
+type Plan = Pick<InterviewBody, 'concept_key' | 'topic' | 'depth' | 'level'>;
+type Turn = InterviewBody['turns'][number];
 
 type Saving = { state: 'idle' } | { state: 'saving' } | { state: 'done'; summary: string; sessionId: string } | { state: 'failed'; message: string };
 
@@ -39,8 +31,8 @@ export function Interview({ concept, category }: { concept: string | null; categ
   return <InterviewSession plan={plan} category={category} />;
 }
 
-const DEPTH_KEYS = Object.keys(INTERVIEW_DEPTHS) as InterviewDepth[];
-const LEVEL_KEYS = Object.keys(INTERVIEW_LEVELS) as InterviewLevel[];
+const DEPTH_OPTIONS = (Object.keys(INTERVIEW_DEPTHS) as InterviewDepth[]).map((key) => ({ value: key, label: `${INTERVIEW_DEPTHS[key].label} · ${INTERVIEW_DEPTHS[key].questions}문` }));
+const LEVEL_OPTIONS = (Object.keys(INTERVIEW_LEVELS) as InterviewLevel[]).map((key) => ({ value: key, label: INTERVIEW_LEVELS[key] }));
 
 /** 시작 화면: 추천 주제 또는 직접 적은 주제, 난이도, 깊이를 고른다. 추천은 AI를 부르지 않아서 크레딧이 들지 않는다 */
 function InterviewStart({ concept, category, onStart }: { concept: string | null; category: string | null; onStart: (plan: Plan) => void }) {
@@ -120,24 +112,12 @@ function InterviewStart({ concept, category, onStart }: { concept: string | null
 
       <section aria-labelledby="interview-level-title">
         <h2 id="interview-level-title">난이도</h2>
-        <div className="segmented" role="group" aria-labelledby="interview-level-title">
-          {LEVEL_KEYS.map((key) => (
-            <button key={key} type="button" className={level === key ? 'current' : ''} aria-pressed={level === key} onClick={() => setLevel(key)}>
-              {INTERVIEW_LEVELS[key]}
-            </button>
-          ))}
-        </div>
+        <Pills className="segmented" label="난이도" options={LEVEL_OPTIONS} value={level} onPick={setLevel} />
       </section>
 
       <section aria-labelledby="interview-depth-title">
         <h2 id="interview-depth-title">깊이</h2>
-        <div className="segmented" role="group" aria-labelledby="interview-depth-title">
-          {DEPTH_KEYS.map((key) => (
-            <button key={key} type="button" className={depth === key ? 'current' : ''} aria-pressed={depth === key} onClick={() => setDepth(key)}>
-              {INTERVIEW_DEPTHS[key].label} · {INTERVIEW_DEPTHS[key].questions}문
-            </button>
-          ))}
-        </div>
+        <Pills className="segmented" label="깊이" options={DEPTH_OPTIONS} value={depth} onPick={setDepth} />
         <p className="muted small">
           질문 {INTERVIEW_DEPTHS[depth].questions}개와 마지막 정리, 최대 {interviewCost(depth)} 크레딧이에요. 중간에 그만두면 물은 만큼만 써요.
         </p>
@@ -342,26 +322,23 @@ function Summary({ summary, saving, onSave }: { summary: InterviewSummary; savin
   return (
     <m.section className="interview-summary" aria-labelledby="interview-summary-title" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0, transition: SOFT }}>
       <h2 id="interview-summary-title">면접을 마쳤어요</h2>
-      {summary.good.length > 0 ? (
-        <>
-          <h3>잘한 점</h3>
-          <ul>
-            {summary.good.map((item) => (
-              <li key={item}>{item}</li>
-            ))}
-          </ul>
-        </>
-      ) : null}
-      {summary.fix.length > 0 ? (
-        <>
-          <h3>고칠 점</h3>
-          <ul>
-            {summary.fix.map((item) => (
-              <li key={item}>{item}</li>
-            ))}
-          </ul>
-        </>
-      ) : null}
+      {(
+        [
+          ['잘한 점', summary.good],
+          ['고칠 점', summary.fix],
+        ] as const
+      ).map(([title, items]) =>
+        items.length > 0 ? (
+          <Fragment key={title}>
+            <h3>{title}</h3>
+            <ul>
+              {items.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          </Fragment>
+        ) : null,
+      )}
       {saving.state === 'saving' ? <p className="notice">판정과 카드로 정리하는 중이에요. 1~2분 걸리고, 다 되면 알림으로도 알려 드려요.</p> : null}
       {saving.state === 'done' ? (
         <p className="notice good">

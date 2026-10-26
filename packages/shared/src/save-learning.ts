@@ -203,21 +203,3 @@ export function checkSaveLearning(input: SaveLearningInput, existing: ExistingCo
 
   return problems;
 }
-
-export interface SaveLearningCounts {
-  concepts: number;
-  cards: number;
-  judgments: number;
-  followups: number;
-  edges: number;
-}
-
-export function countSaveLearning(input: SaveLearningInput): SaveLearningCounts {
-  return {
-    concepts: input.concepts.length,
-    cards: input.cards.length,
-    judgments: input.judgments.length,
-    followups: input.followups.length,
-    edges: input.edges.length,
-  };
-}

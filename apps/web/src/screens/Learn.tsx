@@ -188,9 +188,9 @@ function MaterialPath({ material, materials }: { material: MaterialSummary; mate
   );
 }
 
-function ConceptChips({ concepts, className }: { concepts: MaterialConcept[]; className: string }) {
+export function ConceptChips({ concepts, className, label }: { concepts: MaterialConcept[]; className: string; label?: string }) {
   return (
-    <ul className={className}>
+    <ul className={className} aria-label={label}>
       {concepts.map((concept) => (
         <li key={concept.key} className={concept.adopted ? 'known' : undefined}>
           {concept.name}
@@ -295,7 +295,6 @@ function SectionRow({
           </div>
           <EditableTitle
             bare
-            as="strong"
             value={view.name}
             maxLength={80}
             allowEmpty

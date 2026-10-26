@@ -7,8 +7,6 @@ export const LADDER_STABILITY_DAYS = 7;
  * 7일일 때는 아래 단계를 며칠 간격으로 두 번 맞혀야 해서, 설명하기를 만나기까지 열흘 넘게 걸렸다 (2026-10-21)
  */
 export const RUNG_OPEN_STABILITY_DAYS = 2;
-/** 3단계(설명하기)까지 연다. MVP 1은 설명하기 화면이 없어서 2단계까지만 열었다 */
-export const MAX_OPEN_RUNG = 3;
 
 export interface LadderCard {
   id: string;
@@ -28,13 +26,8 @@ const unsolvedMaterial = (card: LadderCard) => card.origin === 'material' && car
  * r보다 높은 잠긴 단계 중 가장 낮은 단계의 카드를 연다. 활성 카드가 하나도 없으면(모두 꺼짐) 가장 낮은 잠긴 단계를 연다.
  * 아직 안 푼 자료 카드는 익었는지 따지지 않는다. 그 단계에 그런 카드만 있으면 아직 열지 않는다.
  */
-export function cardsToUnlock(cards: readonly LadderCard[], maxRung = MAX_OPEN_RUNG): string[] {
-  const byConcept = new Map<string, LadderCard[]>();
-  for (const card of cards) {
-    const list = byConcept.get(card.concept_id) ?? [];
-    list.push(card);
-    byConcept.set(card.concept_id, list);
-  }
+export function cardsToUnlock(cards: readonly LadderCard[]): string[] {
+  const byConcept = Map.groupBy(cards, (card) => card.concept_id);
   const unlock: string[] = [];
   for (const list of byConcept.values()) {
     const active = list.filter((card) => card.status === 'active');
@@ -43,7 +36,7 @@ export function cardsToUnlock(cards: readonly LadderCard[], maxRung = MAX_OPEN_R
     const solved = atOpen.filter((card) => !unsolvedMaterial(card));
     if (atOpen.length > 0 && solved.length === 0) continue;
     if (!solved.every((card) => card.stability >= RUNG_OPEN_STABILITY_DAYS)) continue;
-    const locked = list.filter((card) => card.status === 'locked' && card.rung > open && card.rung <= maxRung);
+    const locked = list.filter((card) => card.status === 'locked' && card.rung > open);
     if (locked.length === 0) continue;
     const next = Math.min(...locked.map((card) => card.rung));
     for (const card of locked) if (card.rung === next) unlock.push(card.id);
@@ -67,5 +60,5 @@ export function stuckCards(cards: readonly LadderCard[]): string[] {
  * 설명하기 카드는 그 개념의 설명하기 단계가 이미 열렸을 때만 active다 (새 개념이면 아래 단계를 익힌 뒤 열린다).
  */
 export function initialStatus(rung: number, openRung: number): 'active' | 'locked' {
-  return rung <= openRung && rung <= MAX_OPEN_RUNG ? 'active' : 'locked';
+  return rung <= openRung ? 'active' : 'locked';
 }

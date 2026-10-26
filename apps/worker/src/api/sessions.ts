@@ -2,7 +2,7 @@ import { SessionTopicBody, materialLabel, type CardStatus, type CardType, type J
 import { Hono } from 'hono';
 import type { AppEnv } from '../context';
 import { cardsToUnlock, stuckCards, type LadderCard } from '../domain/ladder';
-import { setCardSuspended } from '../domain/reviews';
+import { openLocked, setCardSuspended } from '../domain/reviews';
 import type { Env } from '../env';
 import { errorJson, readJson } from '../lib/http';
 
@@ -110,7 +110,7 @@ export async function deleteSessions(env: Env, userId: string, ids: readonly str
           AND NOT EXISTS (SELECT 1 FROM learning_sessions s WHERE s.user_id = ?1 AND s.material = material_part_labels.material AND coalesce(s.material_part, '') = material_part_labels.part)`,
     ).bind(userId),
     ...(unlock.length > 0
-      ? [env.DB.prepare("UPDATE cards SET status = 'active', due = ?3 WHERE user_id = ?1 AND status = 'locked' AND id IN (SELECT value FROM json_each(?2))").bind(userId, JSON.stringify(unlock), now)]
+      ? [openLocked(env, userId, unlock, now)]
       : []),
   ]);
 }

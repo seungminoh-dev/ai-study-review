@@ -6,7 +6,6 @@ import {
   MaterialPartLabelBody,
   comparePart,
   materialLabel,
-  normalizeCategory,
   type CardType,
   type CategoryManage,
   type CategoryNode,
@@ -17,7 +16,7 @@ import {
 } from '@moai/shared';
 import { Hono } from 'hono';
 import type { AppEnv } from '../context';
-import { categoryLookupQueries, categoryOverview, resolveCategories, updateCategories } from '../domain/categories';
+import { categoryLookupQueries, categoryOverview, resolveCategories, resolvedCategory, updateCategories } from '../domain/categories';
 import { errorJson, readJson } from '../lib/http';
 import { deleteSessions } from './sessions';
 
@@ -72,12 +71,6 @@ function nextPart(parts: PartRow[]): MaterialSummary['next'] {
   return part ? { part: part.name, unsolved_open: part.unsolved_open } : null;
 }
 
-function groupBy<T, K>(rows: T[], key: (row: T) => K): Map<K, T[]> {
-  const groups = new Map<K, T[]>();
-  for (const row of rows) groups.set(key(row), [...(groups.get(key(row)) ?? []), row]);
-  return groups;
-}
-
 /** 사용자가 바꾼 자료 이름 */
 const LABELS = 'SELECT material, label FROM material_labels WHERE user_id = ?1';
 
@@ -97,7 +90,7 @@ library.get('/materials', async (c) => {
     c.env.DB.prepare(LABELS).bind(c.var.userId),
     c.env.DB.prepare(PART_LABELS).bind(c.var.userId),
   ]);
-  const partsOf = groupBy(parts!.results as unknown as PartRow[], (row) => row.title);
+  const partsOf = Map.groupBy(parts!.results as unknown as PartRow[], (row) => row.title);
   const materials: MaterialSummary[] = (totals!.results as unknown as TotalsRow[]).map((row) => {
     const ordered = [...(partsOf.get(row.title) ?? [])].sort(comparePart);
     return { ...row, name: nameOf(labels!, row.title), parts: ordered.map((part) => part.name).filter(Boolean), next: nextPart(ordered), part_labels: partLabelsOf(partLabels!, row.title) };
@@ -136,8 +129,8 @@ library.get('/materials/detail', async (c) => {
   // 같은 섹션을 여러 번 저장했으면 가장 최근 저장을 연다 (만든 순서로 받아 뒤의 것이 남는다)
   const latest = new Map((sessions!.results as unknown as { id: string; name: string }[]).map((row) => [row.name, row.id]));
   const conceptRows = concepts!.results as unknown as { part: string; key: string; name: string; adopted: number }[];
-  const conceptsOf = groupBy(conceptRows, (row) => row.part);
-  const previewsOf = groupBy(previews!.results as unknown as { part: string; type: CardType; prompt: string }[], (row) => row.part);
+  const conceptsOf = Map.groupBy(conceptRows, (row) => row.part);
+  const previewsOf = Map.groupBy(previews!.results as unknown as { part: string; type: CardType; prompt: string }[], (row) => row.part);
   const detail: MaterialDetail = {
     ...total,
     name: nameOf(labels!, total.title),
@@ -266,10 +259,7 @@ library.patch('/concepts/:key/category', async (c) => {
   let path: string | null = null;
   if (body.category) {
     const [existing, aliases] = await c.env.DB.batch(categoryLookupQueries(c.env, c.var.userId));
-    const normalized = normalizeCategory(body.category);
-    path = normalized
-      ? (resolveCategories([normalized], existing!.results as { domain: string }[], aliases!.results as { alias: string; path: string }[]).get(normalized) ?? normalized)
-      : null;
+    path = resolvedCategory(resolveCategories([body.category], existing!.results as { domain: string }[], aliases!.results as { alias: string; path: string }[]), body.category);
   }
   const updated = await c.env.DB.prepare('UPDATE concepts SET domain = ?3, updated_at = ?4 WHERE user_id = ?1 AND key = ?2')
     .bind(c.var.userId, c.req.param('key'), path, Date.now())

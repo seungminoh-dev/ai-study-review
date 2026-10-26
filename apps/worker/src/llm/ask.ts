@@ -1,5 +1,4 @@
 import { AskResult, CREDIT_COST, type AskBody, type AskCardsBody, type CreditBalance, type McqOption } from '@moai/shared';
-import { z } from 'zod';
 import { creditBalance, noCreditsMessage } from '../domain/credits';
 import type { Env } from '../env';
 import { sha256Hex } from '../lib/crypto';
@@ -8,7 +7,7 @@ import { overBudget } from './budget';
 import { createJob } from './jobs';
 import { fail, meteredCall, type Failure } from './metered';
 import { ASK_SYSTEM, askInput } from './prompts';
-import { toOutputSchema } from './schema';
+import { outputSchema } from './schema';
 
 // AI 개념 채팅 (3단계 시안): 복습에서 답을 고른 카드(틀렸든 맞혔든)나 설명하기를 비교한 카드의 개념을 묻는다.
 // 질문과 답은 저장하지 않는다. 크레딧과 예산은 metered.ts가 본다.
@@ -62,7 +61,7 @@ export async function askConcept(env: Env, userId: string, cardId: string, body:
       history: body.history,
       question: body.question,
     }),
-    schema: (schema ??= toOutputSchema(z.toJSONSchema(AskResult, { target: 'draft-2020-12' }) as Record<string, unknown>)),
+    schema: (schema ??= outputSchema(AskResult)),
     maxTokens: MAX_TOKENS,
     timeoutMs: TIMEOUT_MS,
   };

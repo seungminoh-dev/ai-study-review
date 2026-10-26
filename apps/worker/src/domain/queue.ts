@@ -96,14 +96,17 @@ export function categoryClause(column: string, param: string): string {
 /** 후보는 넉넉히 읽되 끝없이 읽지는 않는다. 종류마다 따로 읽어서, 밀린 새 카드가 복습 카드를 밀어내지 않게 한다 */
 const CANDIDATE_LIMIT = 200;
 
+/** 큐 카드 한 장에 읽는 열 (cards c, concepts k) */
+const CARD_FIELDS = `c.id, c.concept_id, c.state, c.due, c.created_at, c.type, c.rung, c.prompt, c.code, c.answer, c.options, c.explain,
+  c.checklist, c.stability, c.difficulty, c.elapsed_days, c.scheduled_days, c.learning_steps, c.reps, c.lapses,
+  c.last_review, k.key AS concept_key, k.name AS concept_name, k.final_answer`;
+
 /**
  * 후보 카드. ?3은 분류 필터(없으면 NULL): 그 분류와 그 아래 분류의 개념만 고른다.
  * 자료에서 만든 카드는 한 번 풀기 전(state 0)에는 넣지 않는다. 학습 탭(자료)에서만 처음 푼다.
  * 설명하기는 예외다. 아래 단계를 익혀야 열리는 카드라 열렸을 때는 그 섹션을 이미 다 푼 뒤여서, 학습 탭에만 두면 거의 보이지 않는다 (2026-10-21)
  */
-const CANDIDATES = `SELECT c.id, c.concept_id, c.state, c.due, c.created_at, c.type, c.rung, c.prompt, c.code, c.answer, c.options, c.explain,
-                          c.checklist, c.stability, c.difficulty, c.elapsed_days, c.scheduled_days, c.learning_steps, c.reps, c.lapses,
-                          c.last_review, k.key AS concept_key, k.name AS concept_name, k.final_answer
+const CANDIDATES = `SELECT ${CARD_FIELDS}
                      FROM cards c JOIN concepts k ON k.id = c.concept_id
                     WHERE c.user_id = ?1 AND c.status = 'active' AND c.due <= ?2
                       AND NOT (c.origin = 'material' AND c.state = 0 AND c.type != 'explain')
@@ -164,15 +167,13 @@ export async function loadMaterialQueue(
   const from = `FROM cards c JOIN concepts k ON k.id = c.concept_id JOIN learning_sessions s ON s.id = c.session_id
       WHERE c.user_id = ?1 AND s.user_id = ?1 AND s.material = ?2 AND c.status = 'active' AND c.state = 0${part === null ? '' : " AND coalesce(s.material_part, '') = ?3"}`;
   const binds = part === null ? [userId, material] : [userId, material, part];
+  return page(env, from, 'ORDER BY s.created_at, c.created_at', binds, size, now);
+}
+
+/** 앞에서 size장과 같은 조건의 전체 장수를 한 batch로 읽는다 */
+async function page(env: Env, from: string, order: string, binds: unknown[], size: number, now: number): Promise<{ cards: QueueCard[]; remaining: number }> {
   const [rows, count] = await env.DB.batch([
-    env.DB.prepare(
-      `SELECT c.id, c.concept_id, c.state, c.due, c.created_at, c.type, c.rung, c.prompt, c.code, c.answer, c.options, c.explain,
-              c.checklist, c.stability, c.difficulty, c.elapsed_days, c.scheduled_days, c.learning_steps, c.reps, c.lapses,
-              c.last_review, k.key AS concept_key, k.name AS concept_name, k.final_answer
-         ${from}
-        ORDER BY s.created_at, c.created_at
-        LIMIT ?${binds.length + 1}`,
-    ).bind(...binds, size),
+    env.DB.prepare(`SELECT ${CARD_FIELDS} ${from} ${order} LIMIT ?${binds.length + 1}`).bind(...binds, size),
     env.DB.prepare(`SELECT count(*) AS n ${from}`).bind(...binds),
   ]);
   return {
@@ -194,9 +195,7 @@ export async function loadMistakes(env: Env, userId: string, now: number, size: 
        SELECT card_id, grade, reviewed_at, row_number() OVER (PARTITION BY card_id ORDER BY reviewed_at DESC) AS rn
          FROM review_logs WHERE user_id = ?1 AND reviewed_at >= ?2
      )
-     SELECT c.id, c.concept_id, c.state, c.due, c.created_at, c.type, c.rung, c.prompt, c.code, c.answer, c.options, c.explain,
-            c.checklist, c.stability, c.difficulty, c.elapsed_days, c.scheduled_days, c.learning_steps, c.reps, c.lapses,
-            c.last_review, k.key AS concept_key, k.name AS concept_name, k.final_answer
+     SELECT ${CARD_FIELDS}
        FROM last JOIN cards c ON c.id = last.card_id JOIN concepts k ON k.id = c.concept_id
       WHERE last.rn = 1 AND last.grade = 1 AND last.reviewed_at < ?3 AND c.user_id = ?1 AND c.status = 'active'
       ORDER BY last.reviewed_at DESC
@@ -223,19 +222,7 @@ export async function loadRandom(
        AND ${categoryClause('k.domain', '?2')}
        AND (?3 IS NULL OR s.material = ?3) AND (?4 IS NULL OR coalesce(s.material_part, '') = ?4)`;
   const binds = [userId, scope.category, scope.material, scope.part];
-  const [rows, count] = await env.DB.batch([
-    env.DB.prepare(
-      `SELECT c.id, c.concept_id, c.state, c.due, c.created_at, c.type, c.rung, c.prompt, c.code, c.answer, c.options, c.explain,
-              c.checklist, c.stability, c.difficulty, c.elapsed_days, c.scheduled_days, c.learning_steps, c.reps, c.lapses,
-              c.last_review, k.key AS concept_key, k.name AS concept_name, k.final_answer
-         ${from} ORDER BY random() LIMIT ?5`,
-    ).bind(...binds, size),
-    env.DB.prepare(`SELECT count(*) AS n ${from}`).bind(...binds),
-  ]);
-  return {
-    cards: (rows!.results as unknown as CandidateRow[]).map((row) => toQueueCard(row, now)),
-    remaining: (count!.results[0] as { n: number } | undefined)?.n ?? 0,
-  };
+  return page(env, from, 'ORDER BY random()', binds, size, now);
 }
 
 /** 이 카드들 중 마지막 답이 틀린 카드 수 (오늘 화면의 "틀린 것") */

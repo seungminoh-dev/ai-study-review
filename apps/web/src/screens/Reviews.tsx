@@ -4,8 +4,10 @@ import { Mascot } from '../Mascot';
 import { CategoryProgress } from '../progress';
 import { examHref } from '../materials';
 import { Link } from '../router';
-import { formatDate, useApi } from '../useApi';
-import { InterviewLink, ReviewHero, useCanInterview } from './Today';
+import { useApi } from '../useApi';
+import { useCanInterview } from '../ai';
+import { InterviewLink, ReviewHero } from './Today';
+import { SessionItem } from './Sessions';
 
 // 복습 탭 (4단계 시안): 대화에서 온 카드와 한 번이라도 푼 카드. 오늘 복습, 틀린 것, 분류별, 모의면접, 공부한 대화.
 
@@ -106,14 +108,7 @@ export function Reviews() {
         ) : (
           <ul className="list">
             {chats.map((session) => (
-              <li key={session.id}>
-                <Link href={`/sessions/${session.id}`} className="row-link">
-                  <span>{session.topic}</span>
-                  <span className="muted small">
-                    {formatDate(session.created_at)} · 개념 {session.concepts}개 · 카드 {session.cards}장
-                  </span>
-                </Link>
-              </li>
+              <SessionItem key={session.id} session={session} />
             ))}
           </ul>
         )}

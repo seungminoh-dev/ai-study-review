@@ -13,7 +13,9 @@ import { Ring } from '../progress';
 import { EditableTitle } from '../EditableTitle';
 import { BackLink, Link, goBack } from '../router';
 import { formatDate, useApi } from '../useApi';
-import { BookTile } from './Materials';
+import { BookTile, percentOf } from './Materials';
+import { CARD_TYPE } from '../cards/QuestionCard';
+import { ConceptChips } from './Learn';
 
 // 자료 상세 (3단계 시안 "자료 상세 · 섹션"): 섹션마다 진행을 보고, 섹션 하나만 골라 푼다.
 // 휴대폰은 섹션을 누르면 그 자리에서 펼치고, 컴퓨터(1024px 이상)는 왼쪽 섹션 목록 · 오른쪽 섹션 상세 두 칸이다.
@@ -31,16 +33,6 @@ const FILTERS: { key: Filter; label: string }[] = [
   { key: 'done', label: '다 풂' },
 ];
 
-const TYPE: Record<MaterialPart['preview'][number]['type'], string> = { ox: 'OX', mcq: '객관식', cloze: '빈칸', explain: '설명하기' };
-
-const percentOf = (solved: number, cards: number) => (cards === 0 ? 0 : Math.round((solved / cards) * 100));
-
-function statusOf(part: MaterialPart): string {
-  const kind = kindOf(part);
-  if (kind === 'todo') return '새 카드';
-  if (kind === 'done') return '다 풂';
-  return `${part.solved}/${part.cards}`;
-}
 
 export function MaterialDetail({ title }: { title: string }) {
   const { data, error, reload } = useApi<Detail>(`/materials/detail?${new URLSearchParams({ title })}`);
@@ -122,27 +114,21 @@ export function MaterialDetail({ title }: { title: string }) {
           <strong>{percentOf(data.solved, data.cards)}%</strong>
         </Ring>
         <dl>
-          <div>
-            <dt>푼 카드</dt>
-            <dd>
-              {data.solved}
-              <small>/{data.cards}</small>
-            </dd>
-          </div>
-          <div>
-            <dt>내 지식</dt>
-            <dd>
-              {data.adopted}
-              <small>/{data.concepts}</small>
-            </dd>
-          </div>
-          <div>
-            <dt>시작한 섹션</dt>
-            <dd>
-              {started}
-              <small>/{parts.length}</small>
-            </dd>
-          </div>
+          {(
+            [
+              ['푼 카드', data.solved, data.cards],
+              ['내 지식', data.adopted, data.concepts],
+              ['시작한 섹션', started, parts.length],
+            ] as const
+          ).map(([title, done, total]) => (
+            <div key={title}>
+              <dt>{title}</dt>
+              <dd>
+                {done}
+                <small>/{total}</small>
+              </dd>
+            </div>
+          ))}
         </dl>
       </section>
 
@@ -193,7 +179,7 @@ export function MaterialDetail({ title }: { title: string }) {
                         <span className={kind === 'done' ? 'good' : undefined} style={{ width: `${percentOf(part.solved, part.cards)}%` }} />
                       </span>
                     </span>
-                    <span className={`section-status ${kind}`}>{statusOf(part)}</span>
+                    <span className={`section-status ${kind}`}>{kind === 'todo' ? '새 카드' : kind === 'done' ? '다 풂' : `${part.solved}/${part.cards}`}</span>
                     <span className={expanded ? 'section-chevron open narrow-only' : 'section-chevron narrow-only'}>
                       <IconChevron />
                     </span>
@@ -256,13 +242,7 @@ function SectionBody({ title, part, name, compact = false }: { title: string; pa
       {part.concepts.length > 0 ? (
         <div className="section-block">
           {compact ? null : <strong className="small">이 섹션의 개념</strong>}
-          <ul className="concept-chips" aria-label="개념 (초록은 내 지식)">
-            {part.concepts.map((concept) => (
-              <li key={concept.key} className={concept.adopted ? 'known' : undefined}>
-                {concept.name}
-              </li>
-            ))}
-          </ul>
+          <ConceptChips concepts={part.concepts} className="concept-chips" label="개념 (초록은 내 지식)" />
         </div>
       ) : null}
       <div className="section-actions">
@@ -285,7 +265,7 @@ function SectionBody({ title, part, name, compact = false }: { title: string; pa
           <ul className="card-preview">
             {part.preview.map((card, index) => (
               <li key={index}>
-                <span className={`type-tag ${card.type}`}>{TYPE[card.type]}</span>
+                <span className={`type-tag ${card.type}`}>{CARD_TYPE[card.type]}</span>
                 <span>{card.prompt}</span>
               </li>
             ))}

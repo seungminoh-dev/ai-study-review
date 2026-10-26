@@ -4,7 +4,7 @@ import { errorMessage, request } from '../api';
 import { forgetAiStatus } from '../ai';
 import { copyText } from '../copy';
 import { Badge, Disclosure, RowError, SetCard, SetRow, Toaster, toast } from '../settings-ui';
-import { formatDate, useApi } from '../useApi';
+import { formatDate, useApi, useRun } from '../useApi';
 
 // 관리 대시보드 (/admin, 오너만): 설정 맨 아래에 있던 초대·회원·베타 지표·AI 사용량·크레딧 주기를 따로 뺀 화면.
 // 서버의 /api/admin/*는 app.ts에서 오너만 통과시킨다. 이 화면을 숨기는 것은 보기 좋게 하려는 것뿐이다.
@@ -179,20 +179,17 @@ function InviteCard({ members }: { members: MemberSummary[] }) {
   const [label, setLabel] = useState('');
   const [bind, setBind] = useState('');
   const [created, setCreated] = useState<{ label: string; code: string; recovery: boolean } | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const { error, setError, run } = useRun();
 
   const create = async (event: FormEvent) => {
     event.preventDefault();
-    setError(null);
-    try {
+    await run(async () => {
       const result = await request<{ invite: InviteSummary; code: string }>('/admin/invites', { method: 'POST', json: bind ? { label, bind_user_id: bind } : { label } });
       setCreated({ label: result.invite.label, code: result.code, recovery: result.invite.bind_name !== null });
       setLabel('');
       setBind('');
       reload();
-    } catch (reason) {
-      setError(errorMessage(reason));
-    }
+    });
   };
 
   const remove = async (invite: InviteSummary) => {
@@ -268,18 +265,15 @@ function InviteCard({ members }: { members: MemberSummary[] }) {
 
 /** 회원 이용 멈추기·다시 열기 (이용약관의 이용 정지). 멈추면 그 회원의 로그인·커넥터·알림이 모두 끊긴다 */
 function MemberCard({ members, error, reload }: { members: MemberSummary[] | null; error: string | null; reload: () => void }) {
-  const [failure, setFailure] = useState<string | null>(null);
+  const { error: failure, run } = useRun();
   const toggle = async (member: MemberSummary) => {
     const disable = member.disabled_at === null;
     if (disable && !confirm(`${member.display_name}님의 이용을 멈출까요? 그 사람의 로그인, 커넥터, 알림이 모두 끊기고 다시 열 때까지 로그인할 수 없어요. 데이터는 지우지 않아요.`)) return;
-    setFailure(null);
-    try {
+    await run(async () => {
       await request(`/admin/members/${encodeURIComponent(member.id)}/${disable ? 'disable' : 'enable'}`, { method: 'POST' });
       toast(disable ? `${member.display_name}님의 이용을 멈췄어요.` : `${member.display_name}님이 다시 로그인할 수 있어요.`);
       reload();
-    } catch (reason) {
-      setFailure(errorMessage(reason));
-    }
+    });
   };
   return (
     <SetCard title="회원" aside={members ? <Badge>{members.length}명</Badge> : undefined}>
@@ -310,22 +304,19 @@ function CreditCard() {
   const [target, setTarget] = useState('');
   const [amount, setAmount] = useState(100);
   const [note, setNote] = useState('');
-  const [failure, setFailure] = useState<string | null>(null);
+  const { error: failure, run } = useRun();
 
   const grant = async (event: FormEvent) => {
     event.preventDefault();
     const person = data?.people.find((row) => row.id === target);
     if (!person || !confirm(`${person.name}님에게 보유 크레딧 ${amount}을 줄까요? 준 뒤에는 되돌릴 수 없어요.`)) return;
-    setFailure(null);
-    try {
+    await run(async () => {
       await request('/admin/credits', { method: 'POST', json: { user_id: target, amount, ...(note.trim() ? { note: note.trim() } : {}) } });
       toast(`${person.name}님에게 보유 크레딧 ${amount}을 줬어요.`);
       setNote('');
       forgetAiStatus();
       reload();
-    } catch (reason) {
-      setFailure(errorMessage(reason));
-    }
+    });
   };
 
   return (

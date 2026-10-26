@@ -51,6 +51,7 @@ function text(message: string): CallToolResult['content'] {
  * 검증은 원래 스키마에 맡기고 JSON Schema 변환 결과만 기억한다.
  * SDK는 tools/list(와 2026-07-28 방식의 tools/call)마다 inputSchema를 JSON Schema로 다시 바꾸는데,
  * save_learning 스키마는 이 변환이 tools/list CPU의 40%쯤을 쓴다. SDK는 target만 넘기므로 target으로만 구분한다.
+ * 모듈 범위에서 부르므로 SDK가 쓰는 target으로 미리 바꿔 둔다 (달라져도 isolate마다 첫 요청에서 한 번 더 바꿀 뿐이다).
  */
 function memoJsonSchema<S extends StandardSchemaWithJSON>(schema: S): S {
   const std = schema['~standard'];
@@ -63,7 +64,9 @@ function memoJsonSchema<S extends StandardSchemaWithJSON>(schema: S): S {
       if (!json) memo.set(key, (json = std.jsonSchema[io](options)));
       return json;
     };
-  return { '~standard': { ...std, jsonSchema: { input: converter('input'), output: converter('output') } } } as S;
+  const input = converter('input');
+  input({ target: 'draft-2020-12' });
+  return { '~standard': { ...std, jsonSchema: { input, output: converter('output') } } } as S;
 }
 
 const FindConceptsInput = z.object({
@@ -122,19 +125,6 @@ const SubmitReviewSchema = memoJsonSchema(SubmitReviewInput);
 const InterviewChainSchema = memoJsonSchema(InterviewChainInput);
 const CategoriesSchema = memoJsonSchema(CategoriesInput);
 const UpdateCategoriesSchema = memoJsonSchema(UpdateCategoriesInput);
-// SDK가 쓰는 target과 같다. 달라져도 isolate마다 첫 요청에서 한 번 더 변환할 뿐이다.
-for (const schema of [
-  SaveLearningSchema,
-  FindConceptsSchema,
-  LearnerContextSchema,
-  ReviewQueueSchema,
-  SubmitReviewSchema,
-  InterviewChainSchema,
-  CategoriesSchema,
-  UpdateCategoriesSchema,
-]) {
-  schema['~standard'].jsonSchema.input({ target: 'draft-2020-12' });
-}
 // 처음 실행하는 함수는 V8이 그때 컴파일한다. 첫 tools/call이 그 비용을 내지 않도록 기획서 예시를 한 번 검사해 둔다.
 const warmup = SaveLearningInput.safeParse(saveLearningExample);
 if (warmup.success) checkSaveLearning(warmup.data);

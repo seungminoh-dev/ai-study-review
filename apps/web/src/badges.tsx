@@ -8,6 +8,7 @@ import { IconStar } from './icons';
 import { play } from './sound';
 import { Mascot, type Mood } from './Mascot';
 import { Link } from './router';
+import { readStoredJson, writeStored } from './prefs';
 
 // 이정표 배지 (3단계 3-4). 무엇을 몇 번 하면 받는지는 packages/shared/src/badges.ts, 받은 기록은 서버가 갖는다.
 // 새 배지 축하는 기기마다 한 번만 한다. 본 배지는 이 기기의 localStorage에 적어 둔다.
@@ -37,31 +38,15 @@ const SEEN = 'moai:badges-seen';
 /** 받은 지 이만큼 안 된 배지만 새 배지로 축하한다. 오래전에 이룬 것은 조용히 선반에만 둔다 */
 const NEW_MS = 2 * 24 * 60 * 60 * 1000;
 
-function readSeen(): Set<string> {
-  try {
-    return new Set(JSON.parse(localStorage.getItem(SEEN) ?? '[]') as string[]);
-  } catch {
-    return new Set();
-  }
-}
+const readSeen = () => new Set((readStoredJson(SEEN) as string[] | null) ?? []);
 
+/** 저장소를 못 쓰면 다음에 또 축하한다 */
 function markSeen(ids: readonly string[]): void {
-  if (ids.length === 0) return;
-  try {
-    localStorage.setItem(SEEN, JSON.stringify([...new Set([...readSeen(), ...ids])]));
-  } catch {
-    // 저장소를 못 쓰면 다음에 또 축하한다
-  }
+  if (ids.length > 0) writeStored(SEEN, JSON.stringify([...new Set([...readSeen(), ...ids])]));
 }
 
 /** 로그아웃하면 지운다. 같은 기기로 다른 사람이 로그인해도 그 사람의 새 배지를 축하한다 */
-export function forgetSeenBadges(): void {
-  try {
-    localStorage.removeItem(SEEN);
-  } catch {
-    // 저장소를 못 쓰면 지울 것도 없다
-  }
-}
+export const forgetSeenBadges = () => writeStored(SEEN, null);
 
 type Earnable = { id: string; earned_at: number | null };
 

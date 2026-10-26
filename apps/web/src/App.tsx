@@ -18,6 +18,7 @@ import { Landing } from './screens/Landing';
 import { Login } from './screens/Login';
 import { Setup } from './screens/Setup';
 import { Today } from './screens/Today';
+import { readStoredJson, writeStored } from './prefs';
 
 /**
  * 로그인한 뒤에만 쓰는 큰 화면은 따로 받는다. 처음 오는 사람의 랜딩과 매일 여는 오늘 화면을 가볍게 하려고.
@@ -66,23 +67,9 @@ type Auth = { state: 'loading' } | { state: 'in'; me: Me } | { state: 'setup' } 
 
 const ME_KEY = 'moai:me';
 
-function rememberMe(me: Me | null): void {
-  try {
-    if (me) localStorage.setItem(ME_KEY, JSON.stringify(me));
-    else localStorage.removeItem(ME_KEY);
-  } catch {
-    // 저장소를 못 쓰면 오프라인 시작만 안 된다
-  }
-}
-
-function rememberedMe(): Me | null {
-  try {
-    const raw = localStorage.getItem(ME_KEY);
-    return raw ? (JSON.parse(raw) as Me) : null;
-  } catch {
-    return null;
-  }
-}
+/** 오프라인으로 시작할 때 쓴다. 저장소를 못 쓰면 오프라인 시작만 안 된다 */
+const rememberMe = (me: Me | null) => writeStored(ME_KEY, me && JSON.stringify(me));
+const rememberedMe = () => readStoredJson(ME_KEY) as Me | null;
 
 type Section = 'today' | 'learn' | 'reviews' | 'map' | 'growth' | 'admin' | 'settings';
 
@@ -108,22 +95,13 @@ const ICONS: Record<Section, () => ReactNode> = {
   settings: () => <IconSettings />,
 };
 
-/** 휴대폰 아래 탭. 설정은 오늘 화면 오른쪽 위에 있다 */
-const TABS: { href: string; label: string; section: Section }[] = [
+/** 휴대폰 아래 탭과 컴퓨터 왼쪽 메뉴 (왼쪽 메뉴는 long 이름이 있으면 그것을 쓴다). 설정은 오늘 화면 오른쪽 위에 있다 */
+const TABS: { href: string; label: string; long?: string; section: Section }[] = [
   { href: '/', label: '오늘', section: 'today' },
   { href: '/learn', label: '학습', section: 'learn' },
   { href: '/reviews', label: '복습', section: 'reviews' },
-  { href: '/map', label: '지도', section: 'map' },
-  { href: '/growth', label: '성장', section: 'growth' },
-];
-
-/** 컴퓨터 왼쪽 메뉴 */
-const SIDE: { href: string; label: string; section: Section }[] = [
-  { href: '/', label: '오늘', section: 'today' },
-  { href: '/learn', label: '학습', section: 'learn' },
-  { href: '/reviews', label: '복습', section: 'reviews' },
-  { href: '/map', label: '지식 지도', section: 'map' },
-  { href: '/growth', label: '내 성장', section: 'growth' },
+  { href: '/map', label: '지도', long: '지식 지도', section: 'map' },
+  { href: '/growth', label: '성장', long: '내 성장', section: 'growth' },
 ];
 
 function Sidebar({ current, owner }: { current: Section | null; owner: boolean }) {
@@ -141,7 +119,7 @@ function Sidebar({ current, owner }: { current: Section | null; owner: boolean }
         <strong>모아이</strong>
       </TabLink>
       <nav className="side-nav" aria-label="메뉴">
-        {SIDE.map(link)}
+        {TABS.map((tab) => link({ ...tab, label: tab.long ?? tab.label }))}
       </nav>
       <nav className="side-nav side-bottom" aria-label="설정">
         <CreditChip className="side-credit" unit />

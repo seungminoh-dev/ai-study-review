@@ -38,19 +38,14 @@ export function revokeAccessStatements(env: Env, userId: string, when?: { sql: s
   ];
 }
 
-/** 이 사람의 연결을 모두 끊는다 (계정 지우기, 기기 복구, 이용 정지). 끊은 수를 돌려준다 */
-export async function revokeAllGrants(env: Env, userId: string): Promise<number> {
+/** 이 사람의 연결을 모두 끊는다 (계정 지우기, 기기 복구, 이용 정지) */
+export async function revokeAllGrants(env: Env, userId: string): Promise<void> {
   const helpers = env.OAUTH_PROVIDER;
-  if (!helpers) return 0;
-  let revoked = 0;
+  if (!helpers) return;
   // 지우면 다음 쪽이 당겨지므로 매번 첫 쪽부터 다시 읽는다. 한 사람의 연결은 많아야 몇 개다
   for (let round = 0; round < 20; round++) {
     const page = await helpers.listUserGrants(userId);
     if (page.items.length === 0) break;
-    for (const grant of page.items) {
-      await helpers.revokeGrant(grant.id, userId);
-      revoked += 1;
-    }
+    for (const grant of page.items) await helpers.revokeGrant(grant.id, userId);
   }
-  return revoked;
 }
