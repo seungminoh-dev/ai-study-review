@@ -6,7 +6,6 @@ import {
   MaterialPartLabelBody,
   comparePart,
   materialLabel,
-  normalizeCategory,
   type CardType,
   type CategoryManage,
   type CategoryNode,
@@ -17,7 +16,7 @@ import {
 } from '@moai/shared';
 import { Hono } from 'hono';
 import type { AppEnv } from '../context';
-import { categoryLookupQueries, categoryOverview, resolveCategories, updateCategories } from '../domain/categories';
+import { categoryLookupQueries, categoryOverview, resolveCategories, resolvedCategory, updateCategories } from '../domain/categories';
 import { errorJson, readJson } from '../lib/http';
 import { deleteSessions } from './sessions';
 
@@ -260,10 +259,7 @@ library.patch('/concepts/:key/category', async (c) => {
   let path: string | null = null;
   if (body.category) {
     const [existing, aliases] = await c.env.DB.batch(categoryLookupQueries(c.env, c.var.userId));
-    const normalized = normalizeCategory(body.category);
-    path = normalized
-      ? (resolveCategories([normalized], existing!.results as { domain: string }[], aliases!.results as { alias: string; path: string }[]).get(normalized) ?? normalized)
-      : null;
+    path = resolvedCategory(resolveCategories([body.category], existing!.results as { domain: string }[], aliases!.results as { alias: string; path: string }[]), body.category);
   }
   const updated = await c.env.DB.prepare('UPDATE concepts SET domain = ?3, updated_at = ?4 WHERE user_id = ?1 AND key = ?2')
     .bind(c.var.userId, c.req.param('key'), path, Date.now())
