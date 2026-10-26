@@ -7,7 +7,6 @@ export const HARD_AFTER_MS = 30_000;
 
 /** 답을 고른 뒤 스스로 매긴 확신도. 답을 보기 전에 묻는다 */
 export type Confidence = 'sure' | 'unsure' | 'guess';
-export const CONFIDENCES: readonly Confidence[] = ['sure', 'unsure', 'guess'];
 
 export interface AnswerResult {
   correct: boolean;

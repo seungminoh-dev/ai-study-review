@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import example from '../fixtures/immutable-object.json';
 import max from '../fixtures/save-learning-max.json';
-import { SaveLearningInput, checkSaveLearning, countSaveLearning, rungOf } from '../src/index';
+import { SaveLearningInput, checkSaveLearning, rungOf } from '../src/index';
 
 const parse = (value: unknown) => SaveLearningInput.parse(value);
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
@@ -10,7 +10,7 @@ describe('SaveLearningInput', () => {
   it('accepts the immutable-object session from the plan', () => {
     const input = parse(example);
     expect(checkSaveLearning(input)).toEqual([]);
-    expect(countSaveLearning(input)).toEqual({ concepts: 5, cards: 5, judgments: 2, followups: 2, edges: 4 });
+    expect([input.concepts, input.cards, input.judgments, input.followups, input.edges].map((list) => list.length)).toEqual([5, 5, 2, 2, 4]);
   });
 
   it('accepts the max-size fixture', () => {

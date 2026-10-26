@@ -7,6 +7,8 @@ export const MAX_ELAPSED_MS = 60 * 60 * 1000;
 /** 무실수 보너스: 한 번 복습에서 이만큼 이상 풀고 하나도 틀리지 않으면 보너스 XP를 준다 */
 export const PERFECT_MIN_ANSWERS = 5;
 export const PERFECT_XP = 10;
+/** 붙여넣기 가져오기: 대화 텍스트 6만 자까지 (설계서 §11.4) */
+export const MAX_IMPORT_CHARS = 60_000;
 /** 알림 시간은 사용자당 3개까지다 (설계서 §10.1) */
 export const MAX_REMINDERS = 3;
 /**
