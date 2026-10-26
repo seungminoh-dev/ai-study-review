@@ -1,7 +1,7 @@
 import type { LoginCode, McpTokenStatus, Reminder, SessionSummary } from '@moai/shared';
 import { MAX_REMINDERS } from '@moai/shared/client';
 import { AnimatePresence } from 'motion/react';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState } from 'react';
 import { errorMessage, request } from '../api';
 import { DemoDeck } from '../cards/DemoDeck';
 import { Confetti } from '../Confetti';
@@ -65,10 +65,6 @@ export function Welcome({ name }: { name: string }) {
   );
 }
 
-function Actions({ children }: { children: ReactNode }) {
-  return <div className="welcome-actions">{children}</div>;
-}
-
 function Hello({ name, onNext, onLater }: { name: string; onNext: () => void; onLater: () => void }) {
   return (
     <>
@@ -97,14 +93,14 @@ function Hello({ name, onNext, onLater }: { name: string; onNext: () => void; on
           </li>
         </ol>
       </div>
-      <Actions>
+      <div className="welcome-actions">
         <button type="button" className="button primary" onClick={onNext}>
           시작하기
         </button>
         <button type="button" className="text-button" onClick={onLater}>
           나중에 할게요
         </button>
-      </Actions>
+      </div>
     </>
   );
 }
@@ -171,7 +167,7 @@ function InstallStep({ onNext, onInstalled }: { onNext: () => void; onInstalled:
         )}
         {note ? <p className={`notice ${note.tone}`}>{note.text}</p> : null}
       </div>
-      <Actions>
+      <div className="welcome-actions">
         {oneTap ? (
           <button type="button" className="button primary" onClick={() => void install()}>
             홈 화면에 추가
@@ -186,7 +182,7 @@ function InstallStep({ onNext, onInstalled }: { onNext: () => void; onInstalled:
             나중에 할게요
           </button>
         )}
-      </Actions>
+      </div>
     </>
   );
 }
@@ -277,11 +273,11 @@ function ConnectorStep({ onNext }: { onNext: () => void }) {
         {status?.connected ? <p className="notice good">연결돼 있어요.</p> : null}
         {note ? <p className={`notice ${note.tone}`}>{note.text}</p> : null}
       </div>
-      <Actions>
+      <div className="welcome-actions">
         <button type="button" className="button primary" onClick={onNext}>
           다음
         </button>
-      </Actions>
+      </div>
     </>
   );
 }
@@ -365,11 +361,11 @@ function SaveStep({ onNext }: { onNext: () => void }) {
           </div>
         )}
       </div>
-      <Actions>
+      <div className="welcome-actions">
         <button type="button" className="button primary" onClick={onNext}>
           다음
         </button>
-      </Actions>
+      </div>
     </>
   );
 }
@@ -460,7 +456,7 @@ function PushStep({ onNext }: { onNext: () => void }) {
         {state && PUSH_NOTE[state] && !ready && !saved ? <p className="notice warn">{PUSH_NOTE[state]}</p> : null}
         {note ? <p className={`notice ${note.tone}`}>{note.text}</p> : null}
       </div>
-      <Actions>
+      <div className="welcome-actions">
         {ready || saved ? (
           <button type="button" className="button primary" onClick={onNext}>
             다음
@@ -475,7 +471,7 @@ function PushStep({ onNext }: { onNext: () => void }) {
             나중에 할게요
           </button>
         )}
-      </Actions>
+      </div>
     </>
   );
 }
@@ -518,14 +514,14 @@ function Ready({ installedNow, onFinish, onRestart }: { installedNow: boolean; o
           </ul>
         ) : null}
       </div>
-      <Actions>
+      <div className="welcome-actions">
         <button type="button" className="button primary" onClick={onFinish}>
           오늘 화면으로
         </button>
         <button type="button" className="text-button" onClick={onRestart}>
           처음부터 다시 보기
         </button>
-      </Actions>
+      </div>
     </>
   );
 }

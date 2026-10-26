@@ -13,18 +13,16 @@ let deferred: InstallPromptEvent | null = null;
 const listeners = new Set<() => void>();
 const changed = () => listeners.forEach((listener) => listener());
 
-if (typeof window !== 'undefined') {
-  window.addEventListener('beforeinstallprompt', (event) => {
-    // 브라우저가 스스로 띄우는 작은 배너 대신 우리 버튼으로 설치한다
-    event.preventDefault();
-    deferred = event as InstallPromptEvent;
-    changed();
-  });
-  window.addEventListener('appinstalled', () => {
-    deferred = null;
-    changed();
-  });
-}
+window.addEventListener('beforeinstallprompt', (event) => {
+  // 브라우저가 스스로 띄우는 작은 배너 대신 우리 버튼으로 설치한다
+  event.preventDefault();
+  deferred = event as InstallPromptEvent;
+  changed();
+});
+window.addEventListener('appinstalled', () => {
+  deferred = null;
+  changed();
+});
 
 /** 설치 창을 띄운다. 설치했으면 true */
 export async function installApp(): Promise<boolean> {

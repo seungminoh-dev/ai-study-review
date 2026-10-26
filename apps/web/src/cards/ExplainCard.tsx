@@ -1,5 +1,5 @@
 import type { QueueCard, ReviewGrade } from '@moai/shared';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { formatInterval } from '../useApi';
 
 // 설명하기 카드 (설계서 §9.3): 먼저 내 말로 설명한다 → 내 최종 버전과 체크리스트를 보고 → 등급 4개 중 하나를 누른다.
@@ -30,7 +30,6 @@ export function ExplainCard({
   const [revealed, setRevealed] = useState(false);
   const [checked, setChecked] = useState<Set<number>>(new Set());
   const [suggested, setSuggested] = useState<ReviewGrade | null>(null);
-  const area = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     // 펼친 순간에 한 번만 알린다
@@ -69,7 +68,6 @@ export function ExplainCard({
       <label className="field">
         <span className="muted small">면접관에게 말하듯 30초 분량으로. 첫 문장에 답부터 써 보세요. 머릿속으로만 해도 돼요.</span>
         <textarea
-          ref={area}
           className="answer-input"
           value={text}
           onChange={(event) => setText(event.target.value)}

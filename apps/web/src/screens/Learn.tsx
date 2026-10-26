@@ -295,7 +295,6 @@ function SectionRow({
           </div>
           <EditableTitle
             bare
-            as="strong"
             value={view.name}
             maxLength={80}
             allowEmpty

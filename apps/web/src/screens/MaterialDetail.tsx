@@ -35,13 +35,6 @@ const TYPE: Record<MaterialPart['preview'][number]['type'], string> = { ox: 'OX'
 
 const percentOf = (solved: number, cards: number) => (cards === 0 ? 0 : Math.round((solved / cards) * 100));
 
-function statusOf(part: MaterialPart): string {
-  const kind = kindOf(part);
-  if (kind === 'todo') return '새 카드';
-  if (kind === 'done') return '다 풂';
-  return `${part.solved}/${part.cards}`;
-}
-
 export function MaterialDetail({ title }: { title: string }) {
   const { data, error, reload } = useApi<Detail>(`/materials/detail?${new URLSearchParams({ title })}`);
   // 자료를 눌러 들어오면 그 자료를 기억한다. 학습 탭이 이 자료로 열린다
@@ -193,7 +186,7 @@ export function MaterialDetail({ title }: { title: string }) {
                         <span className={kind === 'done' ? 'good' : undefined} style={{ width: `${percentOf(part.solved, part.cards)}%` }} />
                       </span>
                     </span>
-                    <span className={`section-status ${kind}`}>{statusOf(part)}</span>
+                    <span className={`section-status ${kind}`}>{kind === 'todo' ? '새 카드' : kind === 'done' ? '다 풂' : `${part.solved}/${part.cards}`}</span>
                     <span className={expanded ? 'section-chevron open narrow-only' : 'section-chevron narrow-only'}>
                       <IconChevron />
                     </span>
