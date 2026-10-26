@@ -27,12 +27,7 @@ const unsolvedMaterial = (card: LadderCard) => card.origin === 'material' && car
  * 아직 안 푼 자료 카드는 익었는지 따지지 않는다. 그 단계에 그런 카드만 있으면 아직 열지 않는다.
  */
 export function cardsToUnlock(cards: readonly LadderCard[]): string[] {
-  const byConcept = new Map<string, LadderCard[]>();
-  for (const card of cards) {
-    const list = byConcept.get(card.concept_id) ?? [];
-    list.push(card);
-    byConcept.set(card.concept_id, list);
-  }
+  const byConcept = Map.groupBy(cards, (card) => card.concept_id);
   const unlock: string[] = [];
   for (const list of byConcept.values()) {
     const active = list.filter((card) => card.status === 'active');
