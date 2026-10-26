@@ -1,8 +1,7 @@
 import { DeleteAccountBody, LogoutBody, TERMS_VERSION, type LoginSummary } from '@moai/shared';
 import { Hono } from 'hono';
-import { deleteCookie } from 'hono/cookie';
 import { revokeAllGrants } from '../auth/grants';
-import { SESSION_COOKIE } from '../auth/session';
+import { SESSION_COOKIE, dropCookie } from '../auth/session';
 import type { AppEnv } from '../context';
 import type { Env } from '../env';
 import { errorJson, readJson } from '../lib/http';
@@ -170,6 +169,6 @@ me.delete('/me', async (c) => {
   await revokeAllGrants(c.env, c.var.userId);
   await c.env.DB.batch(deleteUserStatements(c.env, c.var.userId));
   console.log(JSON.stringify({ event: 'account_deleted', user_id: c.var.userId }));
-  deleteCookie(c, SESSION_COOKIE, { path: '/', secure: true });
+  dropCookie(c, SESSION_COOKIE);
   return c.body(null, 204);
 });

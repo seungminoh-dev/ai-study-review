@@ -8,9 +8,11 @@ const AUTHORIZE_URL = 'https://github.com/login/oauth/authorize';
 const TOKEN_URL = 'https://github.com/login/oauth/access_token';
 const USER_URL = 'https://api.github.com/user';
 
-export interface GithubUser {
-  /** 숫자 id를 문자열로. 아이디(login)는 바뀔 수 있어서 이것으로 찾는다 */
+/** 로그인 방법마다 확인해서 받는 계정 (Google도 이 모양으로 받는다) */
+export interface ProviderUser {
+  /** 바뀌지 않는 값: GitHub 숫자 id를 문자열로, Google sub. 아이디(login)는 바뀔 수 있어서 이것으로 찾는다 */
   id: string;
+  /** 보여 줄 GitHub 아이디. Google은 '' */
   login: string;
   name: string | null;
   /** GitHub 계정이 만들어진 때 (ms). 초대 없이 가입할 때 막 만든 계정을 거른다 */
@@ -43,7 +45,7 @@ export function authorizeUrl(env: Env, state: string, challenge: string): string
 }
 
 /** 인가 코드를 토큰으로 바꾸고 사용자 정보를 읽는다. GitHub가 거절하거나 응답이 이상하면 null */
-export async function fetchGithubUser(env: Env, code: string, verifier: string): Promise<GithubUser | null> {
+export async function fetchGithubUser(env: Env, code: string, verifier: string): Promise<ProviderUser | null> {
   // OAuth 표준대로 폼으로 보낸다. 응답은 accept 헤더로 JSON을 받는다
   const tokenResponse = await fetch(TOKEN_URL, {
     method: 'POST',
