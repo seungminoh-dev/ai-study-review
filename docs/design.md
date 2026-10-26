@@ -176,7 +176,6 @@ claude.ai에서 공부하다가 "정리해줘"라고 하면, 대화 중인 Claud
 - `get_learner_context`의 `topic` 찾기: 주제 문장 안에 이름·별칭·key가 통째로 들어 있는 개념을 먼저 고르고, 없을 때만 낱말로 찾는다. "불변 객체와 방어적 복사"가 "깊은 복사"까지 끌어오지 않게 한다.
 - 저장 응답의 첫 복습 안내는 가장 가까운 알림 시각으로 말한다. 알림 시간이 없으면 설정하라고 안내한다.
 - 세션 쿠키는 하루에 한 번만 연장한다 (DB 쓰기를 줄인다).
-- `scripts/replay.mjs`는 기본으로 읽기만 한다. 실제 계정에 저장하는 측정은 `--save`를 붙일 때만 한다.
 - 출시 전 코드 리뷰에서 고친 규칙:
   - `POST /api/reviews`는 항목을 하나씩 검사해서 잘못된 항목만 버린다 (`rejected`로 센다). 걸린 시간은 1시간으로 자른다. 한 항목 때문에 묶음 전체를 거절하면 기기의 outbox가 영영 막힌다.
   - 오늘 큐는 학습·복습·새 카드를 따로 읽는다. 밀린 새 카드가 복습 카드를 밀어내지 않는다. 같은 개념 거르기를 먼저 하고 하루 상한을 센다.
@@ -317,7 +316,7 @@ apps/
       sw.ts                    # 서비스 워커 (푸시, 캐시)
 packages/
   shared/                      # zod 스키마와 타입 (save_learning 입력, API 요청·응답)
-scripts/                       # gen-vapid.mjs, gen-token.mjs, replay.mjs, make-max-fixture.mjs
+scripts/                       # gen-vapid.mjs, gen-token.mjs, make-max-fixture.mjs
 .github/workflows/             # ci.yml, deploy.yml
 docs/
 ```
@@ -1371,8 +1370,7 @@ runJob(id):
 - GitHub Actions:
   - `.github/workflows/ci.yml`: main·`claude/**` 브랜치 push와 PR마다 `npm ci` → 타입 검사 → 테스트. (MVP 1부터 웹 빌드를 더한다.)
   - `.github/workflows/deploy.yml`: main에 머지되거나 직접 실행하면 테스트 → `wrangler d1 migrations apply moai --remote` → `wrangler deploy`.
-    - 저장소 비밀값 `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`가 없으면 경고만 남기고 건너뛴다.
-    - `wrangler.jsonc`에 자리표시자(예시 도메인, 0으로 된 database_id)가 남아 있으면 실패하고 이유를 알린다.
+    - 저장소 비밀값 `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`가 있어야 한다 (없으면 wrangler 단계에서 실패한다).
   - 앱 비밀값(`SPIKE_TOKEN`, `VAPID_PRIVATE_KEY`, 이후 `TOKEN_PEPPER` 등)은 GitHub에 두지 않고 `wrangler secret put`으로 Cloudflare에 한 번 넣는다.
 - 환경은 로컬(`wrangler dev`, 로컬 D1)과 운영 두 개다. 10명 규모라 스테이징은 두지 않는다.
 - 마이그레이션은 항상 로컬 D1에 먼저 적용해서 테스트하고 올린다.
