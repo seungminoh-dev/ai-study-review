@@ -1,7 +1,7 @@
 import { normalizeSearch, type EdgeType, type JudgmentLabel, type McqOption } from '@moai/shared';
 import type { Env } from '../env';
 import { DAY_MS, formatKstDate } from '../lib/kst';
-import { conceptState, statesFrom, statsQuery, type ConceptRow, type ConceptState } from './concepts';
+import { conceptState, statesFrom, statsQuery, type ConceptRow, type ConceptState, type StatsRow } from './concepts';
 
 // get_learner_context (설계서 §6.7, 부록 D)
 
@@ -132,7 +132,7 @@ export async function learnerContext(
     ).bind(userId, ids, now - FOLLOWUP_WINDOW_MS),
   ]);
 
-  const states = statesFrom(stats!.results as unknown as Parameters<typeof statesFrom>[0]);
+  const states = statesFrom(stats!.results as unknown as StatsRow[]);
   const group = <T extends { concept_id: string }>(rows: readonly T[]) => {
     const map = new Map<string, T[]>();
     for (const row of rows) map.set(row.concept_id, [...(map.get(row.concept_id) ?? []), row]);

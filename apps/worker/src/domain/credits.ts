@@ -7,16 +7,10 @@ import { KST_OFFSET_MS } from '../lib/kst';
 //   쓸 수 있는 크레딧 = 월간 + 받은 것 - 이번 달 쓴 것 - 지난달까지 월간을 넘겨 쓴 것
 // 이번 달 쓴 것이 월간보다 적든 많든 이 식 하나로 맞는다(월간부터 쓰고 넘친 만큼 보유에서 빠진다).
 
-/** 이번 달(한국 시간) 1일 0시 */
-export function creditMonthStart(now: number): number {
+/** 이번 달(한국 시간) 1일 0시. months=1이면 다음 달 1일 0시 (월간 크레딧이 다시 채워진다) */
+export function creditMonthStart(now: number, months = 0): number {
   const kst = new Date(now + KST_OFFSET_MS);
-  return Date.UTC(kst.getUTCFullYear(), kst.getUTCMonth(), 1) - KST_OFFSET_MS;
-}
-
-/** 다음 달(한국 시간) 1일 0시. 월간 크레딧이 다시 채워진다 */
-export function nextRefill(now: number): number {
-  const kst = new Date(now + KST_OFFSET_MS);
-  return Date.UTC(kst.getUTCFullYear(), kst.getUTCMonth() + 1, 1) - KST_OFFSET_MS;
+  return Date.UTC(kst.getUTCFullYear(), kst.getUTCMonth() + months, 1) - KST_OFFSET_MS;
 }
 
 const MONTH_KEY = `strftime('%Y-%m', (created_at + ${KST_OFFSET_MS}) / 1000, 'unixepoch')`;
@@ -50,7 +44,7 @@ export async function creditBalance(env: Env, userId: string, now: number): Prom
   const used = row?.used ?? 0;
   const monthly = Math.max(0, base - used);
   const available = base + (row?.granted ?? 0) - used - (row?.overflow ?? 0);
-  return { monthly, monthly_total: base, held: Math.max(0, available - monthly), refill_at: nextRefill(now) };
+  return { monthly, monthly_total: base, held: Math.max(0, available - monthly), refill_at: creditMonthStart(now, 1) };
 }
 
 /** 이번 달 쓴 크레딧 (운영자 화면) */

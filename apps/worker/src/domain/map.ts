@@ -1,7 +1,7 @@
 import type { CardStatus, CardType, ConceptDetail, ConceptStateKey, EdgeType, MapResponse, McqOption } from '@moai/shared';
 import type { Env } from '../env';
 import { withObject } from '../lib/korean';
-import { conceptState, parseAliases, statsQuery, type ConceptState } from './concepts';
+import { conceptState, parseAliases, statsQuery, type ConceptState, type StatsRow } from './concepts';
 
 // 지식 지도와 개념 상세 (설계서 §9.7). 상태는 Claude가 아니라 서버가 카드와 복습 기록으로 정한다.
 
@@ -28,7 +28,7 @@ export async function loadMap(env: Env, userId: string, now: number): Promise<Ma
     ).bind(userId, JSON.stringify(ids)),
   ]);
   const byId = new Map(
-    (stats!.results as { id: string; cards: number; active: number; unstable: number; recent_fails: number; adopted: number }[]).map((row) => [row.id, row]),
+    (stats!.results as unknown as StatsRow[]).map((row) => [row.id, row]),
   );
   return {
     nodes: concepts.map((concept) => {
@@ -83,14 +83,7 @@ export async function loadConcept(env: Env, userId: string, key: string, now: nu
     ).bind(concept.id, userId),
   ]);
   const neighborRows = neighbors!.results as { id: string; key: string; name: string; type: EdgeType; direction: 'out' | 'in' }[];
-  const { results: stats } = await statsQuery(env, [concept.id, ...neighborRows.map((row) => row.id)], now).all<{
-    id: string;
-    cards: number;
-    active: number;
-    unstable: number;
-    recent_fails: number;
-    adopted: number;
-  }>();
+  const { results: stats } = await statsQuery(env, [concept.id, ...neighborRows.map((row) => row.id)], now).all<StatsRow>();
   const stateOf = new Map(stats.map((row) => [row.id, STATE_KEY[conceptState(row)]]));
   const openFollowups = followups!.results as { id: string; question: string }[];
   const question = openFollowups[0]?.question;
