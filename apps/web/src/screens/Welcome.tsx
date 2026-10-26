@@ -76,21 +76,17 @@ function Hello({ name, onNext, onLater }: { name: string; onNext: () => void; on
         <h1>{name}님, 환영해요</h1>
         <p className="muted">모아이는 Claude와 공부한 내용을 복습 카드로 바꿔 줘요. 세 가지만 하면 바로 시작할 수 있어요.</p>
         <ol className="welcome-list">
-          <li>
-            <span>1</span>
-            <strong>홈 화면에 추가하기</strong>
-            <small>30초</small>
-          </li>
-          <li>
-            <span>2</span>
-            <strong>클로드에 연결하기</strong>
-            <small>1분</small>
-          </li>
-          <li>
-            <span>3</span>
-            <strong>알림 시간 정하기</strong>
-            <small>10초</small>
-          </li>
+          {[
+            ['홈 화면에 추가하기', '30초'],
+            ['클로드에 연결하기', '1분'],
+            ['알림 시간 정하기', '10초'],
+          ].map(([step, time], index) => (
+            <li key={step}>
+              <span>{index + 1}</span>
+              <strong>{step}</strong>
+              <small>{time}</small>
+            </li>
+          ))}
         </ol>
       </div>
       <div className="welcome-actions">

@@ -342,26 +342,23 @@ function Summary({ summary, saving, onSave }: { summary: InterviewSummary; savin
   return (
     <m.section className="interview-summary" aria-labelledby="interview-summary-title" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0, transition: SOFT }}>
       <h2 id="interview-summary-title">면접을 마쳤어요</h2>
-      {summary.good.length > 0 ? (
-        <>
-          <h3>잘한 점</h3>
-          <ul>
-            {summary.good.map((item) => (
-              <li key={item}>{item}</li>
-            ))}
-          </ul>
-        </>
-      ) : null}
-      {summary.fix.length > 0 ? (
-        <>
-          <h3>고칠 점</h3>
-          <ul>
-            {summary.fix.map((item) => (
-              <li key={item}>{item}</li>
-            ))}
-          </ul>
-        </>
-      ) : null}
+      {(
+        [
+          ['잘한 점', summary.good],
+          ['고칠 점', summary.fix],
+        ] as const
+      ).map(([title, items]) =>
+        items.length > 0 ? (
+          <Fragment key={title}>
+            <h3>{title}</h3>
+            <ul>
+              {items.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          </Fragment>
+        ) : null,
+      )}
       {saving.state === 'saving' ? <p className="notice">판정과 카드로 정리하는 중이에요. 1~2분 걸리고, 다 되면 알림으로도 알려 드려요.</p> : null}
       {saving.state === 'done' ? (
         <p className="notice good">

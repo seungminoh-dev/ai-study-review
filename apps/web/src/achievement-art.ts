@@ -5,11 +5,10 @@ import type { Art } from './credits';
 // o 테두리(마스코트 테두리 색), y 금색, g 초록, k 짙은 초록, h 흰색, c 크림, a 주황, r 짙은 주황,
 // i 하늘, b 파랑, p 빨강, v 은회색, n 갈색. 업적 목록은 apps/worker/src/domain/achievements.ts에 있다.
 
-const ART = new Map<string, Art>([
-  // 올빼미
-  [
-    'night_owl',
-    [
+const ART = new Map<string, Art>(
+  Object.entries({
+    // 올빼미
+    night_owl: [
       '.oo......oo.',
       '.ono....ono.',
       '.onnoooonno.',
@@ -23,11 +22,8 @@ const ART = new Map<string, Art>([
       '.orrnnnnrro.',
       'nnoyonnoyonn',
     ],
-  ],
-  // 아침형 인간
-  [
-    'early_bird',
-    [
+    // 아침형 인간
+    early_bird: [
       '.....yy.....',
       '.y........y.',
       '..y.oooo.y..',
@@ -41,11 +37,8 @@ const ART = new Map<string, Art>([
       '............',
       '....byyb....',
     ],
-  ],
-  // 완벽주의자
-  [
-    'perfectionist',
-    [
+    // 완벽주의자
+    perfectionist: [
       '.y..........',
       '...oooooo...',
       '..oihiibio..',
@@ -59,11 +52,8 @@ const ART = new Map<string, Art>([
       '.........yyy',
       '..........y.',
     ],
-  ],
-  // 돌아온 복습러
-  [
-    'comeback',
-    [
+    // 돌아온 복습러
+    comeback: [
       '...o........',
       '..oao.......',
       '.oaaoooooo..',
@@ -77,11 +67,8 @@ const ART = new Map<string, Art>([
       '..orrrrrrro.',
       '...ooooooo..',
     ],
-  ],
-  // 마라토너
-  [
-    'marathon',
-    [
+    // 마라토너
+    marathon: [
       '............',
       '............',
       '.oooo.......',
@@ -95,11 +82,8 @@ const ART = new Map<string, Art>([
       '............',
       '............',
     ],
-  ],
-  // 탐험가
-  [
-    'explorer',
-    [
+    // 탐험가
+    explorer: [
       '......oppp..',
       '......opp...',
       '......o.....',
@@ -113,11 +97,8 @@ const ART = new Map<string, Art>([
       'ovvvvvvvvvvo',
       '.oooooooooo.',
     ],
-  ],
-  // 완독
-  [
-    'finisher',
-    [
+    // 완독
+    finisher: [
       '............',
       'ooo......ooo',
       'occoo..oocco',
@@ -131,11 +112,8 @@ const ART = new Map<string, Art>([
       '.....pp.....',
       '.....pp.....',
     ],
-  ],
-  // 설욕전
-  [
-    'redemption',
-    [
+    // 설욕전
+    redemption: [
       'pp..pp......',
       '.pppp.......',
       '..pp........',
@@ -149,11 +127,8 @@ const ART = new Map<string, Art>([
       '.....oggggo.',
       '......oooo..',
     ],
-  ],
-  // 명사수
-  [
-    'sharpshooter',
-    [
+    // 명사수
+    sharpshooter: [
       '....oooo..ao',
       '..ooppppoooa',
       '.oppccccpo..',
@@ -167,11 +142,8 @@ const ART = new Map<string, Art>([
       '..ooppppoo..',
       '....oooo....',
     ],
-  ],
-  // 찍기의 신
-  [
-    'lucky_guess',
-    [
+    // 찍기의 신
+    lucky_guess: [
       '...oo..oo...',
       '..oggooggo..',
       '.ooggggggoo.',
@@ -185,11 +157,8 @@ const ART = new Map<string, Art>([
       '..oggooggo..',
       '...oo..oo...',
     ],
-  ],
-  // 말하기 선수
-  [
-    'orator',
-    [
+    // 말하기 선수
+    orator: [
       '....oooo....',
       '.a.ovvvvo.a.',
       'a.ovhovovo.a',
@@ -203,11 +172,8 @@ const ART = new Map<string, Art>([
       '....orro....',
       '.....oo.....',
     ],
-  ],
-  // 호기심 대장
-  [
-    'curious',
-    [
+    // 호기심 대장
+    curious: [
       '..oooooooo..',
       '.ohhhhhhhho.',
       'ohhhaaaahhho',
@@ -221,11 +187,8 @@ const ART = new Map<string, Art>([
       '.oho........',
       '..o.........',
     ],
-  ],
-  // 면접 단골
-  [
-    'interviewee',
-    [
+    // 면접 단골
+    interviewee: [
       '....oooo....',
       '...obbbbo...',
       '....obbo....',
@@ -239,11 +202,8 @@ const ART = new Map<string, Art>([
       '....obyo....',
       '.....oo.....',
     ],
-  ],
-  // 퀘스트 장인
-  [
-    'quest_master',
-    [
+    // 퀘스트 장인
+    quest_master: [
       '..........y.',
       '.........yyy',
       '..ooooooooy.',
@@ -257,11 +217,8 @@ const ART = new Map<string, Art>([
       'orrrrrrrrrro',
       '.oooooooooo.',
     ],
-  ],
-  // 백일 동안
-  [
-    'devoted',
-    [
+    // 백일 동안
+    devoted: [
       '.....o......',
       '....oao.....',
       '..o.oaaoo...',
@@ -275,10 +232,8 @@ const ART = new Map<string, Art>([
       '...oaaaao...',
       '....oooo....',
     ],
-  ],
-]);
+  }),
+);
 
 /** 업적 id의 그림. 그림이 아직 없는 업적이면 undefined */
-export function achievementArt(id: string): Art | undefined {
-  return ART.get(id);
-}
+export const achievementArt = (id: string): Art | undefined => ART.get(id);

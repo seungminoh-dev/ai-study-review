@@ -1,7 +1,7 @@
 import type { ConceptDetail, QueueCard } from '@moai/shared';
 import { AnimatePresence } from 'motion/react';
 import * as m from 'motion/react-m';
-import { useEffect, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useState, type ReactNode } from 'react';
 import { request } from '../api';
 import { STATE_LABEL } from '../concept-state';
 import { copyText } from '../copy';
@@ -162,30 +162,25 @@ function More({ data }: { data: ConceptDetail }) {
     <m.div className="panel-more" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0, transition: { ...SOFT, delay: 0.06 } }}>
       {unique.length > 0 ? (
         <section className="panel-card">
-          {contrast.length > 0 ? (
-            <>
-              <h3>헷갈리기 쉬운 개념</h3>
-              <div className="panel-chips">
-                {contrast.map((neighbor) => (
-                  <span key={neighbor.key} className={`chip state-${neighbor.state}`}>
-                    {neighbor.name}
-                  </span>
-                ))}
-              </div>
-            </>
-          ) : null}
-          {linked.length > 0 ? (
-            <>
-              <h3>이어지는 개념</h3>
-              <div className="panel-chips">
-                {linked.slice(0, 6).map((neighbor) => (
-                  <span key={neighbor.key} className={`chip state-${neighbor.state}`}>
-                    {neighbor.name}
-                  </span>
-                ))}
-              </div>
-            </>
-          ) : null}
+          {(
+            [
+              ['헷갈리기 쉬운 개념', contrast],
+              ['이어지는 개념', linked.slice(0, 6)],
+            ] as const
+          ).map(([title, list]) =>
+            list.length > 0 ? (
+              <Fragment key={title}>
+                <h3>{title}</h3>
+                <div className="panel-chips">
+                  {list.map((neighbor) => (
+                    <span key={neighbor.key} className={`chip state-${neighbor.state}`}>
+                      {neighbor.name}
+                    </span>
+                  ))}
+                </div>
+              </Fragment>
+            ) : null,
+          )}
         </section>
       ) : null}
       {data.followups.length > 0 ? (

@@ -115,27 +115,21 @@ export function MaterialDetail({ title }: { title: string }) {
           <strong>{percentOf(data.solved, data.cards)}%</strong>
         </Ring>
         <dl>
-          <div>
-            <dt>푼 카드</dt>
-            <dd>
-              {data.solved}
-              <small>/{data.cards}</small>
-            </dd>
-          </div>
-          <div>
-            <dt>내 지식</dt>
-            <dd>
-              {data.adopted}
-              <small>/{data.concepts}</small>
-            </dd>
-          </div>
-          <div>
-            <dt>시작한 섹션</dt>
-            <dd>
-              {started}
-              <small>/{parts.length}</small>
-            </dd>
-          </div>
+          {(
+            [
+              ['푼 카드', data.solved, data.cards],
+              ['내 지식', data.adopted, data.concepts],
+              ['시작한 섹션', started, parts.length],
+            ] as const
+          ).map(([title, done, total]) => (
+            <div key={title}>
+              <dt>{title}</dt>
+              <dd>
+                {done}
+                <small>/{total}</small>
+              </dd>
+            </div>
+          ))}
         </dl>
       </section>
 
