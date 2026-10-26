@@ -1,5 +1,4 @@
 import { raiseAlert, sendAlerts } from './domain/alerts';
-import { repairLibrary } from './domain/categories';
 import { deliverDueReminders } from './domain/reminders';
 import { notifyBudget } from './llm/budget';
 import { runPendingJobs } from './llm/jobs';
@@ -62,12 +61,5 @@ async function hourlyCleanup(env: Env, now: number): Promise<void> {
     await notifyBudget(env, now);
   } catch (error) {
     console.error(JSON.stringify({ event: 'cron_budget_failed', message: (error as Error).message }));
-  }
-  try {
-    const repaired = await repairLibrary(env);
-    if (repaired.normalized + repaired.adopted > 0) console.log(JSON.stringify({ event: 'library_repaired', ...repaired }));
-  } catch (error) {
-    console.error(JSON.stringify({ event: 'cron_repair_failed', message: (error as Error).message }));
-    await raiseAlert(env, 'cron_failed');
   }
 }

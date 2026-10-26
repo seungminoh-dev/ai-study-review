@@ -99,14 +99,12 @@ export function refundFailedJobsStatement(env: Env): D1PreparedStatement {
   return env.DB.prepare(`DELETE FROM credit_ledger WHERE amount < 0 AND ref IN (SELECT id FROM llm_jobs WHERE status = 'failed') AND ${UNBILLED}`);
 }
 
-/** 보유 크레딧을 준다 (운영자 지급, 숨은 업적) */
-export function grantStatement(env: Env, userId: string, amount: number, kind: 'grant' | 'achievement', ref: string | null, note: string | null, now: number): D1PreparedStatement {
-  return env.DB.prepare('INSERT INTO credit_ledger (id, user_id, amount, kind, ref, note, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)').bind(
+/** 운영자가 보유 크레딧을 준다 (숨은 업적 보상은 achievements.ts가 넣는다) */
+export function grantStatement(env: Env, userId: string, amount: number, note: string | null, now: number): D1PreparedStatement {
+  return env.DB.prepare("INSERT INTO credit_ledger (id, user_id, amount, kind, ref, note, created_at) VALUES (?1, ?2, ?3, 'grant', NULL, ?4, ?5)").bind(
     crypto.randomUUID(),
     userId,
     amount,
-    kind,
-    ref,
     note,
     now,
   );

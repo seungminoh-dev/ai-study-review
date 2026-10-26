@@ -151,7 +151,7 @@ admin.post('/credits', async (c) => {
   if (body instanceof Response) return body;
   const exists = await c.env.DB.prepare('SELECT 1 FROM users WHERE id = ?1').bind(body.user_id).first();
   if (!exists) return errorJson(404, 'not_found', '회원을 찾지 못했어요.');
-  await grantStatement(c.env, body.user_id, body.amount, 'grant', null, body.note || null, Date.now()).run();
+  await grantStatement(c.env, body.user_id, body.amount, body.note || null, Date.now()).run();
   console.log(JSON.stringify({ event: 'credits_granted', user_id: body.user_id, amount: body.amount }));
   return c.body(null, 204);
 });

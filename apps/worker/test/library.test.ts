@@ -2,7 +2,6 @@ import type { MapResponse, MaterialSummary, QueueResponse } from '@moai/shared';
 import { env } from 'cloudflare:workers';
 import { beforeEach, describe, expect, it } from 'vitest';
 import example from '../../../packages/shared/fixtures/immutable-object.json';
-import { repairLibrary } from '../src/domain/categories';
 import { loadMaterialQueue, loadTodayQueue } from '../src/domain/queue';
 import { api, callTool, mcpUrl, newUser, type TestUser } from './helpers';
 
@@ -172,21 +171,6 @@ describe('category tools', () => {
     await callTool(url, 'update_categories', { assign: [], rename: [{ from: '백엔드/Java/Spring', to: '백엔드/Spring' }] });
     await save2('bean', 'Java/Spring');
     expect((await concept('bean'))!.domain).toBe('백엔드/Spring');
-  });
-
-  it('repairs categories saved before normalization and concepts saved during the deploy gap', async () => {
-    const now = Date.now();
-    await env.DB.batch([
-      env.DB.prepare("INSERT INTO concepts (id, user_id, key, name, aliases, search_text, domain, created_at, updated_at, adopted_at) VALUES (?1, ?2, 'old', 'old', '[]', 'old', 'infra > k8s', ?3, ?3, ?3)").bind(crypto.randomUUID(), user.id, now),
-    ]);
-    await save2('gap', 'Kubernetes');
-    await env.DB.prepare("UPDATE concepts SET adopted_at = NULL WHERE user_id = ?1 AND key = 'gap'").bind(user.id).run();
-    await callTool(url, 'save_learning', pdf('1장', 'pdfonly'));
-    await repairLibrary(env);
-    expect(await concept('old')).toMatchObject({ domain: '인프라/Kubernetes' });
-    expect((await concept('gap'))!.adopted_at).not.toBeNull();
-    expect((await concept('pdfonly'))!.adopted_at).toBeNull();
-    expect(await repairLibrary(env)).toEqual({ normalized: 0, adopted: 0 });
   });
 });
 

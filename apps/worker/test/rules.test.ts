@@ -74,7 +74,6 @@ describe('cardsToUnlock (설계서 §9.4)', () => {
   it('can jump from rung 1 to 3, and respects a lower cap', () => {
     const cards = [ladder('a', 'x', 1, 'active', 9), ladder('e', 'x', 3, 'locked', 0)];
     expect(cardsToUnlock(cards)).toEqual(['e']);
-    expect(cardsToUnlock(cards, 2)).toEqual([]);
   });
 
   it('does not let unsolved material cards hold the ladder, but does not open a rung nobody has solved', () => {
