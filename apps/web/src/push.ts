@@ -39,9 +39,13 @@ export async function pushState(): Promise<PushState> {
     return isIos() && !isStandalone() ? 'needs-install' : 'unsupported';
   }
   if (Notification.permission === 'denied') return 'denied';
-  const registration = await navigator.serviceWorker.getRegistration();
-  const subscription = await registration?.pushManager.getSubscription();
-  return subscription ? 'on' : 'off';
+  return (await currentSubscription()) ? 'on' : 'off';
+}
+
+/** 이 기기의 지금 푸시 구독. 없으면 null */
+async function currentSubscription(): Promise<PushSubscription | null> {
+  const registration = await navigator.serviceWorker?.getRegistration();
+  return (await registration?.pushManager.getSubscription()) ?? null;
 }
 
 function keyBytes(base64url: string): Uint8Array<ArrayBuffer> {
@@ -64,8 +68,7 @@ export async function resyncPush(now = Date.now()): Promise<void> {
   if (Notification.permission !== 'granted') return;
   // 저장소를 못 쓰면 매번 보낸다 (덮어쓰기라 괜찮다)
   if (now - Number(readStored(SYNCED) ?? 0) < DAY_MS) return;
-  const registration = await navigator.serviceWorker.getRegistration();
-  const subscription = await registration?.pushManager.getSubscription();
+  const subscription = await currentSubscription();
   if (!subscription) return;
   const json = subscription.toJSON();
   await request('/push/subscriptions', { method: 'POST', json: { endpoint: json.endpoint, keys: json.keys } });
@@ -86,8 +89,7 @@ export async function enablePush(): Promise<PushState> {
 }
 
 export async function disablePush(): Promise<PushState> {
-  const registration = await navigator.serviceWorker.getRegistration();
-  const subscription = await registration?.pushManager.getSubscription();
+  const subscription = await currentSubscription();
   if (subscription) {
     await request('/push/subscriptions', { method: 'DELETE', json: { endpoint: subscription.endpoint } });
     await subscription.unsubscribe();
@@ -97,24 +99,13 @@ export async function disablePush(): Promise<PushState> {
 
 /** 이 기기의 푸시 주소. 다른 기기에서 모두 로그아웃할 때 이 기기의 구독은 남긴다 */
 export async function currentEndpoint(): Promise<string | null> {
-  try {
-    const registration = await navigator.serviceWorker?.getRegistration();
-    return (await registration?.pushManager.getSubscription())?.endpoint ?? null;
-  } catch {
-    return null;
-  }
+  return (await currentSubscription().catch(() => null))?.endpoint ?? null;
 }
 
 /** 로그아웃용: 이 기기의 구독을 브라우저에서 끊고, 서버에서 지울 수 있게 endpoint를 돌려준다. 실패해도 로그아웃은 막지 않는다 */
 export async function dropLocalPush(): Promise<string | null> {
-  try {
-    const registration = await navigator.serviceWorker?.getRegistration();
-    const subscription = await registration?.pushManager.getSubscription();
-    if (!subscription) return null;
-    const endpoint = subscription.endpoint;
-    await subscription.unsubscribe().catch(() => false);
-    return endpoint;
-  } catch {
-    return null;
-  }
+  const subscription = await currentSubscription().catch(() => null);
+  if (!subscription) return null;
+  await subscription.unsubscribe().catch(() => false);
+  return subscription.endpoint;
 }

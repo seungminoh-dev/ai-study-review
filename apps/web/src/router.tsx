@@ -137,13 +137,7 @@ export function leave(): void {
 export function useLocation(): { path: string; query: URLSearchParams } {
   const read = () => ({ path: location.pathname, query: new URLSearchParams(location.search) });
   const [value, setValue] = useState(read);
-  useEffect(() => {
-    const update = () => setValue(read());
-    listeners.add(update);
-    return () => {
-      listeners.delete(update);
-    };
-  }, []);
+  useEffect(() => onNavigate(() => setValue(read())), []);
   return value;
 }
 

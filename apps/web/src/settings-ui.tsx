@@ -48,9 +48,21 @@ export function SwitchRow({ label, sub, tags, checked, onChange }: { label: Reac
 }
 
 /** 하나 고르기. 하루 목표와 테마가 같은 모양을 쓴다 */
-export function Pills<T extends string | number>({ label, options, value, onPick }: { label: string; options: readonly { value: T; label: string }[]; value: T; onPick: (value: T) => void }) {
+export function Pills<T extends string | number>({
+  label,
+  options,
+  value,
+  onPick,
+  className = 'set-pills',
+}: {
+  label: string;
+  options: readonly { value: T; label: string }[];
+  value: T;
+  onPick: (value: T) => void;
+  className?: string;
+}) {
   return (
-    <div className="set-pills" role="group" aria-label={label}>
+    <div className={className} role="group" aria-label={label}>
       {options.map((option) => (
         <button key={String(option.value)} type="button" className={option.value === value ? 'current' : undefined} aria-pressed={option.value === value} onClick={() => onPick(option.value)}>
           {option.label}

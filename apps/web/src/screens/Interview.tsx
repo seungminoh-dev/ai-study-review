@@ -11,6 +11,7 @@ import { Mascot } from '../Mascot';
 import { SOFT } from '../motion';
 import { Link, leave } from '../router';
 import { useApi } from '../useApi';
+import { Pills } from '../settings-ui';
 
 // 앱 안 모의면접 (MCP 모의면접과 같은 순서): 흔들리는 개념에서 시작해 연결된 개념으로 꼬리질문을 이어 간다.
 // 시작 화면에서 추천 주제나 직접 적은 주제, 난이도, 깊이(질문 수와 크레딧)를 고른다 (2026-10-21).
@@ -30,8 +31,8 @@ export function Interview({ concept, category }: { concept: string | null; categ
   return <InterviewSession plan={plan} category={category} />;
 }
 
-const DEPTH_KEYS = Object.keys(INTERVIEW_DEPTHS) as InterviewDepth[];
-const LEVEL_KEYS = Object.keys(INTERVIEW_LEVELS) as InterviewLevel[];
+const DEPTH_OPTIONS = (Object.keys(INTERVIEW_DEPTHS) as InterviewDepth[]).map((key) => ({ value: key, label: `${INTERVIEW_DEPTHS[key].label} · ${INTERVIEW_DEPTHS[key].questions}문` }));
+const LEVEL_OPTIONS = (Object.keys(INTERVIEW_LEVELS) as InterviewLevel[]).map((key) => ({ value: key, label: INTERVIEW_LEVELS[key] }));
 
 /** 시작 화면: 추천 주제 또는 직접 적은 주제, 난이도, 깊이를 고른다. 추천은 AI를 부르지 않아서 크레딧이 들지 않는다 */
 function InterviewStart({ concept, category, onStart }: { concept: string | null; category: string | null; onStart: (plan: Plan) => void }) {
@@ -111,24 +112,12 @@ function InterviewStart({ concept, category, onStart }: { concept: string | null
 
       <section aria-labelledby="interview-level-title">
         <h2 id="interview-level-title">난이도</h2>
-        <div className="segmented" role="group" aria-labelledby="interview-level-title">
-          {LEVEL_KEYS.map((key) => (
-            <button key={key} type="button" className={level === key ? 'current' : ''} aria-pressed={level === key} onClick={() => setLevel(key)}>
-              {INTERVIEW_LEVELS[key]}
-            </button>
-          ))}
-        </div>
+        <Pills className="segmented" label="난이도" options={LEVEL_OPTIONS} value={level} onPick={setLevel} />
       </section>
 
       <section aria-labelledby="interview-depth-title">
         <h2 id="interview-depth-title">깊이</h2>
-        <div className="segmented" role="group" aria-labelledby="interview-depth-title">
-          {DEPTH_KEYS.map((key) => (
-            <button key={key} type="button" className={depth === key ? 'current' : ''} aria-pressed={depth === key} onClick={() => setDepth(key)}>
-              {INTERVIEW_DEPTHS[key].label} · {INTERVIEW_DEPTHS[key].questions}문
-            </button>
-          ))}
-        </div>
+        <Pills className="segmented" label="깊이" options={DEPTH_OPTIONS} value={depth} onPick={setDepth} />
         <p className="muted small">
           질문 {INTERVIEW_DEPTHS[depth].questions}개와 마지막 정리, 최대 {interviewCost(depth)} 크레딧이에요. 중간에 그만두면 물은 만큼만 써요.
         </p>

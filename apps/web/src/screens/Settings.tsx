@@ -15,6 +15,8 @@ import { formatDate, formatDateTime, useApi, useRun } from '../useApi';
 import { setSound, setTheme, setVibrate, soundOn, theme, vibrateOn, type Theme } from '../prefs';
 import { play } from '../sound';
 import { askConfidence, setAskConfidence } from './Review';
+// 레포 package.json의 버전 (버전 PR마다 올린다). version만 번들에 들어간다
+import { version } from '../../../../package.json';
 
 // 설정 (설계서 §12.1, 설정 정리 시안): 한 페이지에 흰 카드 6장(알림, 복습, 화면과 소리, 클로드 연결, 계정과 기기, 내 데이터).
 // 자주 쓰는 것을 위에 두고, 한 번만 보는 것(연결 방법, 코치 지침, 예전 비밀 주소)은 접는다. 바꾸면 바로 저장하고 잠깐 알린다.
@@ -47,7 +49,7 @@ export function Settings({ me, onLogout }: { me: Me; onLogout: () => void }) {
           <Link href="/privacy">개인정보 처리방침</Link>
           <Link href="/terms">이용약관</Link>
         </p>
-        <p className="set-version">버전 {__APP_VERSION__}</p>
+        <p className="set-version">버전 v{version}</p>
       </footer>
       <Toaster />
     </div>

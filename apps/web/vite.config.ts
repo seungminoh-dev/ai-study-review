@@ -1,14 +1,11 @@
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
-import pkg from '../../package.json';
 
 // 로컬에서는 wrangler dev(8787)가 API를 받는다. Worker가 Origin을 검사하므로 프록시가 Origin을 Worker 주소로 바꿔 보낸다.
 const worker = 'http://localhost:8787';
 const proxy = { target: worker, headers: { origin: worker } };
 
-// 설정 화면 바닥에 보여 줄 버전: 레포 package.json의 버전 (버전 PR마다 올린다)
-const appVersion = `v${pkg.version}`;
 
 export default defineConfig({
   plugins: [
@@ -60,7 +57,6 @@ export default defineConfig({
       },
     }),
   ],
-  define: { __APP_VERSION__: JSON.stringify(appVersion) },
   server: { proxy: { '/api': proxy, '/mcp': proxy } },
   build: { target: 'es2022' },
 });
