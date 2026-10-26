@@ -29,7 +29,7 @@ import {
   removeFromOutbox,
   takeLevelUps,
 } from '../offline/store';
-import { buzz } from '../prefs';
+import { buzz, readStored, writeStored } from '../prefs';
 import { play, type Sound } from '../sound';
 import { StreakGoal } from '../progress';
 import { currentMaterial, materialReview, partView, rememberMaterial } from '../materials';
@@ -47,21 +47,8 @@ interface Result {
 const ASK_CONFIDENCE = 'moai:ask-confidence';
 
 /** 답을 고른 뒤 확신도를 물을지. 기기마다 설정에서 끌 수 있다 (기본 켬) */
-export function askConfidence(): boolean {
-  try {
-    return localStorage.getItem(ASK_CONFIDENCE) !== 'off';
-  } catch {
-    return true;
-  }
-}
-
-export function setAskConfidence(on: boolean): void {
-  try {
-    localStorage.setItem(ASK_CONFIDENCE, on ? 'on' : 'off');
-  } catch {
-    // 저장소를 못 쓰면 기본값(켬)으로 둔다
-  }
-}
+export const askConfidence = () => readStored(ASK_CONFIDENCE) !== 'off';
+export const setAskConfidence = (on: boolean) => writeStored(ASK_CONFIDENCE, on ? 'on' : 'off');
 
 const CONFIDENCE_LABEL: Record<Confidence, string> = { sure: '확실해요', unsure: '반반이에요', guess: '찍었어요' };
 

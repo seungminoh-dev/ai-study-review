@@ -14,6 +14,7 @@ import { GoalRing, StreakGoal, WeekDays, todayLabel } from '../progress';
 import { isStandalone, pushState } from '../push';
 import { Link, TabLink } from '../router';
 import { useApi } from '../useApi';
+import { readStored, writeStored } from '../prefs';
 
 // 오늘 화면 (설계서 §12.1, 4단계 시안): 복습(남은 카드)과 학습(이어서 풀 자료 섹션)을 나란히, 그 아래 연속·오늘 목표·모의면접.
 // 휴대폰은 한 줄로 쌓고, 컴퓨터는 왼쪽(할 일)·오른쪽(기록) 두 칸이다 (styles.css의 .today-cols).
@@ -30,13 +31,7 @@ interface Steps {
 /** 처음 쓰는 사람의 시작 체크리스트 (설계서 §2.3 2번). 다 하면 다시 보이지 않는다 */
 function Onboarding({ saved }: { saved: boolean }) {
   const [steps, setSteps] = useState<Steps | null>(null);
-  const [hidden, setHidden] = useState(() => {
-    try {
-      return localStorage.getItem(ONBOARDED) === '1';
-    } catch {
-      return false;
-    }
-  });
+  const [hidden, setHidden] = useState(() => readStored(ONBOARDED) === '1');
   useEffect(() => {
     if (hidden) return;
     void (async () => {
@@ -46,11 +41,8 @@ function Onboarding({ saved }: { saved: boolean }) {
   }, [hidden, saved]);
   const done = steps ? Object.values(steps).every(Boolean) : false;
   const hide = () => {
-    try {
-      localStorage.setItem(ONBOARDED, '1');
-    } catch {
-      // 저장소를 못 쓰면 다음에 또 보일 뿐이다
-    }
+    // 저장소를 못 쓰면 다음에 또 보일 뿐이다
+    writeStored(ONBOARDED, '1');
     setHidden(true);
   };
   useEffect(() => {
@@ -425,11 +417,8 @@ function SurveyCard() {
   const [note, setNote] = useState('');
   const [error, setError] = useState<string | null>(null);
   if (!data?.ask || state === 'hidden') return null;
-  try {
-    if (localStorage.getItem(SURVEY_SKIP) === data.week) return null;
-  } catch {
-    // 저장소를 못 쓰면 그냥 묻는다
-  }
+  // 저장소를 못 쓰면 그냥 묻는다
+  if (readStored(SURVEY_SKIP) === data.week) return null;
   const send = async (used: boolean) => {
     setError(null);
     try {
@@ -440,11 +429,8 @@ function SurveyCard() {
     }
   };
   const skip = () => {
-    try {
-      localStorage.setItem(SURVEY_SKIP, data.week);
-    } catch {
-      // 저장소를 못 쓰면 이번 화면에서만 숨긴다
-    }
+    // 저장소를 못 쓰면 이번 화면에서만 숨긴다
+    writeStored(SURVEY_SKIP, data.week);
     setState('hidden');
   };
   return (

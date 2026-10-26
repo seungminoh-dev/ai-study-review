@@ -1,4 +1,5 @@
 import { request } from './api';
+import { readStored, writeStored } from './prefs';
 
 // 웹 푸시 구독 (설계서 §10.1). 알림 권한은 사용자가 버튼을 눌렀을 때만 묻는다.
 
@@ -61,21 +62,14 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 export async function resyncPush(now = Date.now()): Promise<void> {
   if (inAppBrowser() || !('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) return;
   if (Notification.permission !== 'granted') return;
-  try {
-    if (now - Number(localStorage.getItem(SYNCED) ?? 0) < DAY_MS) return;
-  } catch {
-    // 저장소를 못 쓰면 매번 보낸다 (덮어쓰기라 괜찮다)
-  }
+  // 저장소를 못 쓰면 매번 보낸다 (덮어쓰기라 괜찮다)
+  if (now - Number(readStored(SYNCED) ?? 0) < DAY_MS) return;
   const registration = await navigator.serviceWorker.getRegistration();
   const subscription = await registration?.pushManager.getSubscription();
   if (!subscription) return;
   const json = subscription.toJSON();
   await request('/push/subscriptions', { method: 'POST', json: { endpoint: json.endpoint, keys: json.keys } });
-  try {
-    localStorage.setItem(SYNCED, String(now));
-  } catch {
-    // 다음에 다시 보낸다
-  }
+  writeStored(SYNCED, String(now));
 }
 
 export async function enablePush(): Promise<PushState> {

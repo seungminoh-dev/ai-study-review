@@ -18,6 +18,7 @@ import { Landing } from './screens/Landing';
 import { Login } from './screens/Login';
 import { Setup } from './screens/Setup';
 import { Today } from './screens/Today';
+import { readStoredJson, writeStored } from './prefs';
 
 /**
  * 로그인한 뒤에만 쓰는 큰 화면은 따로 받는다. 처음 오는 사람의 랜딩과 매일 여는 오늘 화면을 가볍게 하려고.
@@ -66,23 +67,9 @@ type Auth = { state: 'loading' } | { state: 'in'; me: Me } | { state: 'setup' } 
 
 const ME_KEY = 'moai:me';
 
-function rememberMe(me: Me | null): void {
-  try {
-    if (me) localStorage.setItem(ME_KEY, JSON.stringify(me));
-    else localStorage.removeItem(ME_KEY);
-  } catch {
-    // 저장소를 못 쓰면 오프라인 시작만 안 된다
-  }
-}
-
-function rememberedMe(): Me | null {
-  try {
-    const raw = localStorage.getItem(ME_KEY);
-    return raw ? (JSON.parse(raw) as Me) : null;
-  } catch {
-    return null;
-  }
-}
+/** 오프라인으로 시작할 때 쓴다. 저장소를 못 쓰면 오프라인 시작만 안 된다 */
+const rememberMe = (me: Me | null) => writeStored(ME_KEY, me && JSON.stringify(me));
+const rememberedMe = () => readStoredJson(ME_KEY) as Me | null;
 
 type Section = 'today' | 'learn' | 'reviews' | 'map' | 'growth' | 'admin' | 'settings';
 
