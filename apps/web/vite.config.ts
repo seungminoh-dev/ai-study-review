@@ -7,12 +7,8 @@ import pkg from '../../package.json';
 const worker = 'http://localhost:8787';
 const proxy = { target: worker, headers: { origin: worker } };
 
-// 설정 화면 바닥에 보여 줄 버전: 레포 package.json의 버전(버전 PR마다 올린다), 커밋 앞 7자리, 빌드한 날(한국 시간).
-// GitHub Actions가 GITHUB_SHA를 넣어 주고, 로컬 빌드는 dev다.
-// 설정 파일은 Node에서 돌지만 Node 타입을 따로 들이지 않으려고 process를 globalThis에서 꺼낸다
-const env = (globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env ?? {};
-const buildDay = new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
-const appVersion = `v${pkg.version} · ${env.GITHUB_SHA?.slice(0, 7) ?? 'dev'} · ${buildDay}`;
+// 설정 화면 바닥에 보여 줄 버전: 레포 package.json의 버전 (버전 PR마다 올린다)
+const appVersion = `v${pkg.version}`;
 
 export default defineConfig({
   plugins: [
