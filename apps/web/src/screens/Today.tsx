@@ -13,7 +13,7 @@ import { cachedQueue, peekLevelUps, takeLevelUps } from '../offline/store';
 import { GoalRing, StreakGoal, WeekDays, todayLabel } from '../progress';
 import { isStandalone, pushState } from '../push';
 import { Link, TabLink } from '../router';
-import { useApi } from '../useApi';
+import { useApi, useRun } from '../useApi';
 import { readStored, writeStored } from '../prefs';
 
 // 오늘 화면 (설계서 §12.1, 4단계 시안): 복습(남은 카드)과 학습(이어서 풀 자료 섹션)을 나란히, 그 아래 연속·오늘 목표·모의면접.
@@ -415,19 +415,15 @@ function SurveyCard() {
   const { data } = useApi<SurveyStatus>('/survey');
   const [state, setState] = useState<'ask' | 'note' | 'sent' | 'hidden'>('ask');
   const [note, setNote] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  const { error, run } = useRun();
   if (!data?.ask || state === 'hidden') return null;
   // 저장소를 못 쓰면 그냥 묻는다
   if (readStored(SURVEY_SKIP) === data.week) return null;
-  const send = async (used: boolean) => {
-    setError(null);
-    try {
+  const send = (used: boolean) =>
+    run(async () => {
       await request('/survey', { method: 'PUT', json: { used, ...(note.trim() ? { note: note.trim() } : {}) } });
       setState('sent');
-    } catch (reason) {
-      setError(errorMessage(reason));
-    }
-  };
+    });
   const skip = () => {
     // 저장소를 못 쓰면 이번 화면에서만 숨긴다
     writeStored(SURVEY_SKIP, data.week);
