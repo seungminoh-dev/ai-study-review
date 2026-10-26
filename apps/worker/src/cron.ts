@@ -13,31 +13,22 @@ export async function runCron(env: Env, now: number): Promise<void> {
     .bind(now)
     .run()
     .catch(() => undefined);
-  try {
-    await deliverDueReminders(env, now);
-  } catch (error) {
-    console.error(JSON.stringify({ event: 'cron_reminders_failed', message: (error as Error).message }));
-    await raiseAlert(env, 'cron_failed');
-  }
+  await step(env, 'cron_reminders_failed', () => deliverDueReminders(env, now));
   // AI 채점 이어 받기와 붙여넣기 가져오기 (설계서 §11.3). 가져오기는 몇 분 걸릴 수 있어서 알림 뒤에 한다
-  try {
-    await runPendingJobs(env, now);
-  } catch (error) {
-    console.error(JSON.stringify({ event: 'cron_jobs_failed', message: (error as Error).message }));
-    await raiseAlert(env, 'cron_failed');
-  }
+  await step(env, 'cron_jobs_failed', () => runPendingJobs(env, now));
   // 쌓인 서버 문제를 오너에게 알린다 (종류마다 한 시간에 한 번)
-  try {
-    await sendAlerts(env, now);
-  } catch (error) {
-    console.error(JSON.stringify({ event: 'cron_alerts_failed', message: (error as Error).message }));
-  }
+  await step(env, 'cron_alerts_failed', () => sendAlerts(env, now), false);
   // 매시 0분 정리. 실패해도 다른 일은 이미 끝났고, 오너에게 알린다
-  if (new Date(now).getUTCMinutes() === 0) {
-    await hourlyCleanup(env, now).catch(async (error: unknown) => {
-      console.error(JSON.stringify({ event: 'cron_cleanup_failed', message: error instanceof Error ? error.message : '' }));
-      await raiseAlert(env, 'cron_failed');
-    });
+  if (new Date(now).getUTCMinutes() === 0) await step(env, 'cron_cleanup_failed', () => hourlyCleanup(env, now));
+}
+
+/** 일 하나를 한다. 실패하면 로그를 남기고(alert면 오너 알림도 쌓고) 다음 일로 넘어간다 */
+async function step(env: Env, event: string, work: () => Promise<unknown>, alert = true): Promise<void> {
+  try {
+    await work();
+  } catch (error) {
+    console.error(JSON.stringify({ event, message: error instanceof Error ? error.message : '' }));
+    if (alert) await raiseAlert(env, 'cron_failed');
   }
 }
 
@@ -51,15 +42,7 @@ async function hourlyCleanup(env: Env, now: number): Promise<void> {
     env.DB.prepare("DELETE FROM llm_jobs WHERE created_at <= ?1 AND status IN ('done', 'failed')").bind(now - 30 * DAY_MS),
   ]);
   if (sessions!.meta.changes > 0) console.log(JSON.stringify({ event: 'sessions_expired', removed: sessions!.meta.changes }));
-  try {
-    // 만료됐거나 주인 잃은 OAuth 권한·토큰을 조금씩 지운다
-    await oauthProvider(env).purgeExpiredData(env);
-  } catch (error) {
-    console.error(JSON.stringify({ event: 'cron_oauth_purge_failed', message: (error as Error).message }));
-  }
-  try {
-    await notifyBudget(env, now);
-  } catch (error) {
-    console.error(JSON.stringify({ event: 'cron_budget_failed', message: (error as Error).message }));
-  }
+  // 만료됐거나 주인 잃은 OAuth 권한·토큰을 조금씩 지운다
+  await step(env, 'cron_oauth_purge_failed', () => oauthProvider(env).purgeExpiredData(env), false);
+  await step(env, 'cron_budget_failed', () => notifyBudget(env, now), false);
 }
