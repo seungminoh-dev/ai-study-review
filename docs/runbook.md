@@ -204,9 +204,31 @@ claude.ai 계정으로 로그인한 Claude Code면 claude.ai의 모아이 커넥
 
 ## 3. 평소 운영
 
+### 버전과 PR
+
+2026-10-26부터 운영(prod)으로 본다. `main`은 운영에 나가 있는 코드이고, 직접 push하지 않는다. 변경은 버전마다 모아 PR 하나로 내보낸다.
+
+- **버전 번호**: `vMAJOR.MINOR.PATCH`. 이 규칙을 넣은 첫 PR이 `v1.0.0`이다. 레포 루트 `package.json`의 `version`이 지금 버전이고, 설정 화면 맨 아래에 `버전 v1.0.0 · 커밋 · 빌드한 날`로 보인다.
+  - MAJOR: 데이터를 옮겨야 하거나, 이미 설치한 앱·커넥터·플러그인이 깨지는 변경
+  - MINOR: 새 기능, 화면 추가
+  - PATCH: 버그 수정, 문구, 의존성 갱신
+- **모으기**: `main`에서 `release/vX.Y.Z` 브랜치를 만들고, 첫 커밋에서 루트 `package.json`의 `version`을 그 번호로 올린다. 그 버전의 커밋을 모두 여기에 쌓는다. 처음 push할 때 PR(초안)을 열어 두면 push마다 CI가 돈다.
+- **PR**: 제목은 `vX.Y.Z: 한 줄 요약`. 본문에 적는다:
+  1. 바뀐 것 (사용자 눈에 보이는 것부터)
+  2. 마이그레이션 (파일 이름, 옛 코드와 같이 돌아도 되는지)
+  3. 보안 점검 결과
+  4. 사용자가 할 설정 (secret, 외부 콘솔)
+  5. 배포 뒤 확인할 것
+- **머지 전**: CI 초록, 보안 점검, 마이그레이션이 있으면 업그레이드 테스트 통과. 그 사이 `main`이 바뀌었으면 `main`을 브랜치에 합치고 다시 확인한다.
+- **머지**: 사용자가 하거나, 하라고 할 때만 한다. 커밋을 남기는 merge commit으로 합친다 (`gh pr merge <번호> --merge`). 머지하면 🤖 Deploy가 돈다.
+- **머지 뒤**: Deploy와 운영 확인 결과를 본다. 통과하면 머지 커밋에 태그를 단다: `git tag vX.Y.Z <머지 커밋> && git push origin vX.Y.Z`.
+- **급한 수정**: `main`에서 `hotfix/vX.Y.Z`를 만들고 `version`의 PATCH를 올려 바로 PR로 낸다. 머지한 뒤 열려 있는 `release/` 브랜치에 `main`을 합친다.
+- **Dependabot PR**: 그대로 PR로 받는다. 바로 머지하지 않고 다음 버전 브랜치에 합쳐도 된다.
+- 더 막으려면 (🙋 선택): GitHub → Settings → Branches(또는 Rulesets)에서 `main`에 "PR 필요"와 "CI 통과 필요"를 건다.
+
 ### 배포
 
-- `main`에 push하면 🤖 Deploy가 타입 검사 → 빌드 → 테스트 → D1 bookmark 기록 → 마이그레이션 → 배포 → 운영 확인을 한다. CI(타입 검사, 빌드, 테스트)는 따로 돌고, Deploy는 CI를 기다리지 않아서 같은 검사를 스스로 한다.
+- 버전 PR을 `main`에 머지하면(곧 `main` push) 🤖 Deploy가 타입 검사 → 빌드 → 테스트 → D1 bookmark 기록 → 마이그레이션 → 배포 → 운영 확인을 한다. CI(타입 검사, 빌드, 테스트)는 따로 돌고, Deploy는 CI를 기다리지 않아서 같은 검사를 스스로 한다.
 - 급할 때는 GitHub Actions → Deploy → Run workflow로 직접 돌린다.
 - Deploy는 `main`에서만 돈다(다른 브랜치를 골라 손으로 돌려도 건너뛴다). Cloudflare 토큰은 설정 확인·bookmark·마이그레이션·배포 네 단계에만 들어간다. 액션은 커밋 SHA로 고정했고, Dependabot이 주 1회 npm과 액션 갱신 PR을 연다. 나온 지 14일이 안 된 버전은 기다린다. npm의 minor·patch는 한 PR로 묶고, 메이저는 하나씩 따로 연다. 메이저 PR은 바뀐 점을 읽고 하나씩 합친다.
 - 더 막으려면 (🙋 선택): GitHub → Settings → Environments에서 `production`을 만들고 Deployment branches를 `main`만 허용한 뒤, Cloudflare secret 두 개를 그 환경으로 옮기고 deploy 잡에 `environment: production`을 넣는다. 그러면 다른 워크플로에서는 토큰을 읽을 수 없다.
@@ -217,7 +239,7 @@ claude.ai 계정으로 로그인한 Claude Code면 claude.ai의 모아이 커넥
 
 1. `npx wrangler deployments list`로 앞 버전 id를 확인한다.
 2. `npx wrangler rollback <앞 버전 id>` (id를 빼면 바로 앞 버전). 몇 초 안에 바뀐다.
-3. 원인을 고쳐 `main`에 다시 push한다. 롤백한 상태는 다음 배포가 덮어쓴다.
+3. 원인을 `hotfix/vX.Y.Z` PR로 고쳐 머지한다. 롤백한 상태는 다음 배포가 덮어쓴다.
 
 - 마이그레이션은 열·테이블을 **더하기만** 해서, DB는 그대로 두고 코드만 되돌려도 안전하다. 데이터가 잘못 바뀐 경우만 위 "되돌리기 (D1 Time Travel)"를 쓴다.
 - 롤백은 Worker 코드와 정적 파일을 같이 되돌린다. 열려 있던 앱은 다음에 새로 받을 때 앞 버전이 된다.
