@@ -69,6 +69,9 @@ function useWide(): boolean {
   return wide;
 }
 
+/** 끝 화면을 그리기 전에 서버 숫자를 기다리는 최대 시간 */
+const READY_WAIT_MS = 4000;
+
 /** 끝 화면의 LEVEL UP: 새로 열린 단계에서 나오는 카드 */
 const RUNG_NEXT: Record<number, string> = { 2: '이제 빈칸·코드 문제가 나와요', 3: '이제 직접 설명하는 카드가 나와요' };
 
@@ -684,26 +687,40 @@ function Summary({
   const [learnNext, setLearnNext] = useState<MaterialSummary | null>(null);
   /** 이번 복습의 답이 모두 서버에 들어갔다. 그래야 서버 숫자의 차이가 이번 복습의 몫이다 */
   const [allSent, setAllSent] = useState(false);
+  /** 끝 화면에 쓸 것을 다 받았다(또는 기다리기를 그만뒀다). 받는 대로 하나씩 그리면 화면이 여러 번 밀려서 한 번에 그린다 (#8) */
+  const [ready, setReady] = useState(practice);
   useEffect(() => {
     if (practice) return;
     let cancelled = false;
+    // 연결이 느려도 끝 화면을 오래 막지 않는다. 늦게 온 숫자는 받은 뒤에 채운다
+    const giveUp = setTimeout(() => setReady(true), READY_WAIT_MS);
     void (async () => {
+      let ups: LevelUp[] = [];
+      let sent = false;
       try {
         // 밀린 답을 먼저 보내야 오늘 목표와 연속, LEVEL UP이 맞게 나온다
         await flushReviews();
         if (cancelled) return;
-        setLevelUps(await takeLevelUps());
-        setAllSent((await pendingCount()) === 0);
+        ups = await takeLevelUps();
+        sent = (await pendingCount()) === 0;
         const [next, materials] = await Promise.all([request<StatsResponse>('/stats'), request<{ materials: MaterialSummary[] }>('/materials').catch(() => null)]);
         if (cancelled) return;
         setStats(next);
         setLearnNext(materials ? (currentMaterial(materials.materials, true) ?? null) : null);
       } catch {
         // 오프라인이면 숫자 없이 보여 준다
+      } finally {
+        clearTimeout(giveUp);
+        if (!cancelled) {
+          setLevelUps(ups);
+          setAllSent(sent);
+          setReady(true);
+        }
       }
     })();
     return () => {
       cancelled = true;
+      clearTimeout(giveUp);
     };
   }, [practice]);
   const goalMet = stats !== null && stats.today.reviewed >= stats.goal;
@@ -728,6 +745,7 @@ function Summary({
   const here = new URLSearchParams(location.search);
   const sameSection = learnNext?.next ? here.get('material') === learnNext.title && here.get('part') === learnNext.next.part : false;
   const title = exam ? `시험 끝! ${right}/${results.length}` : practice ? '다시 보기를 마쳤어요' : goalMet ? '오늘 목표 달성!' : wrong.length === 0 ? '다 맞혔어요!' : `${results.length}장을 끝냈어요`;
+  if (!ready) return <Loading label="결과를 정리하는 중" />;
   return (
     <div className="summary">
       <div className="summary-head">
