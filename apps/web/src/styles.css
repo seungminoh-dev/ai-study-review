@@ -3189,11 +3189,16 @@ a.notice.link:active,
   color: var(--text);
 }
 
+/* 축하할 것이 많아 끝 화면이 길어도 버튼은 늘 보이게 화면 아래에 붙인다 (#12) */
 .summary-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
   display: flex;
   gap: 10px;
   margin-top: auto;
-  padding-bottom: 8px;
+  padding: 16px 0 max(8px, env(safe-area-inset-bottom));
+  background: linear-gradient(to bottom, transparent, var(--bg) 16px);
 }
 
 .miss-tag {
