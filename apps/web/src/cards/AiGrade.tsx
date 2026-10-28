@@ -9,7 +9,8 @@ import { AiNotice, useAiNotice } from './AskConcept';
 
 const GRADE_OF: Record<GradeResult['suggested_grade'], ReviewGrade> = { again: 1, hard: 2, good: 3, easy: 4 };
 
-type State = { step: 'idle' } | { step: 'waiting' } | { step: 'done'; result: GradeResult } | { step: 'error'; message: string };
+/** slow: 기다리는 시간을 넘겼지만 서버의 매분 작업이 아직 채점 중이다. 같은 작업을 다시 확인한다 (크레딧은 이미 냈다) */
+type State = { step: 'idle' } | { step: 'waiting' } | { step: 'slow'; jobId: string } | { step: 'done'; result: GradeResult } | { step: 'error'; message: string };
 
 export function AiGrade({ cardId, text, onSuggest }: { cardId: string; text: string; onSuggest: (grade: ReviewGrade) => void }) {
   const [available, setAvailable] = useState(false);
@@ -24,12 +25,15 @@ export function AiGrade({ cardId, text, onSuggest }: { cardId: string; text: str
   }, []);
 
   if (!available) return null;
-  const grade = async () => {
+  const grade = async (retryJob?: string) => {
     notice.dismiss();
     setState({ step: 'waiting' });
     try {
-      const { job_id } = await request<{ job_id: string }>(`/cards/${cardId}/grade-ai`, { method: 'POST', json: { answer: text } });
-      forgetAiStatus();
+      let job_id = retryJob;
+      if (!job_id) {
+        ({ job_id } = await request<{ job_id: string }>(`/cards/${cardId}/grade-ai`, { method: 'POST', json: { answer: text } }));
+        forgetAiStatus();
+      }
       // 25초 안에 못 끝나면 서버의 매분 작업이 이어 받는다. 그만큼 더 기다린다
       const job = await waitForJob(job_id, 150_000, abort.current.signal);
       if (job.status === 'done') {
@@ -39,8 +43,8 @@ export function AiGrade({ cardId, text, onSuggest }: { cardId: string; text: str
       } else if (job.status === 'failed') {
         if (job.error === 'budget') forgetAiStatus();
         setState({ step: 'error', message: JOB_ERROR[job.error ?? ''] ?? 'AI 채점에 실패했어요.' });
-      } else {
-        setState({ step: 'error', message: '채점이 오래 걸려요. 자가 채점으로 진행해 주세요.' });
+      } else if (!abort.current.signal.aborted) {
+        setState({ step: 'slow', jobId: job_id });
       }
     } catch (error) {
       if (error instanceof RequestError && error.status === 429) forgetAiStatus();
@@ -60,6 +64,17 @@ export function AiGrade({ cardId, text, onSuggest }: { cardId: string; text: str
   }
   if (state.step === 'waiting') return <p className="notice">AI가 채점하는 중이에요… (보통 5~20초, 길면 2분). 기다리지 않고 자가 채점해도 돼요.</p>;
   if (state.step === 'error') return <p className="notice bad">{state.message}</p>;
+  if (state.step === 'slow') {
+    const { jobId } = state;
+    return (
+      <div className="notice">
+        <p>채점이 오래 걸려요. 자가 채점으로 진행하거나, 조금 뒤에 결과를 다시 확인해 주세요.</p>
+        <button type="button" className="small-button" onClick={() => void grade(jobId)}>
+          결과 다시 확인
+        </button>
+      </div>
+    );
+  }
   const { result } = state;
   return (
     <div className="ai-result">
