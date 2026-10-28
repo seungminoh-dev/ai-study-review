@@ -554,7 +554,8 @@ export function Today({ name, termsVersion }: { name: string; termsVersion: stri
   useEffect(() => {
     if (error) void cachedQueue().then((cards) => setCached(cards.length));
   }, [error]);
-  if (error) {
+  // 다시 읽기가 실패해도 이미 받은 화면은 그대로 둔다 (오프라인으로 돌아왔을 때 오류 화면으로 바뀌지 않게)
+  if (error && !data) {
     return (
       <div className="screen">
         <p className="notice bad">{error}</p>
