@@ -3,7 +3,7 @@ import { Hono } from 'hono';
 import { listConnectedApps } from '../auth/grants';
 import type { AppEnv } from '../context';
 import { pushToUser } from '../domain/push';
-import { listReminders, replaceReminders } from '../domain/reminders';
+import { listReminders, replaceReminders, skipStaleSlots } from '../domain/reminders';
 import { hashToken, randomToken } from '../lib/crypto';
 import { errorJson, readJson } from '../lib/http';
 
@@ -48,6 +48,7 @@ settings.post('/push/subscriptions', async (c) => {
       'DELETE FROM push_subscriptions WHERE user_id = ?1 AND id NOT IN (SELECT id FROM push_subscriptions WHERE user_id = ?1 ORDER BY created_at DESC LIMIT ?2)',
     ).bind(c.var.userId, MAX_SUBSCRIPTIONS),
   ]);
+  await skipStaleSlots(c.env, c.var.userId, Date.now());
   return c.body(null, 204);
 });
 
