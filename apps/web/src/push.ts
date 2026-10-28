@@ -75,6 +75,9 @@ export async function resyncPush(now = Date.now()): Promise<void> {
   writeStored(SYNCED, String(now));
 }
 
+/** 로그인이 끝나면 하루를 기다리지 않고 다음 로그인 때 바로 다시 보낸다. 다른 기기 로그아웃·기기 복구·이용 정지가 서버 구독을 지웠을 수 있다 */
+export const forgetPushSync = () => writeStored(SYNCED, null);
+
 export async function enablePush(): Promise<PushState> {
   const permission = await Notification.requestPermission();
   if (permission !== 'granted') return permission === 'denied' ? 'denied' : 'off';

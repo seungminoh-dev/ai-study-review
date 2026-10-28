@@ -11,7 +11,7 @@ import { Mascot } from './Mascot';
 import { SNAPPY } from './motion';
 import { ErrorBoundary } from './ErrorBoundary';
 import { claimDevice, releaseDevice } from './offline/store';
-import { dropLocalPush, resyncPush } from './push';
+import { dropLocalPush, forgetPushSync, resyncPush } from './push';
 import { TabLink, navigate, useLocation } from './router';
 import { Join } from './screens/Join';
 import { Landing } from './screens/Landing';
@@ -146,6 +146,7 @@ async function claim(me: Me): Promise<void> {
 async function loggedOut(): Promise<Auth> {
   rememberMe(null);
   forgetSeenBadges();
+  forgetPushSync();
   forgetMaterial();
   const options = await request<AuthOptions>('/auth/options').catch((): AuthOptions => ({ setup_available: false, github: false, google: false }));
   return options.setup_available ? { state: 'setup' } : { state: 'out', github: options.github, google: options.google };
@@ -175,6 +176,8 @@ export function App() {
     await claim(me);
     rememberMe(me);
     setAuth({ state: 'in', me });
+    // 로그아웃된 사이 서버가 이 기기 구독을 지웠을 수 있어 바로 다시 보낸다
+    void resyncPush().catch(() => undefined);
     navigate(to, { replace: true, direction: 'tab' });
   };
 
