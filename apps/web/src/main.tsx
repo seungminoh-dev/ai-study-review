@@ -50,10 +50,10 @@ if (import.meta.env.PROD && 'serviceWorker' in navigator) {
       hadWorker = true;
       return;
     }
-    // 복습 중이면 답을 잃지 않게 복습 화면을 나갈 때까지 기다린다
-    if (location.pathname !== '/review') return reload();
+    // 지금 화면을 떠날 때 다시 불러온다. 복습 답, 모의면접 대화, 붙여 넣던 글, 고치던 카드처럼 화면에만 있는 입력을 잃지 않는다
+    const here = location.pathname;
     const stop = onNavigate(() => {
-      if (location.pathname === '/review') return;
+      if (location.pathname === here) return;
       stop();
       reload();
     });
