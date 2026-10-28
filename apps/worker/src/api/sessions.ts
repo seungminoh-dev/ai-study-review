@@ -43,7 +43,11 @@ export async function listSessions(env: Env, userId: string, limit: number): Pro
   });
 }
 
-sessions.get('/sessions', async (c) => c.json({ sessions: await listSessions(c.env, c.var.userId, 50) }));
+/** 최근 것부터 limit개 (기본 50, 최대 1000). 화면은 '더 보기'로 늘린다 */
+sessions.get('/sessions', async (c) => {
+  const limit = Math.min(Math.max(Number(c.req.query('limit')) || 50, 1), 1000);
+  return c.json({ sessions: await listSessions(c.env, c.var.userId, limit) });
+});
 
 /** 저장한 대화 이름 바꾸기 */
 sessions.patch('/sessions/:id', async (c) => {

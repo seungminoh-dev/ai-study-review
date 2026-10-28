@@ -2,6 +2,20 @@ import { Mascot } from './Mascot';
 
 // 불러오는 중: 글자 대신 화면 모양의 뼈대와 책 읽는 마스코트를 보여 준다. 빨리 끝나면 깜빡이지 않게 조금 늦게 나타난다
 
+/** 불러오지 못했을 때. 다시 시도할 수 있게 버튼을 둔다 */
+export function LoadError({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <div className="screen">
+      <p className="notice bad">{message}</p>
+      <div className="actions">
+        <button type="button" className="button" onClick={onRetry}>
+          다시 시도
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function Loading({ label = '불러오는 중' }: { label?: string }) {
   return (
     <div className="loading" role="status">
