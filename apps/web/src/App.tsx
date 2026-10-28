@@ -306,6 +306,10 @@ export function App() {
     screen = (
       <Settings
         me={auth.me}
+        onMe={(me) => {
+          rememberMe(me);
+          setAuth({ state: 'in', me });
+        }}
         onLogout={async () => {
           setAuth(await loggedOut());
           navigate('/', { replace: true, direction: 'tab' });
