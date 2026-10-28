@@ -91,6 +91,8 @@ const SubmitReviewInput = z.object({
   grade: ReviewGrade.optional().describe('explain만: 1 다시, 2 어려움, 3 좋음, 4 쉬움'),
   easy: z.boolean().optional().describe('맞혔고 사용자가 너무 쉬웠다고 할 때'),
   confidence: z.enum(['sure', 'unsure', 'guess']).optional().describe('ox·mcq·cloze: 답하기 전에 물어본 확신도 (확실, 반반, 찍음)'),
+  category: z.string().max(80).optional().describe('get_review_queue에 category를 넘겼으면 같은 값. 남은 장수를 그 범위로 센다'),
+  material: z.string().max(120).optional().describe('get_review_queue에 material을 넘겼으면 같은 값. 남은 장수를 그 자료로 센다'),
 });
 
 const InterviewChainInput = z.object({
@@ -252,6 +254,7 @@ function buildServer(deps: McpDeps): McpServer {
       const { questions, remaining } = await chatQueue(deps.env, deps.userId, size ?? 5, Date.now(), { category, material });
       if (questions.length === 0) return { content: text('오늘 복습할 카드가 없어요.'), structuredContent: { questions: [], remaining: 0 } };
       const lines = [`오늘 남은 ${remaining}장 중 ${questions.length}장이에요. 한 문제씩 내고 정답은 먼저 말하지 마세요.`];
+      if (material || category) lines.push(`답을 보낼 때 submit_review에 같은 ${material ? 'material' : 'category'} 값을 넣으세요. 남은 장수를 그 범위로 세요.`);
       questions.forEach((question, index) => {
         lines.push('', `${index + 1}. [${question.type}] ${question.concept} · card_id ${question.card_id}`, question.prompt);
         if (question.code) lines.push('```', question.code, '```');

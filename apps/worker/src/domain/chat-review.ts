@@ -129,7 +129,16 @@ function resolveChoice(answer: string, choices: readonly string[]): string | nul
 export async function chatSubmit(
   env: Env,
   userId: string,
-  input: { card_id: string; answer: string; grade?: ReviewGrade | undefined; easy?: boolean | undefined; confidence?: Confidence | undefined },
+  input: {
+    card_id: string;
+    answer: string;
+    grade?: ReviewGrade | undefined;
+    easy?: boolean | undefined;
+    confidence?: Confidence | undefined;
+    /** get_review_queue에 넘긴 범위. 남은 장수를 이 범위로 센다 */
+    category?: string | undefined;
+    material?: string | undefined;
+  },
   now: number,
 ): Promise<ChatSubmitResult> {
   const card = await env.DB.prepare(
@@ -183,6 +192,8 @@ export async function chatSubmit(
   if (recorded.conflicted) return { kind: 'busy' };
   if (recorded.recorded === 0) return { kind: 'duplicate' };
   const due = await env.DB.prepare('SELECT due FROM cards WHERE id = ?1').bind(card.id).first<number>('due');
+  // 자료·분류로 받은 문제면 그 범위의 남은 장수다. 전체 오늘 큐로 세면 Claude가 틀린 수를 말한다 (#21)
+  const scoped = input.material || input.category ? (await chatQueue(env, userId, 1, now, { category: input.category, material: input.material })).remaining : null;
   return {
     kind: 'recorded',
     correct,
@@ -192,6 +203,6 @@ export async function chatSubmit(
     explain: card.explain,
     from_my_answer: fromMyAnswer,
     next: due ? describeKstMoment(due, now) : '',
-    remaining: Math.max(0, queue.length - 1),
+    remaining: scoped ?? Math.max(0, queue.length - 1),
   };
 }
