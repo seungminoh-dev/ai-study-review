@@ -45,7 +45,7 @@ export async function listSessions(env: Env, userId: string, limit: number): Pro
 
 /** 최근 것부터 limit개 (기본 50, 최대 1000). 화면은 '더 보기'로 늘린다 */
 sessions.get('/sessions', async (c) => {
-  const limit = Math.min(Math.max(Number(c.req.query('limit')) || 50, 1), 1000);
+  const limit = Math.min(Math.max(Math.trunc(Number(c.req.query('limit'))) || 50, 1), 1000);
   return c.json({ sessions: await listSessions(c.env, c.var.userId, limit) });
 });
 

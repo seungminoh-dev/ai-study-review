@@ -39,7 +39,8 @@ export function onUnauthorized(handler: (() => void) | null): void {
 export async function request<T>(path: string, init: RequestInit & { json?: unknown } = {}): Promise<T> {
   const { json, headers, ...rest } = init;
   const read = (rest.method ?? 'GET').toUpperCase() === 'GET';
-  const signal = rest.signal ?? (read ? AbortSignal.timeout(READ_TIMEOUT_MS) : undefined);
+  // AbortSignal.timeout이 없는 브라우저(iOS 15)에서는 시간 제한 없이 읽는다
+  const signal = rest.signal ?? (read && typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(READ_TIMEOUT_MS) : undefined);
   let response: Response;
   try {
     response = await fetch(`/api${path}`, {
@@ -53,7 +54,11 @@ export async function request<T>(path: string, init: RequestInit & { json?: unkn
     throw error instanceof DOMException && error.name === 'TimeoutError' ? new SlowError() : new OfflineError();
   }
   if (response.status === 204) return undefined as T;
-  const body = (await response.json().catch(() => null)) as T | ApiError | null;
+  const body = (await response.json().catch(() => {
+    // 본문을 받다가 시간 제한에 걸리면 빈 결과로 넘기지 않고 늦다고 알린다
+    if (signal?.aborted) throw new SlowError();
+    return null;
+  })) as T | ApiError | null;
   if (!response.ok) {
     if (response.status === 401) unauthorized?.();
     const error = (body as ApiError | null)?.error;
