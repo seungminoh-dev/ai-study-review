@@ -21,13 +21,14 @@ import {
   cacheQueue,
   cachedMaterialQueue,
   cachedQueue,
+  dropLevelUps,
   enqueueReview,
   flushReviews,
   forgetAnswered,
+  peekLevelUps,
   pendingCardIds,
   pendingCount,
   removeFromOutbox,
-  takeLevelUps,
 } from '../offline/store';
 import { buzz, readStored, writeStored } from '../prefs';
 import { play, type Sound } from '../sound';
@@ -76,7 +77,10 @@ const READY_WAIT_MS = 4000;
 const RUNG_NEXT: Record<number, string> = { 2: '이제 빈칸·코드 문제가 나와요', 3: '이제 직접 설명하는 카드가 나와요' };
 
 /** 복습을 시작할 때 서버가 센 오늘 XP와 장수 */
-type TodayBefore = StatsResponse['today'];
+type TodayBefore = StatsResponse['today'] & { at: number };
+
+/** 학습일 번호. 04:00 KST에 바뀐다 (worker lib/kst.ts의 studyDayIndex와 같다) */
+const studyDay = (ms: number) => Math.floor((ms + 5 * 60 * 60 * 1000) / (24 * 60 * 60 * 1000));
 
 /** left: 이번 묶음 다음에 같은 범위에 남은 장수 (끝 화면의 "이어서 더"). 오프라인이면 0 */
 type Load = { state: 'loading' } | { state: 'error'; message: string } | { state: 'ready'; cards: QueueCard[]; offline: boolean; before?: TodayBefore | null; left?: number };
@@ -134,7 +138,7 @@ export function Review({
         // 자료 섹션은 따로 남겨 둔다. 지하철에서 연결이 끊겨도 이어서 학습한다
         if (material && !exam) await cacheMaterialQueue(material, part ?? null, queue.cards.filter((card) => !pending.has(card.id)));
         if (!cancelled) {
-          setLoad({ state: 'ready', cards, offline: false, before: before && before.today, left: Math.max(0, queue.remaining - cards.length) });
+          setLoad({ state: 'ready', cards, offline: false, before: before && { ...before.today, at: Date.now() }, left: Math.max(0, queue.remaining - cards.length) });
         }
       } catch (error) {
         if (error instanceof OfflineError && material && !exam) {
@@ -384,7 +388,8 @@ function Session({
       // 보내는 중이던 답은 전송이 끝난 뒤에 판단한다. 기기에 남아 있으면 서버는 모르는 답이라 기기에서만 지운다
       const removedLocally = await removeFromOutbox(last.reviewId);
       if (!removedLocally) await request(`/reviews/${last.reviewId}/undo`, { method: 'POST' });
-      setCards((list) => [...list.slice(0, index), last.card, ...list.slice(index)]);
+      // 답한 카드는 바로 앞 자리에 그대로 있다. 끼워 넣으면 전체 장수가 늘어난다 (#15)
+      setIndex((value) => value - 1);
       setResults((list) => list.slice(0, -1));
       setLast(null);
       // 지금 카드에서 고르던 답과 확신도는 버린다. 남기면 되돌아온 카드에 그 답이 기록된다
@@ -701,7 +706,8 @@ function Summary({
         // 밀린 답을 먼저 보내야 오늘 목표와 연속, LEVEL UP이 맞게 나온다
         await flushReviews();
         if (cancelled) return;
-        ups = await takeLevelUps();
+        // 꺼내지 않고 읽기만 한다. 보여 준 뒤에 비워서, 그 전에 화면을 떠나도 오늘 화면에서 다시 보여 준다 (#16)
+        ups = await peekLevelUps();
         sent = (await pendingCount()) === 0;
         const [next, materials] = await Promise.all([request<StatsResponse>('/stats'), request<{ materials: MaterialSummary[] }>('/materials').catch(() => null)]);
         if (cancelled) return;
@@ -715,6 +721,7 @@ function Summary({
           setLevelUps(ups);
           setAllSent(sent);
           setReady(true);
+          if (ups.length > 0) void dropLevelUps(ups);
         }
       }
     })();
@@ -724,10 +731,12 @@ function Summary({
     };
   }, [practice]);
   const goalMet = stats !== null && stats.today.reviewed >= stats.goal;
+  // 시작한 뒤 학습일이 바뀌었으면(04:00 KST를 넘김) 시작 숫자는 전날 것이라 쓰지 않는다 (#17)
+  const start = before && studyDay(before.at) === studyDay(Date.now()) ? before : null;
   // 이번 복습으로 오늘 목표를 처음 채웠으면 연속 학습이 하루 늘었다
-  const streakUp = goalMet && !practice && (before ? before.reviewed : stats.today.reviewed - results.length) < stats.goal;
+  const streakUp = goalMet && !practice && (start ? start.reviewed : stats.today.reviewed - results.length) < stats.goal;
   // 얻은 XP는 서버가 센 오늘 XP의 차이다. 시작 숫자가 없거나, 못 보낸 답이 있거나, 그사이 하루가 바뀌었으면 화면에서 어림한다
-  const gained = stats && before && allSent ? stats.today.xp - before.xp : -1;
+  const gained = stats && start && allSent ? stats.today.xp - start.xp : -1;
   // 로딩 화면 뒤에서 카운트업이 끝나지 않게, 끝 화면을 그릴 때 0부터 올린다
   const xp = useCountUp(practice || !ready ? 0 : gained >= 0 ? gained : sessionXp(results) + (perfect ? PERFECT_XP : 0));
   const toGoal = stats && !goalMet ? stats.goal - stats.today.reviewed : 0;
