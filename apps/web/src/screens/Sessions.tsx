@@ -131,14 +131,20 @@ function EditForm({ card, onSaved, onCancel }: { card: SessionCard; onSaved: (ca
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const set = (patch: Partial<Draft>) => setDraft((value) => ({ ...value, ...patch }) as Draft);
+  // 보기·핵심 요소는 치는 그대로 두고 저장할 때 나눈다. 칠 때마다 나누면 끝의 쉼표·빈 줄·띄어쓰기가 지워진다
+  const [choicesText, setChoicesText] = useState(() => (draft.type === 'cloze' ? draft.choices.join(', ') : ''));
+  const [checklistText, setChecklistText] = useState(() => (draft.type === 'explain' ? draft.checklist.join('\n') : ''));
+  const split = (text: string, by: string) => text.split(by).map((item) => item.trim()).filter(Boolean);
 
   const save = async (event: FormEvent) => {
     event.preventDefault();
     setBusy(true);
     setError(null);
     try {
-      await request(`/cards/${card.id}`, { method: 'PATCH', json: draft });
-      onSaved({ ...card, ...draft });
+      const final: Draft =
+        draft.type === 'cloze' ? { ...draft, choices: split(choicesText, ',') } : draft.type === 'explain' ? { ...draft, checklist: split(checklistText, '\n') } : draft;
+      await request(`/cards/${card.id}`, { method: 'PATCH', json: final });
+      onSaved({ ...card, ...final });
     } catch (reason) {
       setError(errorMessage(reason));
     } finally {
@@ -196,8 +202,8 @@ function EditForm({ card, onSaved, onCancel }: { card: SessionCard; onSaved: (ca
           <label className="field">
             <span>보기 (쉼표로 나눠요. 정답도 넣어요)</span>
             <input
-              value={draft.choices.join(', ')}
-              onChange={(event) => set({ choices: event.target.value.split(',').map((item) => item.trim()).filter(Boolean) })}
+              value={choicesText}
+              onChange={(event) => setChoicesText(event.target.value)}
               required
             />
           </label>
@@ -207,9 +213,9 @@ function EditForm({ card, onSaved, onCancel }: { card: SessionCard; onSaved: (ca
         <label className="field">
           <span>핵심 요소 (한 줄에 하나, 2~5개)</span>
           <textarea
-            value={draft.checklist.join('\n')}
+            value={checklistText}
             rows={4}
-            onChange={(event) => set({ checklist: event.target.value.split('\n').map((item) => item.trim()).filter(Boolean) })}
+            onChange={(event) => setChecklistText(event.target.value)}
             required
           />
         </label>
