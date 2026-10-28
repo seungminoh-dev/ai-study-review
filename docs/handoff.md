@@ -276,7 +276,7 @@
 
 ## 9. 다음 작업
 
-2026-10-20에 레포 전체를 8개 관점으로 분석해 우선순위를 매긴 개선점 56개가 [Improvement.md](../Improvement.md)에 있다.
+2026-10-20에 레포 전체를 8개 관점으로 분석해 개선점 56개를 정리했다 (`Improvement.md`, 2026-10-28에 지웠고 git 기록에 남아 있다). 번호는 그 목록 기준이다.
 - 2026-10-20에 1~8번(P0과 작업량 S인 P1)을 고쳤다: OAuth 리디렉트 주소 제한, MCP 도구 실패·Hono 밖 오류 기록(`mcp_failed` 알림), 백업 파일 규칙·복구 절차·Deploy bookmark, 카톡 인앱 브라우저·iPhone 홈 화면 앱·iPad 안내(`InAppNotice.tsx`, 가입 뒤 커넥터 허용 화면으로 복귀), 푸시 구독 다시 맞추기(하루 한 번, `pushsubscriptionchange`, `/api/today`의 `push_lost`), 복습 알림 1분 20명·5명씩 병렬·구독 없는 사람 빼기(`reminder_late` 알림), Deploy 타입 검사·롤백 절차, 설명하기 카드 잠김(`stuckCards`).
 - 그때 하지 않은 것: 4번 실제 카톡 Android·iPhone 확인, 2번 관리자 지표의 도구 실패 수, 5번 오너 지표의 구독 수·마지막 성공 시각, 6·8번 운영 D1 읽기 확인(이 컴퓨터 wrangler에 운영 D1 권한이 없다).
 - 2026-10-20에 9~11번도 고쳤다: 다음에 볼 질문 닫기(판정이 새로 오면 그 개념의 예전 질문을 닫음, 오늘 화면 ✓, 코칭 문맥은 개념마다 최근 3개·60일), 마이그레이션 업그레이드 테스트(`test/migrations.test.ts`), Cron heartbeat와 `/api/health`(D1·Cron 5분, Deploy 확인과 3시간마다의 Actions **Health**). 운영에 이미 쌓인 열린 질문은 일괄로 닫지 않았다(운영 D1 권한 없음). 그 개념을 다시 공부하거나 오늘 화면에서 닫으면 줄어든다.
