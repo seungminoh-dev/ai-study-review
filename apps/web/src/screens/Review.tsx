@@ -390,6 +390,8 @@ function Session({
       if (!removedLocally) await request(`/reviews/${last.reviewId}/undo`, { method: 'POST' });
       // 답한 카드는 바로 앞 자리에 그대로 있다. 끼워 넣으면 전체 장수가 늘어난다 (#15)
       setIndex((value) => value - 1);
+      // 같은 자리로 돌아가니 설명하기를 펼쳤던 표시도 지운다
+      setExplainShown(null);
       setResults((list) => list.slice(0, -1));
       setLast(null);
       // 지금 카드에서 고르던 답과 확신도는 버린다. 남기면 되돌아온 카드에 그 답이 기록된다
@@ -464,6 +466,8 @@ function Session({
     try {
       await request(`/cards/${card.id}/report`, { method: 'POST', json: { reason } });
       await forgetAnswered([card.id]);
+      // 신고한 카드를 건너뛰면 바로 앞 카드가 마지막 답이 아니다. 되돌리기를 닫는다 (되돌리면 앞 자리로 돌아간다)
+      setLast(null);
       advance();
     } catch (error) {
       setNotice(errorMessage(error));
