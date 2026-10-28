@@ -255,11 +255,11 @@ function SectionBody({ title, part, name, compact = false }: { title: string; pa
         ) : (
           <span className="muted small grow">이 섹션의 카드를 모두 껐어요.</span>
         )}
-        {part.session_id ? (
-          <Link className="button" href={`/sessions/${part.session_id}`}>
-            카드 보기
+        {part.session_ids.map((id, i) => (
+          <Link key={id} className="button" href={`/sessions/${id}`}>
+            {part.session_ids.length > 1 ? `카드 보기 ${i + 1}` : '카드 보기'}
           </Link>
-        ) : null}
+        ))}
       </div>
       {compact || part.preview.length === 0 ? null : (
         <div className="section-block">

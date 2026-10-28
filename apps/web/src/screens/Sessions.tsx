@@ -1,9 +1,9 @@
-import type { CardEditBody, SessionCard, SessionDetail as Detail, SessionSummary } from '@moai/shared';
+import type { CardEditBody, CardStatus, SessionCard, SessionDetail as Detail, SessionSummary } from '@moai/shared';
 import { useState, type FormEvent } from 'react';
 import { errorMessage, request } from '../api';
 import { CodeBlock } from '../cards/CodeBlock';
 import { EditableTitle } from '../EditableTitle';
-import { Loading } from '../Loading';
+import { LoadError, Loading } from '../Loading';
 import { materialHref } from '../materials';
 import { forgetAnswered } from '../offline/store';
 import { BackLink, Link, goBack } from '../router';
@@ -53,9 +53,13 @@ export function SessionItem({ session }: { session: SessionSummary }) {
   );
 }
 
+/** 한 번에 받는 대화 수. 더 있으면 '더 보기'로 늘린다 */
+const PAGE = 50;
+
 export function Sessions() {
-  const { data, error } = useApi<{ sessions: SessionSummary[] }>('/sessions');
-  if (error) return <div className="screen"><p className="notice bad">{error}</p></div>;
+  const [limit, setLimit] = useState(PAGE);
+  const { data, error, reload } = useApi<{ sessions: SessionSummary[] }>(`/sessions?limit=${limit}`);
+  if (error) return <LoadError message={error} onRetry={reload} />;
   if (!data) return <Loading />;
   return (
     <div className="screen">
@@ -82,6 +86,13 @@ export function Sessions() {
           ),
         )}
       </ul>
+      {data.sessions.length >= limit ? (
+        <div className="actions">
+          <button type="button" className="button" onClick={() => setLimit((value) => value + PAGE)}>
+            더 보기
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -247,8 +258,8 @@ export function CardRow({ card: initial }: { card: SessionCard }) {
     const suspend = status !== 'suspended';
     if (suspend && !confirm('이 카드를 끌까요? 복습에 다시 나오지 않아요.')) return;
     try {
-      await request(`/cards/${card.id}/${suspend ? 'suspend' : 'unsuspend'}`, { method: 'POST' });
-      setStatus(suspend ? 'suspended' : card.type === 'explain' ? 'locked' : 'active');
+      const result = await request<{ status: CardStatus }>(`/cards/${card.id}/${suspend ? 'suspend' : 'unsuspend'}`, { method: 'POST' });
+      setStatus(result.status);
       setError(null);
     } catch (reason) {
       setError(errorMessage(reason));
@@ -293,9 +304,9 @@ export function CardRow({ card: initial }: { card: SessionCard }) {
 }
 
 export function SessionDetail({ id }: { id: string }) {
-  const { data, error } = useApi<Detail>(`/sessions/${id}`);
+  const { data, error, reload } = useApi<Detail>(`/sessions/${id}`);
   const [notice, setNotice] = useState<string | null>(null);
-  if (error) return <div className="screen"><p className="notice bad">{error}</p></div>;
+  if (error) return <LoadError message={error} onRetry={reload} />;
   if (!data) return <Loading />;
 
   const remove = async () => {

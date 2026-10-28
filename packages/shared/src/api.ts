@@ -290,8 +290,10 @@ export interface MaterialConcept {
 export interface MaterialPart {
   /** 저장할 때 받은 범위 이름 (예: "프로그램 기초 (p.3–21)"). 없으면 빈 문자열 */
   name: string;
-  /** 이 섹션의 가장 최근 저장. "카드 보기"가 연다 */
+  /** 이 섹션의 가장 최근 저장 */
   session_id: string;
+  /** 이 섹션의 저장 전부 (만든 순서). 같은 섹션을 여러 번 저장했으면 "카드 보기"를 저장마다 둔다 */
+  session_ids: string[];
   cards: number;
   solved: number;
   unsolved_open: number;

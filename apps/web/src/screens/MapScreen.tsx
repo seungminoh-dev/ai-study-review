@@ -1,7 +1,7 @@
 import type { ConceptStateKey, MapResponse } from '@moai/shared';
 import { useEffect, useMemo, useState } from 'react';
 import { STATE_LABEL } from '../concept-state';
-import { Loading } from '../Loading';
+import { LoadError, Loading } from '../Loading';
 import { labelWidth, layoutGraph, type Layout } from '../map/layout';
 import type { LayoutRequest } from '../map/layout.worker';
 import { Link, navigate } from '../router';
@@ -74,7 +74,7 @@ function useLayout(request: Omit<LayoutRequest, 'id'> | null): Layout | null {
 }
 
 export function MapScreen() {
-  const { data: raw, error } = useApi<MapResponse>('/map');
+  const { data: raw, error, reload } = useApi<MapResponse>('/map');
   /** 큰 분류 하나만 보기 (null이면 전체) */
   const [top, setTop] = useState<string | null>(null);
   /** 아직 안 푼 자료 개념도 보기. 기본은 내 지식만 */
@@ -99,7 +99,7 @@ export function MapScreen() {
   );
   const layout = useLayout(request);
   const materialCount = raw?.nodes.filter((node) => node.state === 'material').length ?? 0;
-  if (error) return <div className="screen"><p className="notice bad">{error}</p></div>;
+  if (error) return <LoadError message={error} onRetry={reload} />;
   if (!data || !raw || !layout) return <Loading />;
   const positions = layout.positions;
   if (raw.nodes.length === 0) {

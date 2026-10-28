@@ -4,7 +4,7 @@ import { useCanInterview } from '../ai';
 import { errorMessage, request } from '../api';
 import { STATE_LABEL } from '../concept-state';
 import { copyText } from '../copy';
-import { Loading } from '../Loading';
+import { LoadError, Loading } from '../Loading';
 import { BackLink, Link } from '../router';
 import { formatDate, useApi } from '../useApi';
 import { CardRow } from './Sessions';
@@ -19,10 +19,10 @@ const EDGE_LABEL: Record<string, { out: string; in: string }> = {
 };
 
 export function Concept({ conceptKey }: { conceptKey: string }) {
-  const { data, error } = useApi<ConceptDetail>(`/concepts/${encodeURIComponent(conceptKey)}`);
+  const { data, error, reload } = useApi<ConceptDetail>(`/concepts/${encodeURIComponent(conceptKey)}`);
   const [copied, setCopied] = useState<boolean | null>(null);
   const canInterview = useCanInterview();
-  if (error) return <div className="screen"><p className="notice bad">{error}</p></div>;
+  if (error) return <LoadError message={error} onRetry={reload} />;
   if (!data) return <Loading />;
   return (
     <div className="screen">

@@ -1,7 +1,7 @@
 import type { MapResponse, StatsResponse } from '@moai/shared';
 import { AchievementShelf, BadgeShelf } from '../badges';
 import { IconFlame } from '../icons';
-import { Loading } from '../Loading';
+import { LoadError, Loading } from '../Loading';
 import { Mascot } from '../Mascot';
 import { CategoryProgress, Heatmap, conceptCounts } from '../progress';
 import { useApi } from '../useApi';
@@ -9,9 +9,9 @@ import { useApi } from '../useApi';
 // 내 성장 (2단계): 친구와 겨루는 리그 대신 "지난주의 나"와 비교한다. 연속, XP, 익숙해진 개념, 이정표, 최근 12주, 분류별 진행
 
 export function Growth() {
-  const { data: stats, error } = useApi<StatsResponse>('/stats');
+  const { data: stats, error, reload } = useApi<StatsResponse>('/stats');
   const { data: map } = useApi<MapResponse>('/map');
-  if (error) return <div className="screen"><p className="notice bad">{error}</p></div>;
+  if (error) return <LoadError message={error} onRetry={reload} />;
   if (!stats) return <Loading />;
 
   const counts = map ? conceptCounts(map.nodes) : null;

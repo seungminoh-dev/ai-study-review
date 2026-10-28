@@ -1,6 +1,6 @@
 import type { MaterialSummary } from '@moai/shared';
 import { isPdf } from '@moai/shared/client';
-import { Loading } from '../Loading';
+import { LoadError, Loading } from '../Loading';
 import { Mascot } from '../Mascot';
 import { materialHref, materialReview, partView } from '../materials';
 import { Link } from '../router';
@@ -82,8 +82,8 @@ function MaterialCard({ material }: { material: MaterialSummary }) {
 }
 
 export function Materials() {
-  const { data, error } = useApi<{ materials: MaterialSummary[] }>('/materials');
-  if (error) return <div className="screen"><p className="notice bad">{error}</p></div>;
+  const { data, error, reload } = useApi<{ materials: MaterialSummary[] }>('/materials');
+  if (error) return <LoadError message={error} onRetry={reload} />;
   if (!data) return <Loading />;
   return (
     <div className="screen materials">

@@ -559,6 +559,19 @@ export function Today({ name, termsVersion }: { name: string; termsVersion: stri
     return (
       <div className="screen">
         <p className="notice bad">{error}</p>
+        <div className="actions">
+          <button
+            type="button"
+            className="button"
+            onClick={() => {
+              reloadToday();
+              reloadStats();
+              reloadMaterials();
+            }}
+          >
+            다시 시도
+          </button>
+        </div>
         {cached > 0 ? (
           <>
             <p className="muted">저장해 둔 카드 {cached}장으로 복습할 수 있어요. 답은 연결되면 보내요.</p>

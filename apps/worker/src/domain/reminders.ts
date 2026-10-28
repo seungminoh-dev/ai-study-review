@@ -52,6 +52,18 @@ interface SlotRow {
   next_fire_at: number;
 }
 
+/**
+ * 구독이 없던 동안 밀린 알림 시각을 다음 시각으로 넘긴다. 매분 Cron은 구독 없는 사람을 건너뛰어서 시각이 며칠 전에 머문다.
+ * 그대로 두면 구독하자마자 오래 밀린 시각이 '늦은 알림' 경보가 된다 (#22). 어차피 보내지 않을 만큼 밀린 시각만 넘긴다
+ */
+export async function skipStaleSlots(env: Env, userId: string, now: number): Promise<void> {
+  const { results } = await env.DB.prepare('SELECT id, local_time FROM reminder_slots WHERE user_id = ?1 AND enabled = 1 AND next_fire_at < ?2')
+    .bind(userId, now - STALE_AFTER_MS)
+    .all<{ id: string; local_time: string }>();
+  if (results.length === 0) return;
+  await env.DB.batch(results.map((slot) => env.DB.prepare('UPDATE reminder_slots SET next_fire_at = ?2 WHERE id = ?1').bind(slot.id, nextKstTime(slot.local_time, now))));
+}
+
 /** 알림 시간 하나를 처리한다. 보낸 기기 수를 돌려준다 */
 async function deliverSlot(env: Env, slot: SlotRow, now: number): Promise<number> {
   // 다음 시각으로 먼저 넘긴다. 바뀐 행이 없으면 다른 실행이 처리한 것이다 (최대 한 번 발송)

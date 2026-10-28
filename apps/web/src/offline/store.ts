@@ -104,6 +104,12 @@ export async function peekLevelUps(): Promise<LevelUp[]> {
   return (await get<LevelUp[]>(LEVEL_UPS, store)) ?? [];
 }
 
+/** 보여 준 LEVEL UP만 비운다. 그사이 새로 쌓인 것은 남긴다 */
+export async function dropLevelUps(shown: readonly LevelUp[]): Promise<void> {
+  const keys = new Set(shown.map((up) => `${up.concept_key}:${up.rung}`));
+  await update<LevelUp[]>(LEVEL_UPS, (items) => (items ?? []).filter((up) => !keys.has(`${up.concept_key}:${up.rung}`)), store);
+}
+
 /** 모아 둔 LEVEL UP을 꺼내고 비운다 */
 export async function takeLevelUps(): Promise<LevelUp[]> {
   let taken: LevelUp[] = [];

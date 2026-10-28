@@ -43,7 +43,11 @@ export async function listSessions(env: Env, userId: string, limit: number): Pro
   });
 }
 
-sessions.get('/sessions', async (c) => c.json({ sessions: await listSessions(c.env, c.var.userId, 50) }));
+/** 최근 것부터 limit개 (기본 50, 최대 1000). 화면은 '더 보기'로 늘린다 */
+sessions.get('/sessions', async (c) => {
+  const limit = Math.min(Math.max(Math.trunc(Number(c.req.query('limit'))) || 50, 1), 1000);
+  return c.json({ sessions: await listSessions(c.env, c.var.userId, limit) });
+});
 
 /** 저장한 대화 이름 바꾸기 */
 sessions.patch('/sessions/:id', async (c) => {
@@ -209,6 +213,8 @@ for (const [action, suspended] of [
   sessions.post(`/cards/:id/${action}`, async (c) => {
     const found = await setCardSuspended(c.env, c.var.userId, c.req.param('id'), suspended, Date.now());
     if (!found) return errorJson(404, 'not_found', '카드를 찾지 못했어요.');
-    return c.body(null, 204);
+    // 사다리 규칙으로 정해진 상태를 돌려준다. 화면이 짐작하면 잠김·복습 중이 서버와 달라진다 (#23)
+    const status = await c.env.DB.prepare('SELECT status FROM cards WHERE id = ?1 AND user_id = ?2').bind(c.req.param('id'), c.var.userId).first<CardStatus>('status');
+    return c.json({ status });
   });
 }
