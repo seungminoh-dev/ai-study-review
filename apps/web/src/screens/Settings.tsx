@@ -31,14 +31,14 @@ const JUMPS = [
   { id: 'account', label: '계정' },
 ] as const;
 
-export function Settings({ me, onLogout }: { me: Me; onLogout: () => void }) {
+export function Settings({ me, onMe, onLogout }: { me: Me; onMe: (me: Me) => void; onLogout: () => void }) {
   return (
     <div className="screen settings">
       <h1>설정</h1>
       <Profile me={me} />
       <JumpBar />
       <NotifyCard />
-      <ReviewCard initialGoal={me.daily_goal} />
+      <ReviewCard initialGoal={me.daily_goal} onSaved={(daily_goal) => onMe({ ...me, daily_goal })} />
       <ScreenCard />
       <ClaudeCard />
       <AccountCard me={me} onLogout={onLogout} />
@@ -343,7 +343,8 @@ function ReminderRows() {
 const GOALS = [3, 5, 10, 15, 20].map((value) => ({ value, label: `${value}장` }));
 
 /** 하루 목표(설계서 §9.6, 서버에 저장)와 확신도 묻기(설계서 §9.3, 이 기기에만) */
-function ReviewCard({ initialGoal }: { initialGoal: number }) {
+/** onSaved: 바꾼 목표를 앱의 내 정보에도 넣는다. 안 넣으면 다른 화면에 다녀왔을 때 예전 값으로 보인다 */
+function ReviewCard({ initialGoal, onSaved }: { initialGoal: number; onSaved: (goal: number) => void }) {
   const [goal, setGoal] = useState(initialGoal);
   const [error, setError] = useState<string | null>(null);
   const [confidence, setConfidence] = useState(askConfidence);
@@ -353,6 +354,7 @@ function ReviewCard({ initialGoal }: { initialGoal: number }) {
     setError(null);
     try {
       await request('/goal', { method: 'PUT', json: { daily_goal: value } });
+      onSaved(value);
       toast(`하루 ${value}장으로 바꿨어요.`);
     } catch (reason) {
       setGoal(before);

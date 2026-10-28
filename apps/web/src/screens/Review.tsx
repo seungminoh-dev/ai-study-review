@@ -69,6 +69,9 @@ function useWide(): boolean {
   return wide;
 }
 
+/** 끝 화면을 그리기 전에 서버 숫자를 기다리는 최대 시간 */
+const READY_WAIT_MS = 4000;
+
 /** 끝 화면의 LEVEL UP: 새로 열린 단계에서 나오는 카드 */
 const RUNG_NEXT: Record<number, string> = { 2: '이제 빈칸·코드 문제가 나와요', 3: '이제 직접 설명하는 카드가 나와요' };
 
@@ -176,7 +179,7 @@ export function Review({
     setLoad({ state: 'loading' });
     setRound((value) => value + 1);
   };
-  return <Session key={round} initial={load.cards} offline={load.offline} before={load.before ?? null} exam={exam} more={left > 0 ? { count: Math.min(left, size), start: more } : null} />;
+  return <Session key={round} initial={load.cards} offline={load.offline} before={load.before ?? null} exam={exam} more={left > 0 ? { count: Math.min(left, size), start: more } : null} again={more} />;
 }
 
 interface Recorded {
@@ -197,6 +200,7 @@ function Session({
   before,
   exam,
   more,
+  again,
 }: {
   initial: QueueCard[];
   offline: boolean;
@@ -204,6 +208,8 @@ function Session({
   exam: boolean;
   /** 같은 범위에 카드가 더 남았으면 끝 화면에서 바로 이어서 푼다 */
   more: { count: number; start: () => void } | null;
+  /** 같은 범위의 다음 카드를 받아 새로 시작한다 */
+  again: () => void;
 }) {
   const [cards, setCards] = useState(initial);
   const [index, setIndex] = useState(0);
@@ -445,7 +451,7 @@ function Session({
     return () => window.removeEventListener('keydown', onKey);
   });
 
-  if (!card) return <Summary results={results} practice={practice} exam={exam} before={before} onRetry={retry} onUndo={last ? () => void undo() : null} notice={notice} more={more} />;
+  if (!card) return <Summary results={results} practice={practice} exam={exam} before={before} onRetry={retry} onUndo={last ? () => void undo() : null} notice={notice} more={more} again={again} />;
 
   const report = async (reason: ReportReason) => {
     if (stale()) return;
@@ -656,6 +662,7 @@ function Summary({
   onUndo,
   notice,
   more,
+  again,
 }: {
   results: Result[];
   practice: boolean;
@@ -667,6 +674,7 @@ function Summary({
   onUndo: (() => void) | null;
   notice: string | null;
   more: { count: number; start: () => void } | null;
+  again: () => void;
 }) {
   const wrong = results.filter((result) => !result.correct).map((result) => result.card);
   const right = results.length - wrong.length;
@@ -679,26 +687,40 @@ function Summary({
   const [learnNext, setLearnNext] = useState<MaterialSummary | null>(null);
   /** 이번 복습의 답이 모두 서버에 들어갔다. 그래야 서버 숫자의 차이가 이번 복습의 몫이다 */
   const [allSent, setAllSent] = useState(false);
+  /** 끝 화면에 쓸 것을 다 받았다(또는 기다리기를 그만뒀다). 받는 대로 하나씩 그리면 화면이 여러 번 밀려서 한 번에 그린다 (#8) */
+  const [ready, setReady] = useState(practice);
   useEffect(() => {
     if (practice) return;
     let cancelled = false;
+    // 연결이 느려도 끝 화면을 오래 막지 않는다. 늦게 온 숫자는 받은 뒤에 채운다
+    const giveUp = setTimeout(() => setReady(true), READY_WAIT_MS);
     void (async () => {
+      let ups: LevelUp[] = [];
+      let sent = false;
       try {
         // 밀린 답을 먼저 보내야 오늘 목표와 연속, LEVEL UP이 맞게 나온다
         await flushReviews();
         if (cancelled) return;
-        setLevelUps(await takeLevelUps());
-        setAllSent((await pendingCount()) === 0);
+        ups = await takeLevelUps();
+        sent = (await pendingCount()) === 0;
         const [next, materials] = await Promise.all([request<StatsResponse>('/stats'), request<{ materials: MaterialSummary[] }>('/materials').catch(() => null)]);
         if (cancelled) return;
         setStats(next);
         setLearnNext(materials ? (currentMaterial(materials.materials, true) ?? null) : null);
       } catch {
         // 오프라인이면 숫자 없이 보여 준다
+      } finally {
+        clearTimeout(giveUp);
+        if (!cancelled) {
+          setLevelUps(ups);
+          setAllSent(sent);
+          setReady(true);
+        }
       }
     })();
     return () => {
       cancelled = true;
+      clearTimeout(giveUp);
     };
   }, [practice]);
   const goalMet = stats !== null && stats.today.reviewed >= stats.goal;
@@ -706,20 +728,25 @@ function Summary({
   const streakUp = goalMet && !practice && (before ? before.reviewed : stats.today.reviewed - results.length) < stats.goal;
   // 얻은 XP는 서버가 센 오늘 XP의 차이다. 시작 숫자가 없거나, 못 보낸 답이 있거나, 그사이 하루가 바뀌었으면 화면에서 어림한다
   const gained = stats && before && allSent ? stats.today.xp - before.xp : -1;
-  const xp = useCountUp(practice ? 0 : gained >= 0 ? gained : sessionXp(results) + (perfect ? PERFECT_XP : 0));
+  // 로딩 화면 뒤에서 카운트업이 끝나지 않게, 끝 화면을 그릴 때 0부터 올린다
+  const xp = useCountUp(practice || !ready ? 0 : gained >= 0 ? gained : sessionXp(results) + (perfect ? PERFECT_XP : 0));
   const toGoal = stats && !goalMet ? stats.goal - stats.today.reviewed : 0;
   const celebrate = !practice && (streakUp || levelUps.length > 0);
   useEffect(() => {
     if (celebrate) buzz([20, 60, 20, 60, 40]);
   }, [celebrate]);
   // 끝 화면 소리는 하나만: 무실수 > 레벨 업 > 오늘 목표 달성
-  const fanfare: Sound | null = practice ? null : perfect ? 'perfect' : levelUps.length > 0 ? 'levelup' : streakUp ? 'finish' : null;
+  const fanfare: Sound | null = practice || !ready ? null : perfect ? 'perfect' : levelUps.length > 0 ? 'levelup' : streakUp ? 'finish' : null;
   useEffect(() => {
     if (fanfare) play(fanfare);
   }, [fanfare]);
   /** 설명하기를 스스로 통과로 매긴 개념 */
   const passed = practice ? [] : [...new Set(results.filter((result) => result.card.type === 'explain' && result.correct).map((result) => result.card.concept_name))];
+  // 지금 푸는 섹션을 권하면 주소가 같아 화면이 다시 시작되지 않는다 (#10). "이어서 N장 더"가 있으면 그것만 두고, 없으면(그사이 새 단계가 열림) 이 자리에서 새로 받는다
+  const here = new URLSearchParams(location.search);
+  const sameSection = learnNext?.next ? here.get('material') === learnNext.title && here.get('part') === learnNext.next.part : false;
   const title = exam ? `시험 끝! ${right}/${results.length}` : practice ? '다시 보기를 마쳤어요' : goalMet ? '오늘 목표 달성!' : wrong.length === 0 ? '다 맞혔어요!' : `${results.length}장을 끝냈어요`;
+  if (!ready) return <Loading label="결과를 정리하는 중" />;
   return (
     <div className="summary">
       <div className="summary-head">
@@ -829,8 +856,16 @@ function Summary({
         </button>
       ) : null}
       {notice ? <p className="notice bad">{notice}</p> : null}
-      {learnNext?.next ? (
-        <Link className="learn-suggest" href={materialReview(learnNext.title, learnNext.next.part)}>
+      {learnNext?.next && !(sameSection && more) ? (
+        <Link
+          className="learn-suggest"
+          href={materialReview(learnNext.title, learnNext.next.part)}
+          onClick={(event) => {
+            if (!sameSection) return;
+            event.preventDefault();
+            again();
+          }}
+        >
           <span className="grow">
             <span className="learn-suggest-kicker">학습도 이어서 할까요?</span>
             <strong>{learnNext.next.part ? partView(learnNext.next.part, Math.max(learnNext.parts.indexOf(learnNext.next.part), 0), learnNext.part_labels[learnNext.next.part]).name : '안 푼 카드'}</strong>

@@ -119,9 +119,13 @@ export async function takeLevelUps(): Promise<LevelUp[]> {
 }
 
 /** outbox를 20건씩 보낸다. 실패하면 남겨 두고 다음 기회(online 이벤트, 다음 실행)에 다시 보낸다. */
+/** 밀린 답을 서버에 보냈을 때 window에 알린다. 오늘 화면이 숫자와 LEVEL UP을 다시 읽는다 */
+export const REVIEWS_SENT = 'moai:reviews-sent';
+
 export function flushReviews(): Promise<void> {
   if (!confirmed) return Promise.resolve();
   flushing ??= (async () => {
+    let sentAny = false;
     try {
       for (;;) {
         const items = (await get<ReviewItem[]>(OUTBOX, store)) ?? [];
@@ -137,11 +141,14 @@ export function flushReviews(): Promise<void> {
         }
         const sent = new Set(batch.map((item) => item.id));
         await update<ReviewItem[]>(OUTBOX, (current) => (current ?? []).filter((item) => !sent.has(item.id)), store);
+        sentAny = true;
       }
     } catch {
       // 오프라인이거나 서버 오류다. 답은 outbox에 남아 있다
     } finally {
       flushing = null;
+      // 테스트(Node)에는 window가 없다
+      if (sentAny) globalThis.dispatchEvent?.(new Event(REVIEWS_SENT));
     }
   })();
   return flushing;

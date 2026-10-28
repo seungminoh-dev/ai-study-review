@@ -11,6 +11,7 @@ AI와 공부한 대화를 간격 반복 복습 카드로 바꾸는 서비스. Cl
 - 운영 서비스라 배포 전에 항상 보안 점검을 한다.
 - 운영(prod) 서비스다 (2026-10-26부터). `main`에 직접 push하지 않는다. 변경은 버전 브랜치 `release/vX.Y.Z`에 모아 PR 하나로 올리고, 머지는 사용자가 하거나 하라고 할 때만 한다. 머지하면 Deploy가 마이그레이션과 배포를 한다. 절차는 [docs/runbook.md](docs/runbook.md)의 "버전과 PR".
 - 비밀값은 `wrangler secret put`으로만 넣고 레포·로그에 남기지 않는다. 커넥터 URL은 비밀번호와 같다.
+- 커밋 메시지는 `Type: 한국어 요약` (Type은 Feat, Fix, Refactor, Docs, Infra, Test, Chore). 2026-10-28부터이고 그 전 커밋은 영어 문장이다.
 - 커밋, 코드 주석, 문서에 모델 ID를 쓰지 않는다.
 
 ## 명령

@@ -9,7 +9,7 @@ import { IconArrow, IconBook, IconCheck, IconFlame, IconHistory, IconSettings } 
 import { Loading } from '../Loading';
 import { Mascot } from '../Mascot';
 import { currentMaterial, materialReview, partView } from '../materials';
-import { cachedQueue, peekLevelUps, takeLevelUps } from '../offline/store';
+import { REVIEWS_SENT, cachedQueue, peekLevelUps, takeLevelUps } from '../offline/store';
 import { GoalRing, StreakGoal, WeekDays, todayLabel } from '../progress';
 import { isStandalone, pushState } from '../push';
 import { Link, TabLink } from '../router';
@@ -481,7 +481,11 @@ function SurveyCard() {
 function LevelUpNotice() {
   const [ups, setUps] = useState<LevelUp[]>([]);
   useEffect(() => {
-    void peekLevelUps().then(setUps);
+    // 앱을 열 때 밀린 답을 보내는 중일 수 있다. 다 보내면 그 결과로 열린 단계를 다시 읽는다
+    const read = () => void peekLevelUps().then(setUps);
+    read();
+    window.addEventListener(REVIEWS_SENT, read);
+    return () => window.removeEventListener(REVIEWS_SENT, read);
   }, []);
   if (ups.length === 0) return null;
   return (
@@ -523,15 +527,35 @@ export function InterviewLink({ className = '' }: { className?: string }) {
 }
 
 export function Today({ name, termsVersion }: { name: string; termsVersion: string | null }) {
-  const { data, error } = useApi<TodayResponse>('/today');
-  const { data: stats } = useApi<StatsResponse>('/stats');
-  const { data: materials } = useApi<{ materials: MaterialSummary[] }>('/materials');
+  const { data, error, reload: reloadToday } = useApi<TodayResponse>('/today');
+  const { data: stats, reload: reloadStats } = useApi<StatsResponse>('/stats');
+  const { data: materials, reload: reloadMaterials } = useApi<{ materials: MaterialSummary[] }>('/materials');
+  // 앱으로 돌아오거나 다시 연결되거나 밀린 답을 보낸 뒤 다시 읽는다. 열어 둔 채 날이 바뀌었거나, 오프라인 오류가 남았거나, 보내기 전 숫자일 수 있다
+  useEffect(() => {
+    const refresh = () => {
+      reloadToday();
+      reloadStats();
+      reloadMaterials();
+    };
+    const visible = () => {
+      if (document.visibilityState === 'visible') refresh();
+    };
+    document.addEventListener('visibilitychange', visible);
+    window.addEventListener('online', refresh);
+    window.addEventListener(REVIEWS_SENT, refresh);
+    return () => {
+      document.removeEventListener('visibilitychange', visible);
+      window.removeEventListener('online', refresh);
+      window.removeEventListener(REVIEWS_SENT, refresh);
+    };
+  }, [reloadToday, reloadStats, reloadMaterials]);
   const [cached, setCached] = useState(0);
   const canInterview = useCanInterview();
   useEffect(() => {
     if (error) void cachedQueue().then((cards) => setCached(cards.length));
   }, [error]);
-  if (error) {
+  // 다시 읽기가 실패해도 이미 받은 화면은 그대로 둔다 (오프라인으로 돌아왔을 때 오류 화면으로 바뀌지 않게)
+  if (error && !data) {
     return (
       <div className="screen">
         <p className="notice bad">{error}</p>
