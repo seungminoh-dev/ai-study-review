@@ -257,12 +257,12 @@ describe('card ladder', () => {
     await saveExample();
     await addLockedCloze();
     const mcq = await cardOf('deep-copy', 'mcq');
-    expect((await api(user, `/cards/${mcq.id}/suspend`, { method: 'POST' })).status).toBe(204);
+    expect((await api(user, `/cards/${mcq.id}/suspend`, { method: 'POST' })).status).toBe(200);
     expect((await cardOf('deep-copy', 'mcq')).status).toBe('suspended');
     expect((await cardOf('deep-copy', 'cloze')).status).toBe('active');
     expect((await loadTodayQueue(env, user.id, Date.now())).map((card) => card.id)).not.toContain(mcq.id);
 
-    expect((await api(user, `/cards/${mcq.id}/unsuspend`, { method: 'POST' })).status).toBe(204);
+    expect((await api(user, `/cards/${mcq.id}/unsuspend`, { method: 'POST' })).status).toBe(200);
     expect((await cardOf('deep-copy', 'mcq')).status).toBe('active');
   });
 

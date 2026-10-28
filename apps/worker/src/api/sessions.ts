@@ -209,6 +209,8 @@ for (const [action, suspended] of [
   sessions.post(`/cards/:id/${action}`, async (c) => {
     const found = await setCardSuspended(c.env, c.var.userId, c.req.param('id'), suspended, Date.now());
     if (!found) return errorJson(404, 'not_found', '카드를 찾지 못했어요.');
-    return c.body(null, 204);
+    // 사다리 규칙으로 정해진 상태를 돌려준다. 화면이 짐작하면 잠김·복습 중이 서버와 달라진다 (#23)
+    const status = await c.env.DB.prepare('SELECT status FROM cards WHERE id = ?1 AND user_id = ?2').bind(c.req.param('id'), c.var.userId).first<CardStatus>('status');
+    return c.json({ status });
   });
 }

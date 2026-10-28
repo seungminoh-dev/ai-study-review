@@ -61,7 +61,8 @@ export function Join({ onDone }: { onDone: (me: Me) => void }) {
       else onDone(me);
     } catch (reason) {
       // 만료됐거나 너무 많이 틀렸으면 로그인부터 다시 한다
-      if (reason instanceof RequestError && (reason.status === 410 || reason.status === 429)) setLoad({ state: 'expired', message: reason.message });
+      // 초대 없는 가입 자리가 찬 것(join_full)은 다시 시작할 일이 아니다. 폼을 두고 초대 코드를 넣게 한다 (#20)
+      if (reason instanceof RequestError && (reason.status === 410 || (reason.status === 429 && reason.code !== 'join_full'))) setLoad({ state: 'expired', message: reason.message });
       else setError(errorMessage(reason));
     } finally {
       setBusy(false);

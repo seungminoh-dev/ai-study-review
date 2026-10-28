@@ -1,4 +1,4 @@
-import type { CardEditBody, SessionCard, SessionDetail as Detail, SessionSummary } from '@moai/shared';
+import type { CardEditBody, CardStatus, SessionCard, SessionDetail as Detail, SessionSummary } from '@moai/shared';
 import { useState, type FormEvent } from 'react';
 import { errorMessage, request } from '../api';
 import { CodeBlock } from '../cards/CodeBlock';
@@ -247,8 +247,8 @@ export function CardRow({ card: initial }: { card: SessionCard }) {
     const suspend = status !== 'suspended';
     if (suspend && !confirm('이 카드를 끌까요? 복습에 다시 나오지 않아요.')) return;
     try {
-      await request(`/cards/${card.id}/${suspend ? 'suspend' : 'unsuspend'}`, { method: 'POST' });
-      setStatus(suspend ? 'suspended' : card.type === 'explain' ? 'locked' : 'active');
+      const result = await request<{ status: CardStatus }>(`/cards/${card.id}/${suspend ? 'suspend' : 'unsuspend'}`, { method: 'POST' });
+      setStatus(result.status);
       setError(null);
     } catch (reason) {
       setError(errorMessage(reason));

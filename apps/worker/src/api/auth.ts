@@ -244,7 +244,7 @@ async function openJoin(c: Context<AppEnv>, pending: PendingRow, displayName: st
       'INSERT INTO user_identities (provider, subject, user_id, login, created_at) SELECT ?5, ?2, ?1, ?3, ?4 WHERE EXISTS (SELECT 1 FROM users WHERE id = ?1)',
     ).bind(userId, pending.subject, pending.login, now, pending.provider),
   ]);
-  if (created!.meta.changes === 0) return errorJson(429, 'join_full', '오늘은 초대 없이 가입할 수 있는 자리가 다 찼어요. 내일 다시 해 주세요.');
+  if (created!.meta.changes === 0) return errorJson(429, 'join_full', '오늘은 초대 없이 가입할 수 있는 자리가 다 찼어요. 초대 코드가 있으면 넣어 주세요. 없으면 내일 다시 해 주세요.');
   console.log(JSON.stringify({ event: 'user_joined', user_id: userId, invite: false, provider: pending.provider }));
   return finishJoin(c, pending.token_hash, userId, now, 201);
 }
