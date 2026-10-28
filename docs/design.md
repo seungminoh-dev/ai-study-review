@@ -3,7 +3,7 @@
 - 상태: MVP 0 끝남, MVP 1·2 코드 완료 (운영은 [운영 가이드](runbook.md)), MVP 3은 설계
 - 날짜: 2026-10-17
 - 런타임: TypeScript, Cloudflare Worker 하나 (Workers Paid, MVP 0에서 무료 플랜 CPU 한도를 넘어 바꿨다). [ADR 0001](adr/0001-runtime.md)에서 결정
-- 관련 문서: [기획서](service-plan.md), [운영 가이드](runbook.md), [MVP 0 실행 가이드](mvp0-runbook.md), [이름 후보](names.md)
+- 관련 문서: [기획서](service-plan.md), [운영 가이드](runbook.md)
 - 패키지 버전은 2026-10-17 npm 기준이고, API 이름은 각 패키지의 타입 정의로 확인했다.
 
 서비스 이름은 **모아이**로 정했다. 코드 식별자는 `moai`다 (Worker 이름, D1 이름, 패키지 이름 `@moai/*`).
@@ -91,7 +91,7 @@ claude.ai에서 공부하다가 "정리해줘"라고 하면, 대화 중인 Claud
 
 **목표**: 설계 전체가 기대는 가정을 실제 폰과 실제 claude.ai로 먼저 확인한다. 여기서 막히는 것이 있으면 MVP 1 범위를 바꾼다.
 
-**상태**: 코드와 테스트는 레포에 있다 (`apps/worker`, `apps/web/public`, `packages/shared`). Cloudflare·claude.ai 쪽 설정과 점검 순서는 [MVP 0 실행 가이드](mvp0-runbook.md)에 있다.
+**상태**: 코드와 테스트는 레포에 있다 (`apps/worker`, `apps/web/public`, `packages/shared`). MVP 0은 끝났고 점검 결과는 아래 실측 기록에 있다.
 
 **만드는 것**
 
