@@ -728,14 +728,15 @@ function Summary({
   const streakUp = goalMet && !practice && (before ? before.reviewed : stats.today.reviewed - results.length) < stats.goal;
   // 얻은 XP는 서버가 센 오늘 XP의 차이다. 시작 숫자가 없거나, 못 보낸 답이 있거나, 그사이 하루가 바뀌었으면 화면에서 어림한다
   const gained = stats && before && allSent ? stats.today.xp - before.xp : -1;
-  const xp = useCountUp(practice ? 0 : gained >= 0 ? gained : sessionXp(results) + (perfect ? PERFECT_XP : 0));
+  // 로딩 화면 뒤에서 카운트업이 끝나지 않게, 끝 화면을 그릴 때 0부터 올린다
+  const xp = useCountUp(practice || !ready ? 0 : gained >= 0 ? gained : sessionXp(results) + (perfect ? PERFECT_XP : 0));
   const toGoal = stats && !goalMet ? stats.goal - stats.today.reviewed : 0;
   const celebrate = !practice && (streakUp || levelUps.length > 0);
   useEffect(() => {
     if (celebrate) buzz([20, 60, 20, 60, 40]);
   }, [celebrate]);
   // 끝 화면 소리는 하나만: 무실수 > 레벨 업 > 오늘 목표 달성
-  const fanfare: Sound | null = practice ? null : perfect ? 'perfect' : levelUps.length > 0 ? 'levelup' : streakUp ? 'finish' : null;
+  const fanfare: Sound | null = practice || !ready ? null : perfect ? 'perfect' : levelUps.length > 0 ? 'levelup' : streakUp ? 'finish' : null;
   useEffect(() => {
     if (fanfare) play(fanfare);
   }, [fanfare]);
