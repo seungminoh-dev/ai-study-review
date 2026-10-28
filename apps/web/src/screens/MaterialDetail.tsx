@@ -250,8 +250,10 @@ function SectionBody({ title, part, name, compact = false }: { title: string; pa
           <Link className="button primary" href={materialReview(title, part.name)}>
             이 섹션 풀기 · {part.unsolved_open}장
           </Link>
-        ) : (
+        ) : part.solved > 0 ? (
           <span className="muted small grow">이 섹션은 다 풀었어요. 푼 카드는 평소 복습에 나와요.</span>
+        ) : (
+          <span className="muted small grow">이 섹션의 카드를 모두 껐어요.</span>
         )}
         {part.session_id ? (
           <Link className="button" href={`/sessions/${part.session_id}`}>

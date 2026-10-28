@@ -24,7 +24,8 @@ export function BookTile({ title, sections, done = false }: { title: string; sec
 
 function MaterialCard({ material }: { material: MaterialSummary }) {
   const sections = Math.max(material.parts.length, 1);
-  const done = material.cards > 0 && material.unsolved_open === 0;
+  // 한 장도 안 풀고 끈 자료는 '다 풂'이 아니다 (Learn.tsx의 doneOf와 같다)
+  const done = material.solved > 0 && material.unsolved_open === 0;
   const percent = percentOf(material.solved, material.cards);
   const next = material.next ? partView(material.next.part, Math.max(material.parts.indexOf(material.next.part), 0), material.part_labels[material.next.part]) : null;
   return (
