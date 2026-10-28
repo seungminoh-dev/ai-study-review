@@ -93,7 +93,8 @@ library.get('/materials', async (c) => {
   const partsOf = Map.groupBy(parts!.results as unknown as PartRow[], (row) => row.title);
   const materials: MaterialSummary[] = (totals!.results as unknown as TotalsRow[]).map((row) => {
     const ordered = [...(partsOf.get(row.title) ?? [])].sort(comparePart);
-    return { ...row, name: nameOf(labels!, row.title), parts: ordered.map((part) => part.name).filter(Boolean), next: nextPart(ordered), part_labels: partLabelsOf(partLabels!, row.title) };
+    // 이름 없는 섹션('')도 한 섹션으로 센다. 자료 상세와 같아야 섹션 수와 번호가 맞는다 (#18)
+    return { ...row, name: nameOf(labels!, row.title), parts: ordered.map((part) => part.name), next: nextPart(ordered), part_labels: partLabelsOf(partLabels!, row.title) };
   });
   return c.json({ materials });
 });
@@ -126,8 +127,8 @@ library.get('/materials/detail', async (c) => {
   ]);
   const total = totals!.results[0] as unknown as TotalsRow | undefined;
   if (!total) return errorJson(404, 'not_found', '이 자료를 찾지 못했어요.');
-  // 같은 섹션을 여러 번 저장했으면 가장 최근 저장을 연다 (만든 순서로 받아 뒤의 것이 남는다)
-  const latest = new Map((sessions!.results as unknown as { id: string; name: string }[]).map((row) => [row.name, row.id]));
+  // 같은 섹션을 여러 번 저장했으면 저장마다 카드 보기를 둔다. 하나만 열면 앞 저장에서 끈 카드를 다시 켤 수 없다 (#19)
+  const sessionsOf = Map.groupBy(sessions!.results as unknown as { id: string; name: string }[], (row) => row.name);
   const conceptRows = concepts!.results as unknown as { part: string; key: string; name: string; adopted: number }[];
   const conceptsOf = Map.groupBy(conceptRows, (row) => row.part);
   const previewsOf = Map.groupBy(previews!.results as unknown as { part: string; type: CardType; prompt: string }[], (row) => row.part);
@@ -137,7 +138,8 @@ library.get('/materials/detail', async (c) => {
     part_labels: partLabelsOf(partLabels!, total.title),
     parts: [...(parts!.results as unknown as PartRow[])].sort(comparePart).map((part) => ({
       name: part.name,
-      session_id: latest.get(part.name) ?? '',
+      session_id: sessionsOf.get(part.name)?.at(-1)?.id ?? '',
+      session_ids: (sessionsOf.get(part.name) ?? []).map((row) => row.id),
       cards: part.cards,
       solved: part.solved,
       unsolved_open: part.unsolved_open,
